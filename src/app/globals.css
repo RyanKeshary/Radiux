@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ide-bg: #1e1e1e;
+  --ide-sidebar: #252526;
+  --ide-activity: #333333;
+  --ide-border: #3c3c3c;
+  --ide-text: #cccccc;
+  --ide-text-muted: #858585;
+  --ide-accent: #007acc;
+  --ide-accent-hover: #0098ff;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #1e1e1e;
+  color: #cccccc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Custom scrollbars matching VS Code */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(121, 121, 121, 0.4);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 100, 100, 0.7);
+}
+
+/* Yjs Remote cursor widget styles */
+.yRemoteSelection {
+  background-color: rgba(250, 204, 21, 0.3);
+  position: absolute;
+}
+
+.yRemoteSelectionHead {
+  position: absolute;
+  border-left: 2px solid;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.yRemoteSelectionHead::after {
+  position: absolute;
+  content: ' ';
+  border: 3px solid;
+  border-radius: 4px;
+  left: -4px;
+  top: -5px;
+}
