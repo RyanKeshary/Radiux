@@ -5,24 +5,30 @@ import Editor, { Monaco } from '@monaco-editor/react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { MonacoBinding } from 'y-monaco';
-import { FileItem, LanguageType, PresenceUser, getUserColor } from '@/lib/types';
+import { FileItem, getUserColor } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
 import { DataService } from '@/lib/data-service';
-import { Loader2, Wifi, WifiOff } from 'lucide-react';
+import { EditorSettings } from './EditorSettingsModal';
+import { Loader2, Wifi, WifiOff, CheckCircle2 } from 'lucide-react';
 
 interface MonacoEditorWrapperProps {
   projectId: string;
   file: FileItem;
+  settings: EditorSettings;
   onContentSaved?: () => void;
+  onCursorChange?: (line: number, col: number) => void;
 }
 
 export function MonacoEditorWrapper({
   projectId,
   file,
+  settings,
   onContentSaved,
+  onCursorChange,
 }: MonacoEditorWrapperProps) {
   const { user } = useAuth();
   const [synced, setSynced] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [editorReady, setEditorReady] = useState(false);
 
   const editorRef = useRef<any>(null);
@@ -34,15 +40,18 @@ export function MonacoEditorWrapper({
 
   // Debounced persistence to database
   const queuePersist = (text: string) => {
+    setSaveStatus('saving');
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     saveTimeoutRef.current = setTimeout(async () => {
       try {
         await DataService.updateFileContent(file.id, text);
+        setSaveStatus('saved');
         if (onContentSaved) onContentSaved();
       } catch (err) {
         console.error('Failed to save file content to storage:', err);
+        setSaveStatus('saved');
       }
     }, 1500);
   };
@@ -67,7 +76,7 @@ export function MonacoEditorWrapper({
     const ydoc = new Y.Doc();
     ydocRef.current = ydoc;
 
-    // Room name isolated per project and file:
+    // Room name isolated per project and file
     const roomName = `project-${projectId}-file-${file.id}`;
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:1234';
 
@@ -76,12 +85,14 @@ export function MonacoEditorWrapper({
 
     const ytext = ydoc.getText('monaco');
 
-    // Setup local awareness presence
+    // Setup local awareness presence with active file and user details
     const userColor = getUserColor(user?.id || 'guest');
     provider.awareness.setLocalStateField('user', {
+      id: user?.id || 'guest',
       name: user?.full_name || 'Guest Developer',
       color: userColor,
       fileId: file.id,
+      fileName: file.name,
     });
 
     provider.on('status', (event: any) => {
@@ -132,25 +143,43 @@ export function MonacoEditorWrapper({
         ydocRef.current = null;
       }
     };
-  }, [file.id, projectId, editorReady, user?.id]);
+  }, [file.id, projectId, editorReady, user?.id, user?.full_name]);
 
   const handleEditorDidMount = (editor: any, monaco: Monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
     setEditorReady(true);
+
+    editor.onDidChangeCursorPosition((e: any) => {
+      if (onCursorChange) {
+        onCursorChange(e.position.lineNumber, e.position.column);
+      }
+    });
   };
 
   return (
     <div className="relative w-full h-full flex flex-col bg-[#1e1e1e]">
-      {/* Sync Status Banner */}
-      <div className="absolute top-2 right-4 z-10 flex items-center gap-2 bg-[#252526]/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-[#3c3c3c] text-[10px] pointer-events-none">
+      {/* Top Floating Status Indicator */}
+      <div className="absolute top-2 right-4 z-10 flex items-center gap-2 bg-[#252526]/85 backdrop-blur-md px-3 py-1 rounded-full border border-[#3c3c3c] text-[11px] pointer-events-none shadow-lg">
+        {saveStatus === 'saving' ? (
+          <span className="flex items-center gap-1.5 text-amber-400 font-medium">
+            <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-neutral-400">
+            <CheckCircle2 className="w-3 h-3 text-sky-400" /> Saved
+          </span>
+        )}
+
+        <span className="text-neutral-600">|</span>
+
         {synced ? (
           <span className="flex items-center gap-1 text-emerald-400 font-medium">
-            <Wifi className="w-3 h-3" /> Live Synced
+            <Wifi className="w-3 h-3" /> Live
           </span>
         ) : (
           <span className="flex items-center gap-1 text-amber-400 font-medium">
-            <WifiOff className="w-3 h-3 animate-pulse" /> Connecting to peers...
+            <WifiOff className="w-3 h-3 animate-pulse" /> Reconnecting...
           </span>
         )}
       </div>
@@ -159,18 +188,19 @@ export function MonacoEditorWrapper({
         <Editor
           height="100%"
           language={file.language || 'plaintext'}
-          theme="vs-dark"
+          theme={settings.theme}
           defaultValue={file.content || ''}
           onMount={handleEditorDidMount}
           options={{
-            fontSize: 14,
+            fontSize: settings.fontSize,
             fontFamily: "'Fira Code', 'Cascadia Code', Consolas, monospace",
-            minimap: { enabled: true },
+            minimap: { enabled: settings.minimap },
             lineNumbers: 'on',
             roundedSelection: false,
             scrollBeyondLastLine: false,
             automaticLayout: true,
-            tabSize: 2,
+            tabSize: settings.tabSize,
+            wordWrap: settings.wordWrap,
             renderWhitespace: 'selection',
             cursorBlinking: 'smooth',
             smoothScrolling: true,

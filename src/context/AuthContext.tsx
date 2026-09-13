@@ -2,15 +2,14 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserProfile } from '@/lib/types';
-import { DEMO_USERS, initStorageMock } from '@/lib/storage-mock';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   isSupabase: boolean;
-  switchDemoUser: (user: UserProfile) => void;
-  signIn: (email: string) => Promise<void>;
+  signInWithPassword: (email: string, password: string) => Promise<{ error: any }>;
+  signUpWithPassword: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -20,86 +19,123 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    initStorageMock();
+  // Sync Supabase user profile
+  const syncProfile = async (sessionUser: any) => {
+    if (!sessionUser) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
 
-    if (isSupabaseConfigured && supabase) {
-      // Check supabase session
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-            avatar_url: session.user.user_metadata?.avatar_url,
-          });
-        } else {
-          // Fallback to active demo user if not logged in
-          const savedDemoUserId = localStorage.getItem('codecollab_current_demo_user');
-          const demoUser = DEMO_USERS.find(u => u.id === savedDemoUserId) || DEMO_USERS[0];
-          setUser(demoUser);
-        }
-        setLoading(false);
+    try {
+      // Fetch or ensure profile exists in public.profiles
+      const { data: profile } = await supabase!
+        .from('profiles')
+        .select('*')
+        .eq('id', sessionUser.id)
+        .single();
+
+      if (profile) {
+        setUser({
+          id: profile.id,
+          email: profile.email,
+          full_name: profile.full_name || sessionUser.email.split('@')[0],
+          avatar_url: profile.avatar_url,
+        });
+      } else {
+        const fallbackProfile = {
+          id: sessionUser.id,
+          email: sessionUser.email,
+          full_name: sessionUser.user_metadata?.full_name || sessionUser.email.split('@')[0],
+        };
+        setUser(fallbackProfile);
+        // Ensure profile row
+        await supabase!.from('profiles').upsert([fallbackProfile]);
+      }
+    } catch (e) {
+      console.error('Error fetching user profile:', e);
+      setUser({
+        id: sessionUser.id,
+        email: sessionUser.email,
+        full_name: sessionUser.user_metadata?.full_name || sessionUser.email.split('@')[0],
       });
-
-      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session?.user) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-            avatar_url: session.user.user_metadata?.avatar_url,
-          });
-        } else {
-          const savedDemoUserId = localStorage.getItem('codecollab_current_demo_user');
-          const demoUser = DEMO_USERS.find(u => u.id === savedDemoUserId) || DEMO_USERS[0];
-          setUser(demoUser);
-        }
-      });
-
-      return () => {
-        authListener.subscription.unsubscribe();
-      };
-    } else {
-      // Local/Demo user mode
-      const savedDemoUserId = typeof window !== 'undefined' ? localStorage.getItem('codecollab_current_demo_user') : null;
-      const demoUser = DEMO_USERS.find(u => u.id === savedDemoUserId) || DEMO_USERS[0];
-      setUser(demoUser);
+    } finally {
       setLoading(false);
     }
-  }, []);
-
-  const switchDemoUser = (newUser: UserProfile) => {
-    localStorage.setItem('codecollab_current_demo_user', newUser.id);
-    setUser(newUser);
   };
 
-  const signIn = async (email: string) => {
-    if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase.auth.signInWithOtp({ email });
-      if (error) throw error;
-    } else {
-      // Create or find mock user
-      let found = DEMO_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (!found) {
-        found = {
-          id: 'user-' + Math.random().toString(36).substring(2, 8),
-          email,
-          full_name: email.split('@')[0],
-          avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${email}`
-        };
-        DEMO_USERS.push(found);
-      }
-      switchDemoUser(found);
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false);
+      return;
     }
+
+    // 1. Initial session fetch
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        syncProfile(session.user);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // 2. Listen to auth state transitions
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        await syncProfile(session.user);
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const signInWithPassword = async (email: string, password: string) => {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: new Error('Supabase is not configured') };
+    }
+    const res = await supabase.auth.signInWithPassword({ email, password });
+    if (res.data.user) {
+      await syncProfile(res.data.user);
+    }
+    return { error: res.error };
+  };
+
+  const signUpWithPassword = async (email: string, password: string, fullName: string) => {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: new Error('Supabase is not configured') };
+    }
+    const res = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+        },
+      },
+    });
+
+    if (res.data.user) {
+      // Auto-insert profile record immediately
+      await supabase.from('profiles').upsert([{
+        id: res.data.user.id,
+        email: res.data.user.email,
+        full_name: fullName,
+      }]);
+      await syncProfile(res.data.user);
+    }
+    return { error: res.error };
   };
 
   const signOut = async () => {
     if (isSupabaseConfigured && supabase) {
       await supabase.auth.signOut();
     }
-    // Switch to first demo user
-    switchDemoUser(DEMO_USERS[0]);
+    setUser(null);
   };
 
   return (
@@ -108,8 +144,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         isSupabase: isSupabaseConfigured,
-        switchDemoUser,
-        signIn,
+        signInWithPassword,
+        signUpWithPassword,
         signOut,
       }}
     >

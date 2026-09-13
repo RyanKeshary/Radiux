@@ -1,11 +1,64 @@
 import { supabase, isSupabaseConfigured } from './supabase/client';
-import { StorageMock, DEMO_USERS } from './storage-mock';
+import { StorageMock } from './storage-mock';
 import { Project, ProjectMember, FileItem, UserProfile } from './types';
 
 export const DataService = {
-  // Check backend mode
   isSupabaseActive(): boolean {
     return isSupabaseConfigured;
+  },
+
+  // Lookup registered user by email
+  async findUserByEmail(email: string): Promise<UserProfile | null> {
+    if (!isSupabaseConfigured || !supabase) {
+      return null;
+    }
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .ilike('email', email.trim())
+      .single();
+
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      email: data.email,
+      full_name: data.full_name,
+      avatar_url: data.avatar_url,
+    };
+  },
+
+  // Check if a user has access to a project
+  async verifyProjectAccess(projectId: string, userId: string): Promise<{ authorized: boolean; role?: 'owner' | 'member' }> {
+    if (!isSupabaseConfigured || !supabase) {
+      const p = StorageMock.getProject(projectId);
+      if (!p) return { authorized: false };
+      return { authorized: true, role: p.owner_id === userId ? 'owner' : 'member' };
+    }
+
+    // Check if owner
+    const { data: proj } = await supabase
+      .from('projects')
+      .select('id, owner_id')
+      .eq('id', projectId)
+      .single();
+
+    if (proj && proj.owner_id === userId) {
+      return { authorized: true, role: 'owner' };
+    }
+
+    // Check if member
+    const { data: member } = await supabase
+      .from('project_members')
+      .select('id, role')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .single();
+
+    if (member) {
+      return { authorized: true, role: member.role as 'owner' | 'member' };
+    }
+
+    return { authorized: false };
   },
 
   // Projects
@@ -22,7 +75,10 @@ export const DataService = {
       console.warn('Supabase getProjects error, falling back to local storage:', error.message);
       return StorageMock.getProjects(userId);
     }
-    return data || [];
+    return (data || []).map((p: any) => ({
+      ...p,
+      role: p.owner_id === userId ? 'owner' : 'member'
+    }));
   },
 
   async getProject(projectId: string): Promise<Project | null> {
@@ -61,7 +117,7 @@ export const DataService = {
       return StorageMock.createProject(name, description, user);
     }
 
-    // Add owner as member
+    // Add owner as member in project_members
     await supabase.from('project_members').insert({
       project_id: data.id,
       user_id: user.id,
@@ -74,7 +130,7 @@ export const DataService = {
       name: 'index.js',
       is_folder: false,
       language: 'javascript',
-      content: `// Project: ${name}\nconsole.log("Welcome to CodeCollab!");\n`
+      content: `// Project: ${name}\n// Created by ${user.full_name}\n\nconsole.log("Welcome to CodeCollab!");\n`
     });
 
     return data;
@@ -116,6 +172,19 @@ export const DataService = {
       return StorageMock.addMember(projectId, user);
     }
     return data;
+  },
+
+  async removeMember(projectId: string, userId: string): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) {
+      return true;
+    }
+    const { error } = await supabase
+      .from('project_members')
+      .delete()
+      .eq('project_id', projectId)
+      .eq('user_id', userId);
+
+    return !error;
   },
 
   // Files
