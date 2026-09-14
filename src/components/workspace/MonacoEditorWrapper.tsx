@@ -15,7 +15,7 @@ interface MonacoEditorWrapperProps {
   projectId: string;
   file: FileItem;
   settings: EditorSettings;
-  onContentSaved?: () => void;
+  onContentSaved?: (text: string) => void;
   onCursorChange?: (line: number, col: number) => void;
 }
 
@@ -37,23 +37,38 @@ export function MonacoEditorWrapper({
   const providerRef = useRef<WebsocketProvider | null>(null);
   const bindingRef = useRef<MonacoBinding | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingTextRef = useRef<string | null>(null);
+  const fileIdRef = useRef(file.id);
+  fileIdRef.current = file.id;
 
-  // Debounced persistence to database
+  // Flush pending changes to Supabase storage immediately
+  const flushPersist = async (targetFileId: string, text: string) => {
+    try {
+      await DataService.updateFileContent(targetFileId, text);
+      setSaveStatus('saved');
+    } catch (err) {
+      console.error('Failed to save file content to storage:', err);
+      setSaveStatus('saved');
+    }
+  };
+
+  // Debounced persistence to database & workspace disk
   const queuePersist = (text: string) => {
+    pendingTextRef.current = text;
     setSaveStatus('saving');
+    // Immediately notify workspace sync with fresh content
+    if (onContentSaved) onContentSaved(text);
+
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     saveTimeoutRef.current = setTimeout(async () => {
-      try {
-        await DataService.updateFileContent(file.id, text);
-        setSaveStatus('saved');
-        if (onContentSaved) onContentSaved();
-      } catch (err) {
-        console.error('Failed to save file content to storage:', err);
-        setSaveStatus('saved');
+      const currentText = pendingTextRef.current;
+      pendingTextRef.current = null;
+      if (currentText !== null) {
+        await flushPersist(file.id, currentText);
       }
-    }, 1500);
+    }, 400);
   };
 
   useEffect(() => {
@@ -99,36 +114,57 @@ export function MonacoEditorWrapper({
       setSynced(event.status === 'connected');
     });
 
-    provider.on('sync', (isSynced: boolean) => {
-      setSynced(isSynced);
-      // If doc is completely fresh in Yjs room, seed with initial content
-      if (ytext.toString().length === 0 && file.content) {
-        ytext.insert(0, file.content);
-      }
-    });
-
     // Listen for doc changes and schedule debounced persistence
     ytext.observe(() => {
       queuePersist(ytext.toString());
     });
 
-    // Bind Monaco model to Yjs text CRDT
-    const editor = editorRef.current;
-    const model = editor.getModel();
+    const attachBinding = () => {
+      if (bindingRef.current) return;
+      const editor = editorRef.current;
+      if (!editor) return;
+      const model = editor.getModel();
+      if (model) {
+        const binding = new MonacoBinding(
+          ytext,
+          model,
+          new Set([editor]),
+          provider.awareness
+        );
+        bindingRef.current = binding;
+      }
+    };
 
-    if (model) {
-      const binding = new MonacoBinding(
-        ytext,
-        model,
-        new Set([editor]),
-        provider.awareness
-      );
-      bindingRef.current = binding;
+    provider.on('sync', (isSynced: boolean) => {
+      setSynced(isSynced);
+      if (isSynced) {
+        // Seed content only if the Yjs CRDT room is completely empty
+        if (ytext.toString().length === 0 && file.content) {
+          ytext.insert(0, file.content);
+        }
+        attachBinding();
+      }
+    });
+
+    // If provider is already synced before listener
+    if (provider.synced) {
+      if (ytext.toString().length === 0 && file.content) {
+        ytext.insert(0, file.content);
+      }
+      attachBinding();
     }
 
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      if (pendingTextRef.current !== null) {
+        const textToSave = pendingTextRef.current;
+        pendingTextRef.current = null;
+        DataService.updateFileContent(fileIdRef.current, textToSave).catch((err) => {
+          console.error('Error saving pending file on unmount:', err);
+        });
       }
       if (bindingRef.current) {
         bindingRef.current.destroy();
@@ -149,6 +185,20 @@ export function MonacoEditorWrapper({
     editorRef.current = editor;
     monacoRef.current = monaco;
     setEditorReady(true);
+
+    // Enable rich JS/TS and HTML intellisense
+    try {
+      monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+        noSemanticValidation: false,
+        noSyntaxValidation: false,
+      });
+      monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+        target: monaco.languages.typescript.ScriptTarget.ES2020,
+        allowNonTextExtensions: true,
+        allowJs: true,
+        checkJs: true,
+      });
+    } catch (e) {}
 
     editor.onDidChangeCursorPosition((e: any) => {
       if (onCursorChange) {
@@ -187,6 +237,7 @@ export function MonacoEditorWrapper({
       <div className="flex-1 w-full h-full">
         <Editor
           height="100%"
+          path={file.name}
           language={file.language || 'plaintext'}
           theme={settings.theme}
           defaultValue={file.content || ''}
@@ -204,6 +255,14 @@ export function MonacoEditorWrapper({
             renderWhitespace: 'selection',
             cursorBlinking: 'smooth',
             smoothScrolling: true,
+            // Full IntelliSense and Autocomplete Settings
+            quickSuggestions: { other: true, comments: true, strings: true },
+            parameterHints: { enabled: true },
+            suggestOnTriggerCharacters: true,
+            acceptSuggestionOnEnter: 'on',
+            tabCompletion: 'on',
+            wordBasedSuggestions: 'allDocuments',
+            snippetSuggestions: 'top',
           }}
           loading={
             <div className="flex items-center justify-center h-full bg-[#1e1e1e] text-neutral-400 gap-2">

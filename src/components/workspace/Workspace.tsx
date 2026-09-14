@@ -17,6 +17,7 @@ import { CommandPalette, CommandItem } from './CommandPalette';
 import { QuickOpenModal } from './QuickOpenModal';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { EditorSettingsModal, EditorSettings } from './EditorSettingsModal';
+import { BottomDock } from './BottomDock';
 import { 
   ChevronLeft, 
   UserPlus, 
@@ -28,8 +29,8 @@ import {
   ShieldAlert, 
   Command,
   FileSearch,
-  Wifi,
-  WifiOff
+  Terminal,
+  MonitorPlay
 } from 'lucide-react';
 
 interface WorkspaceProps {
@@ -52,9 +53,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [openFiles, setOpenFiles] = useState<FileItem[]>([]);
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const activeFileIdRef = useRef<string | null>(null);
+  activeFileIdRef.current = activeFileId;
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
   const [loading, setLoading] = useState(true);
   const [unauthorized, setUnauthorized] = useState(false);
+
+  // Terminal & Preview Bottom Dock
+  const [isDockOpen, setIsDockOpen] = useState(false);
 
   // Modals & IDE Tools
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -84,6 +90,17 @@ export function Workspace({ projectId }: WorkspaceProps) {
     });
   };
 
+  // Sync file content to remote workspace filesystem
+  const syncFileToWorkspace = (filePath: string, content: string) => {
+    try {
+      fetch('http://localhost:1234/api/sync-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, path: filePath, content }),
+      }).catch(() => {});
+    } catch (e) {}
+  };
+
   // Load project, verify permission, and load files
   const loadWorkspaceData = useCallback(async () => {
     if (!user) return;
@@ -107,6 +124,15 @@ export function Workspace({ projectId }: WorkspaceProps) {
       setProject(projData);
       setFiles(filesData);
       setMembers(membersData);
+
+      // Seed remote workspace disk with existing files
+      try {
+        fetch('http://localhost:1234/api/sync-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId, files: filesData }),
+        }).catch(() => {});
+      } catch (e) {}
 
       // Open first code file if none open
       const firstCodeFile = filesData.find((f) => !f.is_folder);
@@ -138,12 +164,26 @@ export function Workspace({ projectId }: WorkspaceProps) {
     const ymap = ydoc.getMap('file-events');
 
     ymap.observe((event) => {
-      // Re-fetch files when peer makes file-tree change
       DataService.getFiles(projectId).then((updatedFiles) => {
-        setFiles(updatedFiles);
-        // Clean up open tabs if file was deleted
+        setFiles((prevFiles) => {
+          return updatedFiles.map((newF) => {
+            if (newF.id === activeFileIdRef.current) {
+              const currentActive = prevFiles.find((f) => f.id === newF.id);
+              return currentActive ? { ...newF, content: currentActive.content } : newF;
+            }
+            return newF;
+          });
+        });
         setOpenFiles((prevOpen) => {
-          return prevOpen.filter((tab) => updatedFiles.some((f) => f.id === tab.id));
+          return prevOpen
+            .filter((tab) => updatedFiles.some((f) => f.id === tab.id))
+            .map((tab) => {
+              if (tab.id === activeFileIdRef.current) {
+                return tab;
+              }
+              const fresh = updatedFiles.find((f) => f.id === tab.id);
+              return fresh || tab;
+            });
         });
       });
     });
@@ -168,7 +208,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
     }, 500);
   };
 
-  // Keyboard shortcuts (Ctrl+K, Ctrl+P, Ctrl+Shift+F)
+  // Keyboard shortcuts (Ctrl+K, Ctrl+P, Ctrl+Shift+F, Ctrl+`)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -183,6 +223,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
       } else if (cmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         setIsGlobalSearchOpen((prev) => !prev);
+      } else if (cmdOrCtrl && e.key === '`') {
+        e.preventDefault();
+        setIsDockOpen((prev) => !prev);
       }
     };
 
@@ -214,6 +257,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
       if (!isFolder) {
         setOpenFiles((prev) => [...prev, newFile]);
         setActiveFileId(newFile.id);
+        syncFileToWorkspace(name, newFile.content || '');
       }
       broadcastFileChange();
     } catch (err) {
@@ -251,6 +295,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
   // Command Palette Items
   const commands: CommandItem[] = [
+    {
+      id: 'toggle-terminal',
+      title: 'Toggle Terminal / Preview Dock',
+      category: 'View',
+      shortcut: 'Ctrl+`',
+      icon: <Terminal className="w-4 h-4 text-sky-400" />,
+      action: () => setIsDockOpen((prev) => !prev),
+    },
     {
       id: 'quick-open',
       title: 'Quick Open File...',
@@ -390,7 +442,21 @@ export function Workspace({ projectId }: WorkspaceProps) {
         </div>
 
         {/* Right Controls */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
+          {/* Toggle Terminal Button */}
+          <button
+            onClick={() => setIsDockOpen(!isDockOpen)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors border ${
+              isDockOpen
+                ? 'bg-sky-600 text-white border-sky-500'
+                : 'bg-[#1e1e1e] text-neutral-300 hover:text-white border-[#3c3c3c] hover:bg-[#2a2a2a]'
+            }`}
+            title="Toggle Terminal & Preview (Ctrl+`)"
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Terminal</span>
+          </button>
+
           {/* Active Collaborators Presence */}
           <ProjectPresence
             projectId={projectId}
@@ -436,7 +502,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
           />
         </aside>
 
-        {/* Center / Right: Editor Area */}
+        {/* Center / Right: Editor Area + Bottom Dock */}
         <main className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e] overflow-hidden">
           {/* Tabs */}
           <OpenTabs
@@ -447,13 +513,22 @@ export function Workspace({ projectId }: WorkspaceProps) {
           />
 
           {/* Monaco Editor or Empty State */}
-          <div className="flex-1 w-full h-full relative">
+          <div className="flex-1 w-full h-full relative overflow-hidden">
             {activeFile ? (
               <MonacoEditorWrapper
                 key={activeFile.id}
                 projectId={projectId}
                 file={activeFile}
                 settings={settings}
+                onContentSaved={(latestText) => {
+                  setFiles((prev) =>
+                    prev.map((f) => (f.id === activeFile.id ? { ...f, content: latestText } : f))
+                  );
+                  setOpenFiles((prev) =>
+                    prev.map((f) => (f.id === activeFile.id ? { ...f, content: latestText } : f))
+                  );
+                  syncFileToWorkspace(activeFile.name, latestText);
+                }}
                 onCursorChange={(line, col) => setCursorPos({ line, col })}
               />
             ) : (
@@ -462,22 +537,34 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 <div className="text-center">
                   <p className="text-sm font-medium text-neutral-400">No file is open</p>
                   <p className="text-xs text-neutral-500 mt-1">
-                    Press <kbd className="px-1.5 py-0.5 bg-[#252526] rounded text-neutral-300 border border-[#3c3c3c]">Ctrl+P</kbd> to quickly open a file.
+                    Press <kbd className="px-1.5 py-0.5 bg-[#252526] rounded text-neutral-300 border border-[#3c3c3c]">Ctrl+P</kbd> to open a file, or <kbd className="px-1.5 py-0.5 bg-[#252526] rounded text-neutral-300 border border-[#3c3c3c]">Ctrl+`</kbd> to open terminal.
                   </p>
                 </div>
               </div>
             )}
           </div>
+
+          {/* Bottom Dock: Terminal & Live Web Preview */}
+          <BottomDock
+            projectId={projectId}
+            isOpen={isDockOpen}
+            onClose={() => setIsDockOpen(false)}
+            activeFileName={activeFile?.name}
+          />
         </main>
       </div>
 
       {/* Bottom Status Bar */}
       <footer className="h-6 bg-[#007acc] text-white px-3 flex items-center justify-between text-[11px] font-medium select-none z-20">
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
-            Yjs Connected
-          </span>
+          <button
+            onClick={() => setIsDockOpen(!isDockOpen)}
+            className="flex items-center gap-1.5 hover:underline font-semibold"
+          >
+            <Terminal className="w-3 h-3" />
+            <span>{isDockOpen ? 'Hide Terminal' : 'Terminal (Ctrl+`)'}</span>
+          </button>
+
           {activeFile && (
             <span>
               Language: <span className="font-semibold uppercase">{activeFile.language || 'TEXT'}</span>
@@ -489,7 +576,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
           <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
           <span>Spaces: {settings.tabSize}</span>
           <span>UTF-8</span>
-          <span className="font-semibold">CodeCollab Level 2</span>
+          <span className="font-semibold">CodeCollab Level 3</span>
         </div>
       </footer>
 

@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase/client';
 import { StorageMock } from './storage-mock';
-import { Project, ProjectMember, FileItem, UserProfile } from './types';
+import { Project, ProjectMember, FileItem, UserProfile, detectLanguage } from './types';
 
 export const DataService = {
   isSupabaseActive(): boolean {
@@ -197,13 +197,17 @@ export const DataService = {
         .order('name', { ascending: true });
 
       if (!error && data) {
-        return data;
+        return data.map((f) => ({
+          ...f,
+          language: !f.is_folder ? detectLanguage(f.name) : undefined,
+        }));
       }
     }
     return StorageMock.getFiles(projectId);
   },
 
   async createFile(projectId: string, parentId: string | null, name: string, isFolder: boolean): Promise<FileItem> {
+    const language = isFolder ? undefined : detectLanguage(name);
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase
         .from('files')
@@ -212,23 +216,32 @@ export const DataService = {
           parent_id: parentId,
           name,
           is_folder: isFolder,
+          language,
           content: isFolder ? '' : `// ${name}\n`,
         })
         .select()
         .single();
 
       if (!error && data) {
-        return data;
+        return {
+          ...data,
+          language,
+        };
       }
     }
     return StorageMock.createFile(projectId, parentId, name, isFolder);
   },
 
   async renameFile(fileId: string, newName: string): Promise<boolean> {
+    const language = detectLanguage(newName);
     if (isSupabaseConfigured && supabase) {
       const { error } = await supabase
         .from('files')
-        .update({ name: newName, updated_at: new Date().toISOString() })
+        .update({ 
+          name: newName, 
+          language,
+          updated_at: new Date().toISOString() 
+        })
         .eq('id', fileId);
 
       if (!error) return true;
