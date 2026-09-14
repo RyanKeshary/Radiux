@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import { supabase, isSupabaseConfigured } from './supabase/client';
 import { StorageMock } from './storage-mock';
+import { buildApiUrl } from './config';
 import { 
   Project, 
   ProjectMember, 
@@ -9,6 +10,7 @@ import {
   detectLanguage, 
   ChatMessage, 
   ActivityEvent,
+  ActivityActionType,
   GitStatus,
   GitCommit,
   GitBranch,
@@ -322,10 +324,43 @@ export const DataService = {
     content: string,
     media?: {
       type: 'image' | 'video' | 'audio' | 'file';
-      url: string;
+      url: string; // base64 data URL or existing URL
       name: string;
     }
   ): Promise<ChatMessage> {
+    // Level 6: Upload media to Supabase Storage instead of storing base64 in DB
+    let mediaUrl = media?.url;
+    if (media && mediaUrl && mediaUrl.startsWith('data:') && isSupabaseConfigured && supabase) {
+      try {
+        // Convert base64 data URL to Blob
+        const [header, base64Data] = mediaUrl.split(',');
+        const mimeMatch = header.match(/:(.*?);/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+        const byteString = atob(base64Data);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        const blob = new Blob([ab], { type: mimeType });
+
+        // Upload to chat-media bucket: {userId}/{timestamp}-{fileName}
+        const ext = media.name.split('.').pop() || 'bin';
+        const storagePath = `${userId}/${Date.now()}-${media.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('chat-media')
+          .upload(storagePath, blob, { contentType: mimeType, upsert: false });
+
+        if (!uploadError && uploadData) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('chat-media')
+            .getPublicUrl(storagePath);
+          mediaUrl = publicUrl;
+        }
+        // If upload fails, fall back to base64 (will work but not ideal for production)
+      } catch (storageErr) {
+        console.warn('[DataService] Media upload to Storage failed, using base64 fallback:', storageErr);
+      }
+    }
+
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase
         .from('messages')
@@ -336,14 +371,13 @@ export const DataService = {
           user_avatar: userAvatar || '',
           content: content.trim(),
           media_type: media?.type,
-          media_url: media?.url,
+          media_url: mediaUrl,
           media_name: media?.name,
         })
         .select()
         .single();
 
       if (!error && data) {
-        // Also mirror to storage mock for resilience
         StorageMock.saveMessage(data);
         return data as ChatMessage;
       }
@@ -355,7 +389,7 @@ export const DataService = {
       user_avatar: userAvatar,
       content: content.trim(),
       media_type: media?.type,
-      media_url: media?.url,
+      media_url: mediaUrl,
       media_name: media?.name,
     });
   },
@@ -380,8 +414,9 @@ export const DataService = {
     projectId: string,
     userId: string,
     userName: string,
-    actionType: ActivityEvent['action_type'],
-    details: string
+    actionType: ActivityActionType,
+    details: string,
+    targetObject?: string
   ): Promise<ActivityEvent> {
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase
@@ -392,6 +427,7 @@ export const DataService = {
           user_name: userName,
           action_type: actionType,
           details: details.trim(),
+          target_object: targetObject || '',
         })
         .select()
         .single();
@@ -407,19 +443,15 @@ export const DataService = {
       user_name: userName,
       action_type: actionType,
       details: details.trim(),
+      target_object: targetObject || '',
     });
   },
 
   // ==========================================================================
-  // Level 5: Git API Client Methods
+  // Level 5 & 6: Git & Workspace API Client Methods
   // ==========================================================================
   getApiBaseUrl(): string {
-    if (typeof window !== 'undefined') {
-      const protocol = window.location.protocol;
-      const hostname = window.location.hostname;
-      return `${protocol}//${hostname}:1234`;
-    }
-    return 'http://localhost:1234';
+    return buildApiUrl('');
   },
 
   async getGitStatus(projectId: string): Promise<GitStatus> {

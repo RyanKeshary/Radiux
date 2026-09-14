@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { DataService } from '@/lib/data-service';
 import { UserProfile, Project } from '@/lib/types';
+import { buildApiUrl } from '@/lib/config';
 import { useRouter } from 'next/navigation';
 
 interface ImportProjectModalProps {
@@ -109,7 +110,7 @@ export function ImportProjectModal({
 
         // Fetch cloned files from workspace disk to populate database file tree
         try {
-          const filesRes = await fetch(`http://localhost:1234/api/workspace/files?projectId=${createdProject.id}`);
+          const filesRes = await fetch(buildApiUrl(`/api/workspace/files?projectId=${createdProject.id}`));
           if (filesRes.ok) {
             const { files } = await filesRes.json();
             if (Array.isArray(files)) {

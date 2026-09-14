@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { VoicePeer } from '@/lib/types';
+import { config } from '@/lib/config';
 
 interface UseVoiceChatOptions {
   projectId: string;
@@ -127,7 +128,7 @@ export function useVoiceChat({
   // Connect to signaling WebSocket
   useEffect(() => {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:1234/comm?projectId=${projectId}`;
+    const wsUrl = config.buildWsUrl('/comm', { projectId });
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

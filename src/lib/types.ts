@@ -41,6 +41,7 @@ export interface FileItem {
   is_folder: boolean;
   content?: string;
   language?: LanguageType;
+  media_type?: 'image' | 'video' | 'audio' | 'file';
   created_at: string;
   updated_at: string;
   children?: FileItem[];
@@ -119,35 +120,70 @@ export interface ChatMessage {
   media_name?: string;
 }
 
+// All event types for the Level 6 activity system
+export type ActivityActionType =
+  // Project events
+  | 'project_created'
+  | 'project_renamed'
+  // Workspace / member events
+  | 'member_joined'
+  | 'member_invited'
+  | 'member_removed'
+  // File events
+  | 'file_created'
+  | 'file_renamed'
+  | 'file_deleted'
+  | 'file_moved'
+  | 'folder_created'
+  | 'folder_deleted'
+  | 'media_uploaded'
+  // Git events
+  | 'git_init'
+  | 'git_commit'
+  | 'git_push'
+  | 'git_pull'
+  | 'git_branch_created'
+  | 'git_branch_deleted'
+  | 'git_branch_switched'
+  | 'git_remote_configured'
+  | 'git_staged'
+  | 'git_unstaged'
+  // Voice events
+  | 'voice_joined'
+  | 'voice_left'
+  | 'voice_muted'
+  | 'voice_unmuted'
+  // Runtime events
+  | 'server_started'
+  | 'server_stopped';
+
 export interface ActivityEvent {
   id: string;
   project_id: string;
   user_id: string;
   user_name: string;
-  action_type: 
-    | 'file_created' 
-    | 'file_renamed' 
-    | 'file_deleted' 
-    | 'voice_joined' 
-    | 'voice_left' 
-    | 'server_started' 
-    | 'server_stopped'
-    | 'member_joined'
-    | 'media_uploaded';
+  action_type: ActivityActionType;
+  /** Human-readable description of the event */
   details: string;
+  /** The object affected (file name, branch name, user name, etc.) */
+  target_object?: string;
   created_at: string;
 }
 
-export function isMediaFile(fileName: string): { isMedia: boolean; type: 'image' | 'video' | 'none' } {
+export function isMediaFile(fileName: string): { isMedia: boolean; type: 'image' | 'video' | 'audio' | 'none' } {
   const ext = fileName.split('.').pop()?.toLowerCase();
   const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif'];
-  const videoExts = ['mp4', 'webm', 'ogg', 'mov', 'mkv', 'avi'];
+  const videoExts = ['mp4', 'webm', 'mov', 'mkv', 'avi'];
+  const audioExts = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'];
 
   if (ext && imageExts.includes(ext)) {
     return { isMedia: true, type: 'image' };
   }
   if (ext && videoExts.includes(ext)) {
     return { isMedia: true, type: 'video' };
+  }
+  if (ext && audioExts.includes(ext)) {
+    return { isMedia: true, type: 'audio' };
   }
   return { isMedia: false, type: 'none' };
 }

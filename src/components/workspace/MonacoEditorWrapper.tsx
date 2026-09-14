@@ -9,6 +9,7 @@ import { FileItem, getUserColor } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
 import { DataService } from '@/lib/data-service';
 import { EditorSettings } from './EditorSettingsModal';
+import { config } from '@/lib/config';
 import { Loader2, Wifi, WifiOff, CheckCircle2 } from 'lucide-react';
 
 interface MonacoEditorWrapperProps {
@@ -93,7 +94,7 @@ export function MonacoEditorWrapper({
 
     // Room name isolated per project and file
     const roomName = `project-${projectId}-file-${file.id}`;
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:1234';
+    const wsUrl = config.wsUrl;
 
     const provider = new WebsocketProvider(wsUrl, roomName, ydoc);
     providerRef.current = provider;

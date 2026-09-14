@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserProfile } from '@/lib/types';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { APP_URL } from '@/lib/config';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -10,6 +11,8 @@ interface AuthContextType {
   isSupabase: boolean;
   signInWithPassword: (email: string, password: string) => Promise<{ error: any }>;
   signUpWithPassword: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
+  signInWithOAuth: (provider: 'google' | 'github') => Promise<{ error: any }>;
+  resetPassword: (email: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -28,7 +31,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Fetch or ensure profile exists in public.profiles
       const { data: profile } = await supabase!
         .from('profiles')
         .select('*')
@@ -39,25 +41,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser({
           id: profile.id,
           email: profile.email,
-          full_name: profile.full_name || sessionUser.email.split('@')[0],
+          full_name: profile.full_name || sessionUser.email?.split('@')[0] || 'User',
           avatar_url: profile.avatar_url,
         });
       } else {
+        // Build full_name from OAuth metadata or email
+        const oauthName =
+          sessionUser.user_metadata?.full_name ||
+          sessionUser.user_metadata?.name ||
+          sessionUser.email?.split('@')[0] ||
+          'User';
+        const oauthAvatar =
+          sessionUser.user_metadata?.avatar_url ||
+          sessionUser.user_metadata?.picture ||
+          '';
+
         const fallbackProfile = {
           id: sessionUser.id,
-          email: sessionUser.email,
-          full_name: sessionUser.user_metadata?.full_name || sessionUser.email.split('@')[0],
+          email: sessionUser.email || '',
+          full_name: oauthName,
+          avatar_url: oauthAvatar,
         };
         setUser(fallbackProfile);
-        // Ensure profile row
+        // Ensure profile row exists (upsert handles OAuth + email sign-ups)
         await supabase!.from('profiles').upsert([fallbackProfile]);
       }
     } catch (e) {
       console.error('Error fetching user profile:', e);
       setUser({
         id: sessionUser.id,
-        email: sessionUser.email,
-        full_name: sessionUser.user_metadata?.full_name || sessionUser.email.split('@')[0],
+        email: sessionUser.email || '',
+        full_name: sessionUser.user_metadata?.full_name || sessionUser.email?.split('@')[0] || 'User',
+        avatar_url: sessionUser.user_metadata?.avatar_url,
       });
     } finally {
       setLoading(false);
@@ -70,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 1. Initial session fetch
+    // 1. Initial session fetch (handles OAuth redirect back)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         syncProfile(session.user);
@@ -79,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // 2. Listen to auth state transitions
+    // 2. Listen to auth state transitions (sign in, sign out, token refresh)
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         await syncProfile(session.user);
@@ -109,18 +124,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isSupabaseConfigured || !supabase) {
       return { error: new Error('Supabase is not configured') };
     }
+    const redirectTo = APP_URL ? `${APP_URL}/auth/callback` : undefined;
     const res = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          full_name: fullName,
-        },
+        data: { full_name: fullName },
+        emailRedirectTo: redirectTo,
       },
     });
 
     if (res.data.user) {
-      // Auto-insert profile record immediately
       await supabase.from('profiles').upsert([{
         id: res.data.user.id,
         email: res.data.user.email,
@@ -129,6 +143,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await syncProfile(res.data.user);
     }
     return { error: res.error };
+  };
+
+  /**
+   * Level 6: OAuth sign-in with Google or GitHub.
+   * Redirects to provider, then back to /auth/callback which restores the session.
+   */
+  const signInWithOAuth = async (provider: 'google' | 'github') => {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: new Error('Supabase is not configured') };
+    }
+    const redirectTo = APP_URL ? `${APP_URL}/auth/callback` : `${window.location.origin}/auth/callback`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo },
+    });
+    return { error };
+  };
+
+  /**
+   * Level 6: Password reset — sends reset email.
+   */
+  const resetPassword = async (email: string) => {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: new Error('Supabase is not configured') };
+    }
+    const redirectTo = APP_URL ? `${APP_URL}/auth/callback` : `${window.location.origin}/auth/callback`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    return { error };
   };
 
   const signOut = async () => {
@@ -146,6 +188,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isSupabase: isSupabaseConfigured,
         signInWithPassword,
         signUpWithPassword,
+        signInWithOAuth,
+        resetPassword,
         signOut,
       }}
     >

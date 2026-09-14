@@ -6,6 +6,7 @@ import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { Project, FileItem, ProjectMember, getUserColor, isMediaFile } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
+import { config } from '@/lib/config';
 import { useAuth } from '@/context/AuthContext';
 import { useVoiceChat } from '@/hooks/useVoiceChat';
 import { FileTree } from './FileTree';
@@ -74,18 +75,18 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const userColor = getUserColor(user?.id || 'guest');
 
   // Activity Broadcast helper
-  const logAndBroadcastActivity = useCallback(async (actionType: any, details: string) => {
+  const logAndBroadcastActivity = useCallback(async (actionType: any, details: string, targetObject?: string) => {
     try {
       const act = await DataService.logActivity(
         projectId,
         user?.id || 'guest',
         user?.full_name || 'Anonymous Peer',
         actionType,
-        details
+        details,
+        targetObject
       );
-      // Broadcast via comm room
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${window.location.hostname}:1234/comm?projectId=${projectId}`;
+      // Broadcast via comm room using centralized config URL
+      const wsUrl = config.buildWsUrl('/comm', { projectId });
       const tempWs = new WebSocket(wsUrl);
       tempWs.onopen = () => {
         tempWs.send(JSON.stringify({ type: 'activity_event', activity: act }));
@@ -165,10 +166,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
     });
   };
 
-  // Sync file content to remote workspace filesystem
+  // Sync file content to remote workspace filesystem (uses config API URL)
   const syncFileToWorkspace = (filePath: string, content: string) => {
     try {
-      fetch('http://localhost:1234/api/sync-file', {
+      fetch(config.buildApiUrl('/api/sync-file'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, path: filePath, content }),
@@ -202,7 +203,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
       // Seed remote workspace disk with existing files
       try {
-        fetch('http://localhost:1234/api/sync-project', {
+        fetch(config.buildApiUrl('/api/sync-project'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ projectId, files: filesData }),
@@ -222,7 +223,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
         sessionStorage.setItem(sessionKey, 'true');
         logAndBroadcastActivity(
           'member_joined',
-          `${user.full_name || 'A user'} entered the workspace`
+          `${user.full_name || 'A user'} entered the workspace`,
+          projectId
         );
       }
     } catch (err) {
@@ -241,11 +243,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
   // Real-Time File-Tree Synchronization across peers via Yjs workspace room
   useEffect(() => {
     const ydoc = new Y.Doc();
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:1234';
+    const wsUrl = config.wsUrl;
     const roomName = `project-${projectId}-filetree-sync`;
     const provider = new WebsocketProvider(wsUrl, roomName, ydoc);
 
-    // Shared Map for notifying file-tree mutations (create, rename, delete)
     const ymap = ydoc.getMap('file-events');
 
     ymap.observe((event) => {
@@ -282,7 +283,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
   // Broadcast file tree event to peers
   const broadcastFileChange = () => {
     const ydoc = new Y.Doc();
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:1234';
+    const wsUrl = config.wsUrl;
     const roomName = `project-${projectId}-filetree-sync`;
     const provider = new WebsocketProvider(wsUrl, roomName, ydoc);
     const ymap = ydoc.getMap('file-events');
@@ -346,8 +347,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
       }
       broadcastFileChange();
       logAndBroadcastActivity(
-        'file_created',
-        `Created ${isFolder ? 'folder' : 'file'} "${name}"`
+        isFolder ? 'folder_created' : 'file_created',
+        `Created ${isFolder ? 'folder' : 'file'} "${name}"`,
+        name
       );
     } catch (err) {
       console.error(err);
@@ -367,7 +369,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
       broadcastFileChange();
       logAndBroadcastActivity(
         'file_renamed',
-        `Renamed "${oldFile?.name || 'file'}" → "${newName}"`
+        `Renamed "${oldFile?.name || 'file'}" → "${newName}"`,
+        newName
       );
     } catch (err) {
       console.error(err);
@@ -382,8 +385,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
       handleCloseTab(fileId);
       broadcastFileChange();
       logAndBroadcastActivity(
-        'file_deleted',
-        `Deleted "${oldFile?.name || 'file'}"`
+        oldFile?.is_folder ? 'folder_deleted' : 'file_deleted',
+        `Deleted "${oldFile?.name || 'file'}"`,
+        oldFile?.name
       );
     } catch (err) {
       console.error(err);
@@ -419,7 +423,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
         logAndBroadcastActivity(
           'media_uploaded',
-          `Uploaded file "${f.name}" (${(f.size / 1024).toFixed(1)} KB)`
+          `Uploaded file "${f.name}" (${(f.size / 1024).toFixed(1)} KB)`,
+          f.name
         );
       }
       broadcastFileChange();
@@ -509,6 +514,41 @@ export function Workspace({ projectId }: WorkspaceProps) {
     } catch (err) {
       console.error('Project export failed:', err);
       alert('Failed to export project ZIP');
+    }
+  };
+
+  const handleOpenMediaInEditor = (media: { name: string; url: string; type: 'image' | 'video' | 'audio' | 'file' }) => {
+    const existingFile = files.find((f) => f.name === media.name || f.content === media.url);
+    if (existingFile) {
+      if (!openFiles.some((f) => f.id === existingFile.id)) {
+        setOpenFiles((prev) => [...prev, existingFile]);
+      }
+      setActiveFileId(existingFile.id);
+    } else {
+      let defaultExt = 'png';
+      if (media.type === 'video') defaultExt = 'mp4';
+      else if (media.type === 'audio') defaultExt = 'mp3';
+      else if (media.type === 'file') defaultExt = 'txt';
+
+      const safeName = media.name && media.name.includes('.')
+        ? media.name
+        : (media.name ? `${media.name}.${defaultExt}` : `media_${Date.now()}.${defaultExt}`);
+
+      const newMediaFile: FileItem = {
+        id: `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: safeName,
+        content: media.url,
+        language: 'plaintext',
+        media_type: media.type,
+        is_folder: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        project_id: projectId,
+        parent_id: null,
+      };
+      setFiles((prev) => [...prev, newMediaFile]);
+      setOpenFiles((prev) => [...prev, newMediaFile]);
+      setActiveFileId(newMediaFile.id);
     }
   };
 
@@ -828,7 +868,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
             {/* Media Viewer, Monaco Editor, or Empty State */}
             <div className="flex-1 w-full h-full relative overflow-hidden">
               {activeFile ? (
-                isMediaFile(activeFile.name).isMedia ? (
+                (isMediaFile(activeFile.name).isMedia || !!activeFile.media_type) ? (
                   <MediaViewer
                     key={activeFile.id}
                     file={activeFile}
@@ -962,6 +1002,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
               onToggleMute={toggleMute}
               orientation={dockOrientation}
               onChangeOrientation={handleOrientationChange}
+              onOpenMediaInEditor={handleOpenMediaInEditor}
             />
           )}
         </div>

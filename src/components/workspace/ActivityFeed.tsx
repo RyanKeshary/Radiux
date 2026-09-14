@@ -1,208 +1,333 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
-import { ActivityEvent } from '@/lib/types';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { ActivityEvent, ActivityActionType } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
-import { 
-  FilePlus, 
-  FileEdit, 
-  Trash2, 
-  PhoneCall, 
-  PhoneOff, 
-  Server, 
-  UserCheck, 
-  Activity as ActivityIcon,
-  Loader2,
-  Clock,
-  UploadCloud,
-  Users,
-  Film
-} from 'lucide-react';
+import { config } from '@/lib/config';
+import { Loader2, Activity as ActivityIcon, RefreshCw, ChevronDown } from 'lucide-react';
 
 interface ActivityFeedProps {
   projectId: string;
 }
 
+// ============================================================================
+// Compact activity row metadata
+// ============================================================================
+
+type Category = 'file' | 'git' | 'member' | 'voice' | 'runtime';
+
+interface ActionMeta {
+  verb: string;
+  category: Category;
+}
+
+const ACTION_META: Record<ActivityActionType, ActionMeta> = {
+  // Project
+  project_created:         { verb: 'created',   category: 'member' },
+  project_renamed:         { verb: 'renamed',   category: 'member' },
+  // Member
+  member_joined:           { verb: 'joined',    category: 'member' },
+  member_invited:          { verb: 'invited',   category: 'member' },
+  member_removed:          { verb: 'removed',   category: 'member' },
+  // Files
+  file_created:            { verb: 'created',   category: 'file' },
+  file_renamed:            { verb: 'renamed',   category: 'file' },
+  file_deleted:            { verb: 'deleted',   category: 'file' },
+  file_moved:              { verb: 'moved',     category: 'file' },
+  folder_created:          { verb: 'created',   category: 'file' },
+  folder_deleted:          { verb: 'deleted',   category: 'file' },
+  media_uploaded:          { verb: 'uploaded',  category: 'file' },
+  // Git
+  git_init:                { verb: 'init',      category: 'git' },
+  git_commit:              { verb: 'committed', category: 'git' },
+  git_push:                { verb: 'pushed',    category: 'git' },
+  git_pull:                { verb: 'pulled',    category: 'git' },
+  git_branch_created:      { verb: 'branch+',  category: 'git' },
+  git_branch_deleted:      { verb: 'branch-',  category: 'git' },
+  git_branch_switched:     { verb: 'checkout', category: 'git' },
+  git_remote_configured:   { verb: 'remote',   category: 'git' },
+  git_staged:              { verb: 'staged',   category: 'git' },
+  git_unstaged:            { verb: 'unstaged', category: 'git' },
+  // Voice
+  voice_joined:            { verb: 'joined',   category: 'voice' },
+  voice_left:              { verb: 'left',     category: 'voice' },
+  voice_muted:             { verb: 'muted',    category: 'voice' },
+  voice_unmuted:           { verb: 'unmuted',  category: 'voice' },
+  // Runtime
+  server_started:          { verb: 'started',  category: 'runtime' },
+  server_stopped:          { verb: 'stopped',  category: 'runtime' },
+};
+
+// Colors for each verb
+const VERB_COLORS: Record<string, string> = {
+  // creates / joins
+  created:   'text-emerald-400',
+  joined:    'text-emerald-400',
+  started:   'text-emerald-400',
+  init:      'text-emerald-400',
+  'branch+': 'text-emerald-400',
+  invited:   'text-sky-400',
+  uploaded:  'text-sky-400',
+  committed: 'text-violet-400',
+  pushed:    'text-violet-400',
+  pulled:    'text-violet-400',
+  checkout:  'text-violet-400',
+  remote:    'text-violet-400',
+  staged:    'text-blue-400',
+  unstaged:  'text-neutral-400',
+  // renames / moves
+  renamed:   'text-amber-400',
+  moved:     'text-amber-400',
+  // deletes / leaves
+  deleted:   'text-rose-400',
+  left:      'text-rose-400',
+  stopped:   'text-rose-400',
+  removed:   'text-rose-400',
+  'branch-': 'text-rose-400',
+  // voice
+  muted:     'text-neutral-400',
+  unmuted:   'text-sky-400',
+};
+
+const CATEGORY_FILTERS = [
+  { label: 'All', value: 'all' },
+  { label: 'Files', value: 'file' },
+  { label: 'Git', value: 'git' },
+  { label: 'Members', value: 'member' },
+  { label: 'Voice', value: 'voice' },
+  { label: 'Runtime', value: 'runtime' },
+] as const;
+
+type FilterValue = (typeof CATEGORY_FILTERS)[number]['value'];
+
+// Format time as HH:MM:SS
+function formatTime(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch {
+    return '--:--:--';
+  }
+}
+
+// Format full date for tooltip
+function formatFull(isoString: string): string {
+  try {
+    return new Date(isoString).toLocaleString();
+  } catch {
+    return isoString;
+  }
+}
+
+// Truncate long strings to keep columns tight
+function truncate(s: string, max: number): string {
+  if (!s) return '';
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
+// Get category for fallback (unknown action types)
+function getCategoryForFilter(event: ActivityEvent): Category {
+  const meta = ACTION_META[event.action_type];
+  if (meta) return meta.category;
+  if (event.action_type.startsWith('git_')) return 'git';
+  if (event.action_type.startsWith('voice_')) return 'voice';
+  if (event.action_type.startsWith('file_') || event.action_type.startsWith('folder_')) return 'file';
+  if (event.action_type.startsWith('server_')) return 'runtime';
+  return 'member';
+}
+
+// ============================================================================
+// Main component
+// ============================================================================
+
 export function ActivityFeed({ projectId }: ActivityFeedProps) {
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'members' | 'files' | 'voice'>('all');
+  const [filter, setFilter] = useState<FilterValue>('all');
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const PAGE_SIZE = 80;
 
-  const fetchActivities = async () => {
+  const fetchActivities = useCallback(async (reset = false) => {
     try {
+      if (reset) setLoading(true);
       const acts = await DataService.getActivities(projectId);
-      setActivities(acts);
+      if (reset) {
+        setActivities(acts);
+        setPage(0);
+        setHasMore(acts.length >= PAGE_SIZE);
+      } else {
+        setActivities((prev) => {
+          const existingIds = new Set(prev.map((a) => a.id));
+          const newItems = acts.filter((a) => !existingIds.has(a.id));
+          return [...newItems, ...prev];
+        });
+      }
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchActivities();
   }, [projectId]);
 
-  // Real-time activity events via WebSocket
   useEffect(() => {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:1234/comm?projectId=${projectId}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    fetchActivities(true);
+  }, [fetchActivities]);
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'activity_event' && data.activity) {
-          const act: ActivityEvent = data.activity;
-          setActivities((prev) => [act, ...prev.filter((a) => a.id !== act.id)].slice(0, 200));
-        }
-      } catch (e) {}
+  // Real-time activity events via WebSocket comm room
+  useEffect(() => {
+    const wsUrl = config.buildWsUrl('/comm', { projectId });
+
+    const connect = () => {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'activity_event' && msg.activity) {
+            setActivities((prev) => {
+              // Avoid duplicates
+              if (prev.some((a) => a.id === msg.activity.id)) return prev;
+              return [msg.activity, ...prev];
+            });
+          }
+        } catch (e) {}
+      };
+
+      ws.onclose = () => {
+        // Reconnect after 3s if closed unexpectedly
+        setTimeout(() => {
+          if (wsRef.current?.readyState !== WebSocket.OPEN) {
+            connect();
+          }
+        }, 3000);
+      };
     };
+
+    connect();
 
     return () => {
-      ws.close();
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
   }, [projectId]);
 
-  const getActivityIcon = (type: ActivityEvent['action_type']) => {
-    switch (type) {
-      case 'file_created':
-        return <FilePlus className="w-3.5 h-3.5 text-emerald-400" />;
-      case 'media_uploaded':
-        return <UploadCloud className="w-3.5 h-3.5 text-sky-400" />;
-      case 'file_renamed':
-        return <FileEdit className="w-3.5 h-3.5 text-amber-400" />;
-      case 'file_deleted':
-        return <Trash2 className="w-3.5 h-3.5 text-rose-400" />;
-      case 'voice_joined':
-        return <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />;
-      case 'voice_left':
-        return <PhoneOff className="w-3.5 h-3.5 text-neutral-400" />;
-      case 'server_started':
-      case 'server_stopped':
-        return <Server className="w-3.5 h-3.5 text-purple-400" />;
-      case 'member_joined':
-        return <UserCheck className="w-3.5 h-3.5 text-indigo-400" />;
-      default:
-        return <ActivityIcon className="w-3.5 h-3.5 text-neutral-400" />;
-    }
-  };
-
-  const formatRelativeTime = (isoString: string) => {
-    try {
-      const now = Date.now();
-      const timestamp = new Date(isoString).getTime();
-      const diffSec = Math.floor((now - timestamp) / 1000);
-
-      if (diffSec < 10) return 'just now';
-      if (diffSec < 60) return `${diffSec}s ago`;
-      const diffMin = Math.floor(diffSec / 60);
-      if (diffMin < 60) return `${diffMin}m ago`;
-      const diffHour = Math.floor(diffMin / 60);
-      if (diffHour < 24) return `${diffHour}h ago`;
-      return new Date(isoString).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      return '';
-    }
-  };
-
-  const filteredActivities = activities.filter((act) => {
+  // Apply category filter
+  const filtered = activities.filter((a) => {
     if (filter === 'all') return true;
-    if (filter === 'members') return act.action_type === 'member_joined';
-    if (filter === 'files') return ['file_created', 'file_renamed', 'file_deleted', 'media_uploaded'].includes(act.action_type);
-    if (filter === 'voice') return ['voice_joined', 'voice_left', 'server_started', 'server_stopped'].includes(act.action_type);
-    return true;
+    return getCategoryForFilter(a) === filter;
   });
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#181818] p-3 overflow-hidden select-none">
-      {/* Header & Filter Controls */}
-      <div className="flex items-center justify-between pb-2 border-b border-[#333333] mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <ActivityIcon className="w-4 h-4 text-sky-400" />
-          <span className="text-xs font-bold text-white">Project Activity Timeline</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#2a2d2e] text-neutral-400 font-mono">
-            {activities.length} events recorded
-          </span>
+    <div className="flex flex-col h-full bg-[#1e1e1e] text-[#cccccc]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#2d2d2d] shrink-0">
+        <div className="flex items-center gap-1.5">
+          <ActivityIcon className="w-3.5 h-3.5 text-neutral-400" />
+          <span className="text-xs font-semibold text-neutral-300 tracking-wide uppercase">Activity Log</span>
+          <span className="ml-1 text-[10px] text-neutral-600 font-mono">{filtered.length}</span>
         </div>
-
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1 text-[11px] bg-[#252526] p-0.5 rounded-lg border border-[#333333]">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-2 py-0.5 rounded-md transition-colors ${
-              filter === 'all' ? 'bg-[#094771] text-white font-medium' : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setFilter('members')}
-            className={`px-2 py-0.5 rounded-md transition-colors ${
-              filter === 'members' ? 'bg-[#094771] text-white font-medium' : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            Users Joined
-          </button>
-          <button
-            onClick={() => setFilter('files')}
-            className={`px-2 py-0.5 rounded-md transition-colors ${
-              filter === 'files' ? 'bg-[#094771] text-white font-medium' : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            Files & Media
-          </button>
-          <button
-            onClick={() => setFilter('voice')}
-            className={`px-2 py-0.5 rounded-md transition-colors ${
-              filter === 'voice' ? 'bg-[#094771] text-white font-medium' : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            Voice & Runtime
-          </button>
-        </div>
+        <button
+          onClick={() => fetchActivities(true)}
+          title="Refresh"
+          className="p-1 rounded text-neutral-500 hover:text-neutral-200 hover:bg-[#2d2d2d] transition-colors"
+        >
+          <RefreshCw className="w-3 h-3" />
+        </button>
       </div>
 
-      {/* Activity Timeline List */}
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+      {/* Category filter pills */}
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[#2d2d2d] shrink-0 overflow-x-auto">
+        {CATEGORY_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setFilter(f.value)}
+            className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+              filter === f.value
+                ? 'bg-sky-600/30 text-sky-300 border border-sky-700/50'
+                : 'text-neutral-500 hover:text-neutral-300 hover:bg-[#2d2d2d]'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Log rows */}
+      <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
-            <Loader2 className="w-5 h-5 animate-spin text-sky-400" />
-            <span className="text-xs">Loading activity timeline from project origin...</span>
+          <div className="flex items-center justify-center h-full gap-2 text-neutral-600 text-xs">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Loading activity…</span>
           </div>
-        ) : filteredActivities.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2 py-8">
-            <Clock className="w-8 h-8 text-neutral-600" />
-            <p className="text-xs font-medium text-neutral-400">No matching activities found</p>
-            <p className="text-[11px] text-neutral-600">Events from users entering the workspace and creating media will display here.</p>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-neutral-600 text-xs gap-2">
+            <ActivityIcon className="w-8 h-8 text-neutral-700" />
+            <p className="font-mono">No activity yet</p>
+            <p className="text-[10px] text-neutral-700">Events appear here as the workspace is used</p>
           </div>
         ) : (
-          filteredActivities.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-start gap-3 p-2 rounded-lg bg-[#252526]/70 border border-[#333333] hover:border-[#444444] transition-colors"
-            >
-              <div className="p-1.5 rounded-md bg-[#1e1e1e] flex-shrink-0 mt-0.5 border border-[#3c3c3c]">
-                {getActivityIcon(item.action_type)}
-              </div>
+          <div className="font-mono text-[11px] leading-none">
+            {/* Column headers */}
+            <div className="flex items-center px-2 py-1 border-b border-[#252525] text-[10px] text-neutral-600 uppercase tracking-wider select-none sticky top-0 bg-[#1e1e1e] z-10">
+              <span className="w-[72px] shrink-0">Time</span>
+              <span className="w-[90px] shrink-0">User</span>
+              <span className="w-[74px] shrink-0">Action</span>
+              <span className="flex-1 min-w-0">Target / Details</span>
+            </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-neutral-200 truncate">
-                    {item.user_name}
+            {filtered.map((event) => {
+              const meta = ACTION_META[event.action_type] || { verb: event.action_type, category: 'member' as Category };
+              const verbColor = VERB_COLORS[meta.verb] || 'text-neutral-400';
+              const target = event.target_object || '';
+              // Show target_object if present, otherwise fall back to details
+              const displayTarget = target ? truncate(target, 36) : truncate(event.details, 48);
+
+              return (
+                <div
+                  key={event.id}
+                  className="flex items-center px-2 py-[5px] hover:bg-[#252525] border-b border-[#232323] transition-colors group"
+                  title={`${formatFull(event.created_at)} — ${event.details}`}
+                >
+                  {/* Time */}
+                  <span className="w-[72px] shrink-0 text-neutral-600 group-hover:text-neutral-500">
+                    {formatTime(event.created_at)}
                   </span>
-                  <span className="text-[10px] text-neutral-500 flex-shrink-0">
-                    {formatRelativeTime(item.created_at)}
+
+                  {/* User */}
+                  <span className="w-[90px] shrink-0 text-neutral-300 truncate pr-1" title={event.user_name}>
+                    {truncate(event.user_name, 11)}
+                  </span>
+
+                  {/* Action verb — color-coded */}
+                  <span className={`w-[74px] shrink-0 ${verbColor} font-medium`}>
+                    {meta.verb}
+                  </span>
+
+                  {/* Target / Details */}
+                  <span className="flex-1 min-w-0 text-neutral-400 truncate" title={event.details}>
+                    {displayTarget}
                   </span>
                 </div>
-                <p className="text-xs text-neutral-300 mt-0.5 break-words">
-                  {item.details}
-                </p>
-              </div>
-            </div>
-          ))
+              );
+            })}
+
+            {/* Load more */}
+            {hasMore && (
+              <button
+                onClick={() => fetchActivities(false)}
+                className="w-full flex items-center justify-center gap-1.5 py-2 text-[10px] text-neutral-600 hover:text-neutral-400 hover:bg-[#252525] transition-colors border-t border-[#252525]"
+              >
+                <ChevronDown className="w-3 h-3" />
+                Load older events
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

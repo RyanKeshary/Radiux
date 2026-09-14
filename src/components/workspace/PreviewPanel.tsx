@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { buildApiUrl } from '@/lib/config';
 import { 
   RefreshCw, 
   ExternalLink, 
@@ -50,7 +51,7 @@ export function PreviewPanel({
       let cancelled = false;
       const checkPort = async () => {
         try {
-          const res = await fetch(`http://localhost:1234/api/check-port?port=${port}`);
+          const res = await fetch(buildApiUrl('/api/check-port', { port: String(port) }));
           const data = await res.json();
           if (!cancelled) {
             setIsPortActive(data.open);
@@ -70,7 +71,7 @@ export function PreviewPanel({
   }, [mode, port, key]);
 
   // Static preview URL points to CodeCollab backend file server
-  const staticUrl = `http://localhost:1234/preview/${projectId}/${path.replace(/^\//, '') || 'index.html'}`;
+  const staticUrl = buildApiUrl(`/preview/${projectId}/${path.replace(/^\//, '') || 'index.html'}`);
   
   // Port preview URL points to the local listening service (e.g. Express, Flask, Vite)
   const portUrl = `http://localhost:${port}${path.startsWith('/') ? path : '/' + path}`;

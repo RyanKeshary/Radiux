@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Project, ProjectMember, UserProfile } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
 import { useAuth } from '@/context/AuthContext';
+import { config } from '@/lib/config';
 import { UserPlus, X, Check, Copy, Shield, Trash2, Search, AlertCircle, Loader2 } from 'lucide-react';
 
 interface InviteMemberModalProps {
@@ -77,8 +78,8 @@ export function InviteMemberModal({
           'member_joined',
           `Added ${targetUser.full_name} (${targetUser.email}) to the project`
         );
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${wsProtocol}//${window.location.hostname}:1234/comm?projectId=${project.id}`);
+        const wsUrl = config.buildWsUrl('/comm', { projectId: project.id });
+        const ws = new WebSocket(wsUrl);
         ws.onopen = () => {
           ws.send(JSON.stringify({ type: 'activity_event', activity: act }));
           setTimeout(() => ws.close(), 300);

@@ -53,6 +53,7 @@ interface BottomDockProps {
   // Orientation props
   orientation: DockOrientation;
   onChangeOrientation: (orientation: DockOrientation) => void;
+  onOpenMediaInEditor?: (media: { name: string; url: string; type: 'image' | 'video' | 'audio' | 'file' }) => void;
 }
 
 export type DockTab = 'terminal' | 'preview' | 'git' | 'chat' | 'voice' | 'activity' | 'split';
@@ -81,6 +82,7 @@ export function BottomDock({
   onToggleMute,
   orientation,
   onChangeOrientation,
+  onOpenMediaInEditor,
 }: BottomDockProps) {
   const [activeTab, setActiveTab] = useState<DockTab>('terminal');
   const [height, setHeight] = useState<number>(340);
@@ -340,6 +342,7 @@ export function BottomDock({
             userName={userName}
             userAvatar={userAvatar}
             onNewMessageReceived={onNewMessageReceived}
+            onOpenMediaInEditor={onOpenMediaInEditor}
           />
         )}
 

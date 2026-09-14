@@ -19,6 +19,54 @@ const { setupWSConnection } = require(utilsPath);
 const host = process.env.HOST || '0.0.0.0';
 const port = parseInt(process.env.PORT || '1234', 10);
 
+// Level 6: Production CORS — restrict WS origins in production
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || null; // null = allow all (dev mode)
+
+// Level 6: Server-side Supabase client for WS auth verification
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+let supabaseAdmin = null;
+
+if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    console.log('[CodeCollab] Supabase admin client ready for WS auth verification');
+  } catch (e) {
+    console.warn('[CodeCollab] Could not initialize Supabase admin client:', e.message);
+  }
+} else {
+  console.warn('[CodeCollab] SUPABASE_SERVICE_ROLE_KEY not set — WS auth verification disabled (dev mode)');
+}
+
+/**
+ * Verify a Supabase access token server-side.
+ * Returns the user object or null if invalid.
+ */
+async function verifyToken(token) {
+  if (!token || !supabaseAdmin) return null;
+  try {
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !user) return null;
+    return user;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Check if the request origin is allowed.
+ * In production, restrict to ALLOWED_ORIGIN env var.
+ */
+function isOriginAllowed(requestOrigin) {
+  if (!ALLOWED_ORIGIN) return true; // dev mode — allow all
+  if (!requestOrigin) return false;
+  // Allow exact match or subdomain match
+  return requestOrigin === ALLOWED_ORIGIN || requestOrigin.endsWith('.' + ALLOWED_ORIGIN.replace(/^https?:\/\//, ''));
+}
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.htm': 'text/html; charset=utf-8',
@@ -44,12 +92,22 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((request, response) => {
-  // Global CORS & permissive embedding headers
-  response.setHeader('Access-Control-Allow-Origin', '*');
-  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  // Allow iframe embedding from localhost:3000
-  response.setHeader('X-Frame-Options', 'ALLOWALL');
+  // Level 6: Production CORS — only allow configured origin
+  const origin = request.headers.origin || '';
+  if (ALLOWED_ORIGIN) {
+    if (isOriginAllowed(origin)) {
+      response.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      response.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+    }
+  } else {
+    response.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE, PUT');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  response.setHeader('Vary', 'Origin');
+  // Allow iframe embedding from same origin for preview
+  response.setHeader('X-Frame-Options', 'SAMEORIGIN');
 
   if (request.method === 'OPTIONS') {
     response.writeHead(204);
@@ -396,7 +454,7 @@ const server = http.createServer((request, response) => {
         } else {
           try {
             const stat = fs.statSync(fullItemPath);
-            // Skip massive files > 5MB for json transfer
+            // Skip massive files >5MB for json transfer
             if (stat.size < 5 * 1024 * 1024) {
               const content = fs.readFileSync(fullItemPath, 'utf8');
               results.push({ name: item.name, path: relPath, is_folder: false, content });
@@ -418,12 +476,12 @@ const server = http.createServer((request, response) => {
 });
 
 // ============================================================================
-// Level 4: Communication Room Manager (WebRTC Voice Signaling + Chat/Activity)
+// Level 4 + 6: Communication Room Manager (WebRTC Voice Signaling + Chat/Activity)
 // ============================================================================
 // Map: projectId -> Set<{ ws, userId, userName, userColor, isMuted }>
 const commRooms = new Map();
 
-function handleCommConnection(ws, projectId) {
+function handleCommConnection(ws, projectId, verifiedUser) {
   if (!commRooms.has(projectId)) {
     commRooms.set(projectId, new Set());
   }
@@ -431,8 +489,9 @@ function handleCommConnection(ws, projectId) {
   let clientMeta = {
     ws,
     peerId: `peer-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    userId: 'guest',
-    userName: 'Anonymous',
+    // Level 6: Use verified user identity if available
+    userId: verifiedUser?.id || 'guest',
+    userName: verifiedUser?.user_metadata?.full_name || verifiedUser?.email?.split('@')[0] || 'Anonymous',
     userColor: '#38bdf8',
     isMuted: false,
     inVoice: false,
@@ -449,17 +508,20 @@ function handleCommConnection(ws, projectId) {
     try {
       const msg = JSON.parse(raw.toString());
 
-      // 1. Client identifies itself
+      // 1. Client identifies itself (only allows overriding color, not userId/userName in production)
       if (msg.type === 'identify') {
-        clientMeta.userId = msg.userId || clientMeta.userId;
-        clientMeta.userName = msg.userName || clientMeta.userName;
+        // If no verified user, allow identity from message (dev/mock mode)
+        if (!verifiedUser) {
+          clientMeta.userId = msg.userId || clientMeta.userId;
+          clientMeta.userName = msg.userName || clientMeta.userName;
+        }
+        // Always allow color override
         clientMeta.userColor = msg.userColor || clientMeta.userColor;
         return;
       }
 
       // 2. Chat message broadcast
       if (msg.type === 'chat_message') {
-        // Broadcast to all clients in this project room (including sender if desired)
         const chatPayload = JSON.stringify({
           type: 'chat_message',
           message: msg.message,
@@ -491,7 +553,6 @@ function handleCommConnection(ws, projectId) {
         clientMeta.inVoice = true;
         clientMeta.isMuted = Boolean(msg.isMuted);
 
-        // Notify other voice members in room that a new peer joined
         const joinPayload = JSON.stringify({
           type: 'voice_peer_joined',
           peerId: clientMeta.peerId,
@@ -501,7 +562,6 @@ function handleCommConnection(ws, projectId) {
           isMuted: clientMeta.isMuted,
         });
 
-        // Send existing voice peers back to the newly joined peer
         const existingPeers = [];
         room.forEach((c) => {
           if (c.peerId !== clientMeta.peerId && c.inVoice) {
@@ -603,12 +663,37 @@ function handleCommConnection(ws, projectId) {
 
 const wss = new WebSocketServer({ noServer: true });
 
-server.on('upgrade', (request, socket, head) => {
+server.on('upgrade', async (request, socket, head) => {
   const parsedUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+
+  // Level 6: Origin check for WS connections
+  const origin = request.headers.origin || '';
+  if (ALLOWED_ORIGIN && !isOriginAllowed(origin)) {
+    console.warn(`[WS] Rejected connection from unauthorized origin: ${origin}`);
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+    socket.destroy();
+    return;
+  }
 
   // Route 1: Terminal stream WebSocket (/terminal?projectId=...)
   if (parsedUrl.pathname === '/terminal') {
     const projectId = parsedUrl.searchParams.get('projectId') || 'default';
+    const token = parsedUrl.searchParams.get('token') || '';
+
+    // Level 6: Verify token for terminal access
+    let verifiedUser = null;
+    if (token) {
+      verifiedUser = await verifyToken(token);
+    }
+
+    // In dev mode (no service role key), allow without verification
+    if (SUPABASE_SERVICE_ROLE_KEY && !verifiedUser) {
+      console.warn(`[WS/terminal] Rejected unauthenticated terminal connection for project: ${projectId}`);
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     wss.handleUpgrade(request, socket, head, (ws) => {
       WorkspaceManager.connectTerminal(projectId, ws);
     });
@@ -618,13 +703,30 @@ server.on('upgrade', (request, socket, head) => {
   // Route 2: Real-time Communication (/comm?projectId=...)
   if (parsedUrl.pathname === '/comm') {
     const projectId = parsedUrl.searchParams.get('projectId') || 'default';
+    const token = parsedUrl.searchParams.get('token') || '';
+
+    // Level 6: Verify token
+    let verifiedUser = null;
+    if (token) {
+      verifiedUser = await verifyToken(token);
+    }
+
+    // In dev mode (no service role key), allow without verification
+    if (SUPABASE_SERVICE_ROLE_KEY && !verifiedUser) {
+      console.warn(`[WS/comm] Rejected unauthenticated comm connection for project: ${projectId}`);
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     wss.handleUpgrade(request, socket, head, (ws) => {
-      handleCommConnection(ws, projectId);
+      handleCommConnection(ws, projectId, verifiedUser);
     });
     return;
   }
 
   // Route 3: Yjs document & presence sync rooms
+  // Yjs handles its own document-level access — authorization enforced by Supabase RLS at DB level
   wss.handleUpgrade(request, socket, head, (ws) => {
     wss.emit('connection', ws, request);
   });
@@ -633,6 +735,8 @@ server.on('upgrade', (request, socket, head) => {
 wss.on('connection', setupWSConnection);
 
 server.listen(port, host, () => {
-  console.log(`[CodeCollab] Server running on ${host}:${port} (Yjs + Workspace Terminal + WebRTC Voice & Chat + Static Preview)`);
+  console.log(`[CodeCollab] Server running on ${host}:${port}`);
+  console.log(`[CodeCollab] Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`[CodeCollab] CORS origin: ${ALLOWED_ORIGIN || 'all (dev mode)'}`);
+  console.log(`[CodeCollab] WS auth: ${supabaseAdmin ? 'enabled' : 'disabled (dev mode)'}`);
 });
-

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { config } from '@/lib/config';
 import { Square, RotateCcw, Trash2, Terminal as TerminalIcon, Copy, Clipboard } from 'lucide-react';
 
 interface TerminalPanelProps {
@@ -66,9 +67,8 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName }: Ter
 
     term.writeln('\x1b[1;36m[CodeCollab Remote Terminal]\x1b[0m Connecting to workspace environment...');
 
-    // 2. Connect to terminal WebSocket
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:1234/terminal?projectId=${projectId}`;
+    // 2. Connect to terminal WebSocket using centralized config URL
+    const wsUrl = config.buildWsUrl('/terminal', { projectId });
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -153,15 +153,21 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName }: Ter
     window.addEventListener('resize', handleResize);
 
     // Watch container DOM node with ResizeObserver so maximize, dock resize, or tab switches immediately refit
+    // Double rAF ensures that fullscreen transitions fully paint before measuring dimensions
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined' && containerEl) {
       resizeObserver = new ResizeObserver(() => {
-        // Small delay so layout styles have fully painted
         requestAnimationFrame(() => {
-          handleResize();
+          requestAnimationFrame(() => {
+            handleResize();
+          });
         });
       });
       resizeObserver.observe(containerEl);
+      // Also observe the parent so fullscreen/dock resizes are caught
+      if (containerEl.parentElement) {
+        resizeObserver.observe(containerEl.parentElement);
+      }
     }
 
     return () => {
@@ -313,14 +319,15 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName }: Ter
         </div>
       </div>
 
-      {/* Terminal Viewport */}
+      {/* Terminal Viewport — must be position:relative with explicit 0 padding for xterm to measure correctly */}
       <div 
         ref={containerRef} 
         onContextMenu={(e) => {
           e.preventDefault();
           handlePaste();
         }}
-        className="flex-1 w-full h-full min-h-0 p-1.5 overflow-hidden cursor-text relative" 
+        style={{ padding: '4px' }}
+        className="flex-1 w-full min-h-0 overflow-hidden cursor-text" 
       />
     </div>
   );
