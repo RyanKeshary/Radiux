@@ -29,33 +29,41 @@ export const DataService = {
 
   // Check if a user has access to a project
   async verifyProjectAccess(projectId: string, userId: string): Promise<{ authorized: boolean; role?: 'owner' | 'member' }> {
-    if (!isSupabaseConfigured || !supabase) {
-      const p = StorageMock.getProject(projectId);
-      if (!p) return { authorized: false };
-      return { authorized: true, role: p.owner_id === userId ? 'owner' : 'member' };
+    // 1. Try Supabase
+    if (isSupabaseConfigured && supabase) {
+      const { data: proj, error: projError } = await supabase
+        .from('projects')
+        .select('id, owner_id')
+        .eq('id', projectId)
+        .single();
+
+      if (!projError && proj) {
+        if (proj.owner_id === userId) {
+          return { authorized: true, role: 'owner' };
+        }
+        const { data: member } = await supabase
+          .from('project_members')
+          .select('id, role')
+          .eq('project_id', projectId)
+          .eq('user_id', userId)
+          .single();
+
+        if (member) {
+          return { authorized: true, role: member.role as 'owner' | 'member' };
+        }
+        return { authorized: false };
+      }
     }
 
-    // Check if owner
-    const { data: proj } = await supabase
-      .from('projects')
-      .select('id, owner_id')
-      .eq('id', projectId)
-      .single();
-
-    if (proj && proj.owner_id === userId) {
-      return { authorized: true, role: 'owner' };
-    }
-
-    // Check if member
-    const { data: member } = await supabase
-      .from('project_members')
-      .select('id, role')
-      .eq('project_id', projectId)
-      .eq('user_id', userId)
-      .single();
-
-    if (member) {
-      return { authorized: true, role: member.role as 'owner' | 'member' };
+    // 2. Check Local Storage fallback (if created during offline/local fallback)
+    const localProj = StorageMock.getProject(projectId);
+    if (localProj) {
+      const isOwner = localProj.owner_id === userId;
+      const members = StorageMock.getMembers(projectId);
+      const isMember = members.some(m => m.user_id === userId);
+      if (isOwner || isMember) {
+        return { authorized: true, role: isOwner ? 'owner' : 'member' };
+      }
     }
 
     return { authorized: false };
@@ -63,217 +71,192 @@ export const DataService = {
 
   // Projects
   async getProjects(userId: string): Promise<Project[]> {
-    if (!isSupabaseConfigured || !supabase) {
-      return StorageMock.getProjects(userId);
-    }
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .order('updated_at', { ascending: false });
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('updated_at', { ascending: false });
 
-    if (error) {
-      console.warn('Supabase getProjects error, falling back to local storage:', error.message);
-      return StorageMock.getProjects(userId);
+      if (!error && data) {
+        return data.map((p: any) => ({
+          ...p,
+          role: p.owner_id === userId ? 'owner' : 'member'
+        }));
+      }
     }
-    return (data || []).map((p: any) => ({
-      ...p,
-      role: p.owner_id === userId ? 'owner' : 'member'
-    }));
+    return StorageMock.getProjects(userId);
   },
 
   async getProject(projectId: string): Promise<Project | null> {
-    if (!isSupabaseConfigured || !supabase) {
-      return StorageMock.getProject(projectId);
-    }
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('id', projectId)
-      .single();
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
 
-    if (error) {
-      console.warn('Supabase getProject error:', error.message);
-      return StorageMock.getProject(projectId);
+      if (!error && data) {
+        return data;
+      }
     }
-    return data;
+    return StorageMock.getProject(projectId);
   },
 
   async createProject(name: string, description: string, user: UserProfile): Promise<Project> {
-    if (!isSupabaseConfigured || !supabase) {
-      return StorageMock.createProject(name, description, user);
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert({
+          name,
+          description,
+          owner_id: user.id
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        // Add owner to members table
+        await supabase.from('project_members').insert({
+          project_id: data.id,
+          user_id: user.id,
+          role: 'owner'
+        });
+
+        // Add starter index.js
+        await supabase.from('files').insert({
+          project_id: data.id,
+          name: 'index.js',
+          is_folder: false,
+          language: 'javascript',
+          content: `// Project: ${name}\n// Created by ${user.full_name}\n\nconsole.log("Welcome to CodeCollab!");\n`
+        });
+
+        return data;
+      }
+      console.warn('Supabase createProject failed, storing locally:', error?.message);
     }
-    const { data, error } = await supabase
-      .from('projects')
-      .insert({
-        name,
-        description,
-        owner_id: user.id
-      })
-      .select()
-      .single();
 
-    if (error) {
-      console.warn('Supabase createProject error:', error.message);
-      return StorageMock.createProject(name, description, user);
-    }
-
-    // Add owner as member in project_members
-    await supabase.from('project_members').insert({
-      project_id: data.id,
-      user_id: user.id,
-      role: 'owner'
-    });
-
-    // Add starter index.js
-    await supabase.from('files').insert({
-      project_id: data.id,
-      name: 'index.js',
-      is_folder: false,
-      language: 'javascript',
-      content: `// Project: ${name}\n// Created by ${user.full_name}\n\nconsole.log("Welcome to CodeCollab!");\n`
-    });
-
-    return data;
+    return StorageMock.createProject(name, description, user);
   },
 
   // Members
   async getMembers(projectId: string): Promise<ProjectMember[]> {
-    if (!isSupabaseConfigured || !supabase) {
-      return StorageMock.getMembers(projectId);
-    }
-    const { data, error } = await supabase
-      .from('project_members')
-      .select('*, profile:profiles(*)')
-      .eq('project_id', projectId);
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('project_members')
+        .select('*, profile:profiles(*)')
+        .eq('project_id', projectId);
 
-    if (error) {
-      console.warn('Supabase getMembers error:', error.message);
-      return StorageMock.getMembers(projectId);
+      if (!error && data) {
+        return data;
+      }
     }
-    return data || [];
+    return StorageMock.getMembers(projectId);
   },
 
   async addMember(projectId: string, user: UserProfile): Promise<ProjectMember> {
-    if (!isSupabaseConfigured || !supabase) {
-      return StorageMock.addMember(projectId, user);
-    }
-    const { data, error } = await supabase
-      .from('project_members')
-      .insert({
-        project_id: projectId,
-        user_id: user.id,
-        role: 'member'
-      })
-      .select('*, profile:profiles(*)')
-      .single();
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('project_members')
+        .insert({
+          project_id: projectId,
+          user_id: user.id,
+          role: 'member'
+        })
+        .select('*, profile:profiles(*)')
+        .single();
 
-    if (error) {
-      console.warn('Supabase addMember error:', error.message);
-      return StorageMock.addMember(projectId, user);
+      if (!error && data) {
+        return data;
+      }
     }
-    return data;
+    return StorageMock.addMember(projectId, user);
   },
 
   async removeMember(projectId: string, userId: string): Promise<boolean> {
-    if (!isSupabaseConfigured || !supabase) {
-      return true;
-    }
-    const { error } = await supabase
-      .from('project_members')
-      .delete()
-      .eq('project_id', projectId)
-      .eq('user_id', userId);
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase
+        .from('project_members')
+        .delete()
+        .eq('project_id', projectId)
+        .eq('user_id', userId);
 
-    return !error;
+      return !error;
+    }
+    return true;
   },
 
   // Files
   async getFiles(projectId: string): Promise<FileItem[]> {
-    if (!isSupabaseConfigured || !supabase) {
-      return StorageMock.getFiles(projectId);
-    }
-    const { data, error } = await supabase
-      .from('files')
-      .select('*')
-      .eq('project_id', projectId)
-      .order('is_folder', { ascending: false })
-      .order('name', { ascending: true });
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('files')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('is_folder', { ascending: false })
+        .order('name', { ascending: true });
 
-    if (error) {
-      console.warn('Supabase getFiles error:', error.message);
-      return StorageMock.getFiles(projectId);
+      if (!error && data) {
+        return data;
+      }
     }
-    return data || [];
+    return StorageMock.getFiles(projectId);
   },
 
   async createFile(projectId: string, parentId: string | null, name: string, isFolder: boolean): Promise<FileItem> {
-    if (!isSupabaseConfigured || !supabase) {
-      return StorageMock.createFile(projectId, parentId, name, isFolder);
-    }
-    const { data, error } = await supabase
-      .from('files')
-      .insert({
-        project_id: projectId,
-        parent_id: parentId,
-        name,
-        is_folder: isFolder,
-        content: isFolder ? '' : `// ${name}\n`,
-      })
-      .select()
-      .single();
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('files')
+        .insert({
+          project_id: projectId,
+          parent_id: parentId,
+          name,
+          is_folder: isFolder,
+          content: isFolder ? '' : `// ${name}\n`,
+        })
+        .select()
+        .single();
 
-    if (error) {
-      console.warn('Supabase createFile error:', error.message);
-      return StorageMock.createFile(projectId, parentId, name, isFolder);
+      if (!error && data) {
+        return data;
+      }
     }
-    return data;
+    return StorageMock.createFile(projectId, parentId, name, isFolder);
   },
 
   async renameFile(fileId: string, newName: string): Promise<boolean> {
-    if (!isSupabaseConfigured || !supabase) {
-      return StorageMock.renameFile(fileId, newName);
-    }
-    const { error } = await supabase
-      .from('files')
-      .update({ name: newName, updated_at: new Date().toISOString() })
-      .eq('id', fileId);
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase
+        .from('files')
+        .update({ name: newName, updated_at: new Date().toISOString() })
+        .eq('id', fileId);
 
-    if (error) {
-      console.warn('Supabase renameFile error:', error.message);
-      return StorageMock.renameFile(fileId, newName);
+      if (!error) return true;
     }
-    return true;
+    return StorageMock.renameFile(fileId, newName);
   },
 
   async deleteFile(fileId: string): Promise<boolean> {
-    if (!isSupabaseConfigured || !supabase) {
-      return StorageMock.deleteFile(fileId);
-    }
-    const { error } = await supabase
-      .from('files')
-      .delete()
-      .eq('id', fileId);
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase
+        .from('files')
+        .delete()
+        .eq('id', fileId);
 
-    if (error) {
-      console.warn('Supabase deleteFile error:', error.message);
-      return StorageMock.deleteFile(fileId);
+      if (!error) return true;
     }
-    return true;
+    return StorageMock.deleteFile(fileId);
   },
 
   async updateFileContent(fileId: string, content: string): Promise<boolean> {
-    if (!isSupabaseConfigured || !supabase) {
-      return StorageMock.updateFileContent(fileId, content);
-    }
-    const { error } = await supabase
-      .from('files')
-      .update({ content, updated_at: new Date().toISOString() })
-      .eq('id', fileId);
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase
+        .from('files')
+        .update({ content, updated_at: new Date().toISOString() })
+        .eq('id', fileId);
 
-    if (error) {
-      console.warn('Supabase updateFileContent error:', error.message);
-      return StorageMock.updateFileContent(fileId, content);
+      if (!error) return true;
     }
-    return true;
+    return StorageMock.updateFileContent(fileId, content);
   }
 };

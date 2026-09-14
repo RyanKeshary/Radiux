@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { useAuth } from '@/context/AuthContext';
 import { getUserColor, PresenceUser, ProjectMember } from '@/lib/types';
-import { Users, FileCode, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { Users, FileCode, ChevronDown } from 'lucide-react';
 
 interface ExtendedPresenceUser extends PresenceUser {
   fileName?: string;
@@ -28,24 +28,31 @@ export function ProjectPresence({
   const { user } = useAuth();
   const [onlineUsers, setOnlineUsers] = useState<ExtendedPresenceUser[]>([]);
   const [showDrawer, setShowDrawer] = useState(false);
+  const providerRef = useRef<WebsocketProvider | null>(null);
 
+  // 1. Maintain single persistent WebsocketProvider for workspace presence
   useEffect(() => {
     const ydoc = new Y.Doc();
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:1234';
     const roomName = `project-${projectId}-workspace-presence`;
 
     const provider = new WebsocketProvider(wsUrl, roomName, ydoc);
+    providerRef.current = provider;
     const awareness = provider.awareness;
 
     const userColor = getUserColor(user?.id || 'guest');
-    awareness.setLocalStateField('user', {
+    const initialUser: ExtendedPresenceUser = {
       id: user?.id || 'guest',
       name: user?.full_name || 'Anonymous Peer',
       email: user?.email || '',
       color: userColor,
       currentFileId: activeFileId,
-      fileName: activeFileName,
-    });
+      fileName: activeFileName || undefined,
+    };
+
+    // Set local state immediately so user sees at least 1 online (themselves) right away
+    awareness.setLocalStateField('user', initialUser);
+    setOnlineUsers([initialUser]);
 
     const handleAwarenessChange = () => {
       const states = awareness.getStates();
@@ -62,17 +69,44 @@ export function ProjectPresence({
           });
         }
       });
-      setOnlineUsers(users);
+      // Always ensure at least the local user is present
+      if (users.length === 0) {
+        setOnlineUsers([initialUser]);
+      } else {
+        setOnlineUsers(users);
+      }
     };
 
     awareness.on('change', handleAwarenessChange);
+
+    // Immediate check if awareness already has peers
+    handleAwarenessChange();
 
     return () => {
       awareness.off('change', handleAwarenessChange);
       provider.destroy();
       ydoc.destroy();
+      providerRef.current = null;
     };
-  }, [projectId, user?.id, user?.full_name, user?.email, activeFileId, activeFileName]);
+  }, [projectId, user?.id]);
+
+  // 2. Update local presence state (active file, name) without tearing down websocket connection!
+  useEffect(() => {
+    if (!providerRef.current) return;
+    const awareness = providerRef.current.awareness;
+    const userColor = getUserColor(user?.id || 'guest');
+
+    const currentUserState = {
+      id: user?.id || 'guest',
+      name: user?.full_name || 'Anonymous Peer',
+      email: user?.email || '',
+      color: userColor,
+      currentFileId: activeFileId,
+      fileName: activeFileName || undefined,
+    };
+
+    awareness.setLocalStateField('user', currentUserState);
+  }, [activeFileId, activeFileName, user?.full_name, user?.email]);
 
   return (
     <div className="relative">
