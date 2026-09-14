@@ -160,3 +160,65 @@ export interface VoicePeer {
   isMuted: boolean;
 }
 
+// Level 5: Git, GitHub, Import & Export Types
+
+export interface GitFileChange {
+  path: string;
+  status: string; // 'M' | 'A' | 'D' | 'U' | 'R'
+  description: string;
+}
+
+export interface GitLastCommit {
+  hash: string;
+  author: string;
+  relativeDate: string;
+  message: string;
+}
+
+export interface GitStatus {
+  isRepo: boolean;
+  branch: string | null;
+  tracking: string | null;
+  ahead: number;
+  behind: number;
+  staged: GitFileChange[];
+  unstaged: GitFileChange[];
+  untracked: GitFileChange[];
+  clean: boolean;
+  lastCommit?: GitLastCommit | null;
+  error?: string;
+}
+
+export interface GitCommit {
+  fullHash: string;
+  hash: string;
+  author: string;
+  email: string;
+  relativeDate: string;
+  date: string;
+  message: string;
+}
+
+export interface GitBranch {
+  name: string;
+  isCurrent: boolean;
+}
+
+export interface GitHubRemote {
+  name: string;
+  url: string;
+}
+
+export interface WorkspaceExportManifest {
+  version: string;
+  exported_at: string;
+  workspace_name?: string;
+  projects: {
+    id: string;
+    name: string;
+    description?: string;
+    created_at?: string;
+  }[];
+}
+
+

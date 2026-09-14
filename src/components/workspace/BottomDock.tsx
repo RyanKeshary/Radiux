@@ -6,6 +6,7 @@ import { PreviewPanel } from './PreviewPanel';
 import { ChatPanel } from './ChatPanel';
 import { VoicePanel } from './VoicePanel';
 import { ActivityFeed } from './ActivityFeed';
+import { GitPanel } from './GitPanel';
 import { 
   Terminal, 
   MonitorPlay, 
@@ -13,6 +14,7 @@ import {
   MessageSquare, 
   Mic, 
   Activity, 
+  FolderGit2,
   X, 
   Maximize2, 
   Minimize2,
@@ -27,16 +29,19 @@ export type DockOrientation = 'bottom' | 'right' | 'left' | 'fullscreen';
 
 interface BottomDockProps {
   projectId: string;
+  projectName?: string;
   isOpen: boolean;
   onClose: () => void;
   activeFileName?: string | null;
   userId: string;
   userName: string;
+  userEmail?: string;
   userAvatar?: string;
   userColor: string;
   unreadCount: number;
   onClearUnread: () => void;
   onNewMessageReceived: () => void;
+  onActivityEvent?: (details: string) => void;
   // Voice State passed down from Workspace
   isInVoice: boolean;
   isMuted: boolean;
@@ -50,20 +55,23 @@ interface BottomDockProps {
   onChangeOrientation: (orientation: DockOrientation) => void;
 }
 
-export type DockTab = 'terminal' | 'preview' | 'chat' | 'voice' | 'activity' | 'split';
+export type DockTab = 'terminal' | 'preview' | 'git' | 'chat' | 'voice' | 'activity' | 'split';
 
 export function BottomDock({
   projectId,
+  projectName = 'Project',
   isOpen,
   onClose,
   activeFileName,
   userId,
   userName,
+  userEmail,
   userAvatar,
   userColor,
   unreadCount,
   onClearUnread,
   onNewMessageReceived,
+  onActivityEvent,
   isInVoice,
   isMuted,
   voicePeers,
@@ -99,22 +107,23 @@ export function BottomDock({
     containerClasses += 'border-t border-[#3c3c3c] w-full';
     containerStyle = { height: `${height}px` };
   } else if (orientation === 'right') {
-    containerClasses += 'border-l border-[#3c3c3c] h-full flex-shrink-0';
+    containerClasses += 'border-l border-[#3c3c3c] h-full';
     containerStyle = { width: `${width}px` };
   } else if (orientation === 'left') {
-    containerClasses += 'border-r border-[#3c3c3c] h-full flex-shrink-0';
+    containerClasses += 'border-r border-[#3c3c3c] h-full';
     containerStyle = { width: `${width}px` };
   } else if (orientation === 'fullscreen') {
-    containerClasses += 'fixed inset-0 z-50 border-0';
-    containerStyle = { width: '100vw', height: '100vh' };
+    containerClasses += 'fixed inset-0 w-full h-full z-50';
+    containerStyle = {};
   }
 
   return (
-    <div style={containerStyle} className={containerClasses}>
+    <div className={containerClasses} style={containerStyle}>
       {/* Dock Header */}
-      <div className="h-8 bg-[#252526] border-b border-[#333333] px-3 flex items-center justify-between select-none flex-shrink-0 gap-2">
+      <div className="h-9 px-3 bg-[#252526] border-b border-[#3c3c3c] flex items-center justify-between select-none flex-shrink-0">
         {/* Tab Buttons */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+          {/* Terminal Tab */}
           <button
             onClick={() => setActiveTab('terminal')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
@@ -123,30 +132,46 @@ export function BottomDock({
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            <Terminal className="w-3.5 h-3.5 text-sky-400" />
+            <Terminal className="w-3.5 h-3.5 text-emerald-400" />
             <span>Terminal</span>
           </button>
 
+          {/* Web Preview Tab */}
           <button
             onClick={() => setActiveTab('preview')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
               activeTab === 'preview'
-                ? 'bg-[#181818] text-white border-t-2 border-t-emerald-500'
+                ? 'bg-[#181818] text-white border-t-2 border-t-sky-500'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            <MonitorPlay className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Web Preview</span>
+            <MonitorPlay className="w-3.5 h-3.5 text-sky-400" />
+            <span>Preview</span>
             {availablePorts.length > 0 && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             )}
           </button>
 
+          {/* Level 5: Source Control / Git Tab */}
+          <button
+            onClick={() => setActiveTab('git')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'git'
+                ? 'bg-[#181818] text-white border-t-2 border-t-indigo-500'
+                : 'text-neutral-400 hover:text-neutral-200'
+            }`}
+            title="Git Version Control & Source Control"
+          >
+            <FolderGit2 className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Source Control</span>
+          </button>
+
+          {/* Split Tab */}
           <button
             onClick={() => setActiveTab('split')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
               activeTab === 'split'
-                ? 'bg-[#181818] text-white border-t-2 border-t-indigo-500'
+                ? 'bg-[#181818] text-white border-t-2 border-t-sky-500'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
             title="Split view: Terminal and Live Preview side-by-side"
@@ -295,6 +320,16 @@ export function BottomDock({
             initialPort={detectedPort} 
             availablePorts={availablePorts}
             activeFileName={activeFileName}
+          />
+        )}
+
+        {activeTab === 'git' && (
+          <GitPanel
+            projectId={projectId}
+            projectName={projectName}
+            userName={userName}
+            userEmail={userEmail}
+            onActivityEvent={onActivityEvent}
           />
         )}
 

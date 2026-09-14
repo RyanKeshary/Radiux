@@ -25,6 +25,7 @@ interface FileTreeProps {
   onRenameFile: (fileId: string, newName: string) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
   onUploadFiles?: (parentId: string | null, files: FileList) => Promise<void>;
+  onUploadFolder?: (parentId: string | null, files: FileList) => Promise<void>;
 }
 
 export function FileTree({
@@ -35,6 +36,7 @@ export function FileTree({
   onRenameFile,
   onDeleteFile,
   onUploadFiles,
+  onUploadFolder,
 }: FileTreeProps) {
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({
     'folder-src': true // default open common folder if present
@@ -46,6 +48,7 @@ export function FileTree({
   const [uploading, setUploading] = useState(false);
   const [targetUploadParent, setTargetUploadParent] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const toggleFolder = (folderId: string) => {
     setOpenFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
@@ -83,6 +86,14 @@ export function FileTree({
     }
   };
 
+  const triggerUploadFolder = (parentId: string | null) => {
+    setTargetUploadParent(parentId);
+    if (folderInputRef.current) {
+      folderInputRef.current.value = '';
+      folderInputRef.current.click();
+    }
+  };
+
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles || selectedFiles.length === 0 || !onUploadFiles) return;
@@ -95,6 +106,28 @@ export function FileTree({
       }
     } catch (err) {
       console.error('Failed to upload files:', err);
+    } finally {
+      setUploading(false);
+      setTargetUploadParent(null);
+    }
+  };
+
+  const handleFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
+
+    setUploading(true);
+    try {
+      if (onUploadFolder) {
+        await onUploadFolder(targetUploadParent, selectedFiles);
+      } else if (onUploadFiles) {
+        await onUploadFiles(targetUploadParent, selectedFiles);
+      }
+      if (targetUploadParent) {
+        setOpenFolders(prev => ({ ...prev, [targetUploadParent]: true }));
+      }
+    } catch (err) {
+      console.error('Failed to upload folder:', err);
     } finally {
       setUploading(false);
       setTargetUploadParent(null);
@@ -266,14 +299,25 @@ export function FileTree({
 
   return (
     <div className="flex flex-col h-full bg-[#252526] select-none relative">
-      {/* Hidden File Input for Media Upload */}
+      {/* Hidden File Input for Media / File Upload */}
       <input
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,video/*,.png,.jpg,.jpeg,.gif,.svg,.webp,.bmp,.ico,.mp4,.webm,.ogg,.mov,.mkv"
         className="hidden"
         onChange={handleFileInputChange}
+      />
+
+      {/* Hidden Folder Input for Uploading Whole Directory */}
+      <input
+        ref={folderInputRef}
+        type="file"
+        // @ts-ignore
+        webkitdirectory="true"
+        directory="true"
+        multiple
+        className="hidden"
+        onChange={handleFolderInputChange}
       />
 
       {/* Explorer Header */}
@@ -282,11 +326,19 @@ export function FileTree({
         <div className="flex items-center gap-1">
           <button
             onClick={() => triggerUpload(null)}
-            title="Upload Media (Images & Videos)"
+            title="Upload Files"
             disabled={uploading}
             className="p-1 hover:text-sky-300 rounded hover:bg-[#333333] transition-colors disabled:opacity-40"
           >
             {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" /> : <Upload className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            onClick={() => triggerUploadFolder(null)}
+            title="Upload Complete Folder"
+            disabled={uploading}
+            className="p-1 hover:text-amber-300 rounded hover:bg-[#333333] transition-colors disabled:opacity-40"
+          >
+            <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
           </button>
           <button
             onClick={() => setCreatingInParent({ parentId: null, isFolder: false })}

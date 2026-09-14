@@ -20,6 +20,7 @@ import { QuickOpenModal } from './QuickOpenModal';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { EditorSettingsModal, EditorSettings } from './EditorSettingsModal';
 import { BottomDock, DockOrientation } from './BottomDock';
+import { GitHubModal } from './GitHubModal';
 import { 
   ChevronLeft, 
   UserPlus, 
@@ -35,7 +36,11 @@ import {
   MonitorPlay,
   MessageSquare,
   Mic,
-  Activity
+  Activity,
+  Download,
+  FolderGit2,
+  Github,
+  GitBranch
 } from 'lucide-react';
 
 interface WorkspaceProps {
@@ -136,6 +141,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isQuickOpen, setIsQuickOpen] = useState(false);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isGitHubOpen, setIsGitHubOpen] = useState(false);
+  const [currentGitBranch, setCurrentGitBranch] = useState('main');
   const [settings, setSettings] = useState<EditorSettings>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -412,12 +419,96 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
         logAndBroadcastActivity(
           'media_uploaded',
-          `Uploaded media "${f.name}" (${(f.size / 1024).toFixed(1)} KB)`
+          `Uploaded file "${f.name}" (${(f.size / 1024).toFixed(1)} KB)`
         );
       }
       broadcastFileChange();
     } catch (err) {
       console.error('Upload failed:', err);
+    }
+  };
+
+  const handleUploadFolder = async (parentId: string | null, uploadedFiles: FileList) => {
+    try {
+      const fileArray = Array.from(uploadedFiles);
+      const createdFolders = new Map<string, string>(); // relPath -> folderId
+
+      const ensureFolder = async (folderPath: string): Promise<string | null> => {
+        const normalized = folderPath.replace(/\/$/, '').trim();
+        if (!normalized) return parentId;
+        if (createdFolders.has(normalized)) return createdFolders.get(normalized)!;
+
+        const segments = normalized.split('/');
+        let currentPath = '';
+        let currentParentId: string | null = parentId;
+
+        for (const seg of segments) {
+          currentPath = currentPath ? `${currentPath}/${seg}` : seg;
+          if (createdFolders.has(currentPath)) {
+            currentParentId = createdFolders.get(currentPath)!;
+          } else {
+            if (seg === '..' || seg === '.') continue;
+            const newFolder = await DataService.createFile(projectId, currentParentId, seg, true);
+            createdFolders.set(currentPath, newFolder.id);
+            setFiles((prev) => [...prev.filter(x => x.id !== newFolder.id), newFolder]);
+            currentParentId = newFolder.id;
+          }
+        }
+        return currentParentId;
+      };
+
+      for (const f of fileArray) {
+        const relPath = (f as any).webkitRelativePath || f.name;
+        if (relPath.includes('node_modules/') || relPath.includes('.git/') || relPath.includes('..')) {
+          continue;
+        }
+
+        const parts = relPath.split('/');
+        const fileName = parts[parts.length - 1];
+        const dirPath = parts.length > 1 ? parts.slice(0, parts.length - 1).join('/') : '';
+
+        if (!fileName) continue;
+
+        const targetFolderId = dirPath ? await ensureFolder(dirPath) : parentId;
+
+        const ext = fileName.split('.').pop()?.toLowerCase();
+        const isBinary = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'mp4', 'webm', 'ogg', 'mp3', 'wav'].includes(ext || '');
+
+        let content = '';
+        if (isBinary) {
+          content = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string || '');
+            reader.onerror = () => resolve('');
+            reader.readAsDataURL(f);
+          });
+        } else {
+          content = await f.text();
+        }
+
+        const newFile = await DataService.createFile(projectId, targetFolderId, fileName, false, content);
+        setFiles((prev) => [...prev.filter(x => x.id !== newFile.id), newFile]);
+        syncFileToWorkspace(newFile.name, content);
+      }
+
+      broadcastFileChange();
+      logAndBroadcastActivity(
+        'media_uploaded',
+        `Uploaded folder with ${fileArray.length} files`
+      );
+    } catch (err) {
+      console.error('Folder upload failed:', err);
+    }
+  };
+
+  // Export individual project as ZIP
+  const handleExportProject = async () => {
+    if (!project) return;
+    try {
+      await DataService.exportProjectAsZip(project);
+    } catch (err) {
+      console.error('Project export failed:', err);
+      alert('Failed to export project ZIP');
     }
   };
 
@@ -626,6 +717,26 @@ export function Workspace({ projectId }: WorkspaceProps) {
             voicePeers={voicePeers}
           />
 
+          {/* Export Project ZIP Button */}
+          <button
+            onClick={handleExportProject}
+            title="Export Project as ZIP"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#1e1e1e] hover:bg-[#2a2a2a] text-neutral-300 hover:text-white border border-[#3c3c3c] text-xs font-medium transition-colors"
+          >
+            <Download className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden lg:inline">Export</span>
+          </button>
+
+          {/* GitHub Sync Button */}
+          <button
+            onClick={() => setIsGitHubOpen(true)}
+            title="Connect & Sync with GitHub"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#1e1e1e] hover:bg-[#2a2a2a] text-neutral-300 hover:text-white border border-[#3c3c3c] text-xs font-medium transition-colors"
+          >
+            <Github className="w-3.5 h-3.5 text-neutral-300" />
+            <span className="hidden lg:inline">GitHub</span>
+          </button>
+
           {/* Share / Invite Collaborators Button */}
           <button
             onClick={() => setIsInviteOpen(true)}
@@ -661,6 +772,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
             onRenameFile={handleRenameFile}
             onDeleteFile={handleDeleteFile}
             onUploadFiles={handleUploadFiles}
+            onUploadFolder={handleUploadFolder}
           />
         </aside>
 
@@ -674,11 +786,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
           {isDockOpen && dockOrientation === 'left' && (
             <BottomDock
               projectId={projectId}
+              projectName={project.name}
               isOpen={isDockOpen}
               onClose={() => setIsDockOpen(false)}
               activeFileName={activeFile?.name}
               userId={user?.id || 'guest'}
               userName={user?.full_name || 'Anonymous Peer'}
+              userEmail={user?.email}
               userAvatar={user?.avatar_url}
               userColor={userColor}
               unreadCount={unreadCount}
@@ -688,6 +802,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                   setUnreadCount((c) => c + 1);
                 }
               }}
+              onActivityEvent={(details) => logAndBroadcastActivity('media_uploaded', details)}
               isInVoice={isInVoice}
               isMuted={isMuted}
               voicePeers={voicePeers}
@@ -754,11 +869,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
             {isDockOpen && dockOrientation === 'bottom' && (
               <BottomDock
                 projectId={projectId}
+                projectName={project.name}
                 isOpen={isDockOpen}
                 onClose={() => setIsDockOpen(false)}
                 activeFileName={activeFile?.name}
                 userId={user?.id || 'guest'}
                 userName={user?.full_name || 'Anonymous Peer'}
+                userEmail={user?.email}
                 userAvatar={user?.avatar_url}
                 userColor={userColor}
                 unreadCount={unreadCount}
@@ -768,6 +885,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                     setUnreadCount((c) => c + 1);
                   }
                 }}
+                onActivityEvent={(details) => logAndBroadcastActivity('media_uploaded', details)}
                 isInVoice={isInVoice}
                 isMuted={isMuted}
                 voicePeers={voicePeers}
@@ -785,11 +903,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
           {isDockOpen && dockOrientation === 'right' && (
             <BottomDock
               projectId={projectId}
+              projectName={project.name}
               isOpen={isDockOpen}
               onClose={() => setIsDockOpen(false)}
               activeFileName={activeFile?.name}
               userId={user?.id || 'guest'}
               userName={user?.full_name || 'Anonymous Peer'}
+              userEmail={user?.email}
               userAvatar={user?.avatar_url}
               userColor={userColor}
               unreadCount={unreadCount}
@@ -799,6 +919,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                   setUnreadCount((c) => c + 1);
                 }
               }}
+              onActivityEvent={(details) => logAndBroadcastActivity('media_uploaded', details)}
               isInVoice={isInVoice}
               isMuted={isMuted}
               voicePeers={voicePeers}
@@ -815,11 +936,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
           {isDockOpen && dockOrientation === 'fullscreen' && (
             <BottomDock
               projectId={projectId}
+              projectName={project.name}
               isOpen={isDockOpen}
               onClose={() => setIsDockOpen(false)}
               activeFileName={activeFile?.name}
               userId={user?.id || 'guest'}
               userName={user?.full_name || 'Anonymous Peer'}
+              userEmail={user?.email}
               userAvatar={user?.avatar_url}
               userColor={userColor}
               unreadCount={unreadCount}
@@ -829,6 +952,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                   setUnreadCount((c) => c + 1);
                 }
               }}
+              onActivityEvent={(details) => logAndBroadcastActivity('media_uploaded', details)}
               isInVoice={isInVoice}
               isMuted={isMuted}
               voicePeers={voicePeers}
@@ -854,6 +978,16 @@ export function Workspace({ projectId }: WorkspaceProps) {
             <span>{isDockOpen ? 'Hide Dock' : 'Dock (Ctrl+`)'}</span>
           </button>
 
+          {/* Git Branch Indicator */}
+          <button
+            onClick={() => setIsDockOpen(true)}
+            className="flex items-center gap-1 text-sky-200 hover:text-white hover:underline font-mono"
+            title="Current Git Branch. Click to open Source Control."
+          >
+            <GitBranch className="w-3 h-3 text-sky-300" />
+            <span>{currentGitBranch}</span>
+          </button>
+
           {isInVoice && (
             <span className="flex items-center gap-1 text-emerald-200 bg-emerald-700/50 px-2 py-0.5 rounded font-semibold">
               <Mic className="w-3 h-3 text-emerald-300 animate-pulse" />
@@ -872,7 +1006,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
           <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
           <span>Spaces: {settings.tabSize}</span>
           <span>UTF-8</span>
-          <span className="font-semibold">CodeCollab Level 4</span>
+          <span className="font-semibold">CodeCollab Level 5</span>
         </div>
       </footer>
 
@@ -911,6 +1045,17 @@ export function Workspace({ projectId }: WorkspaceProps) {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onUpdateSettings={updateSettings}
+      />
+
+      <GitHubModal
+        isOpen={isGitHubOpen}
+        onClose={() => setIsGitHubOpen(false)}
+        projectId={projectId}
+        projectName={project.name}
+        currentBranch={currentGitBranch}
+        onSyncComplete={() => {
+          logAndBroadcastActivity('media_uploaded', 'Synchronized changes with GitHub');
+        }}
       />
     </div>
   );

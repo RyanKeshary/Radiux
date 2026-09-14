@@ -8,6 +8,8 @@ import { Project } from '@/lib/types';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { CreateProjectModal } from '@/components/dashboard/CreateProjectModal';
+import { ImportProjectModal } from '@/components/dashboard/ImportProjectModal';
+import { ImportWorkspaceModal } from '@/components/dashboard/ImportWorkspaceModal';
 import { 
   Code2, 
   FolderGit2, 
@@ -17,7 +19,10 @@ import {
   Database,
   Radio,
   FileCode,
-  LogIn
+  LogIn,
+  Upload,
+  FolderArchive,
+  Download
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -25,6 +30,9 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportProjectOpen, setIsImportProjectOpen] = useState(false);
+  const [isImportWorkspaceOpen, setIsImportWorkspaceOpen] = useState(false);
+  const [exportingWorkspace, setExportingWorkspace] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const fetchProjects = async () => {
@@ -48,6 +56,19 @@ export default function DashboardPage() {
     fetchProjects();
   }, [user]);
 
+  const handleExportAllWorkspaces = async () => {
+    if (!user) return;
+    setExportingWorkspace(true);
+    try {
+      await DataService.exportCompleteWorkspace(user.id);
+    } catch (e) {
+      console.error('Export all failed:', e);
+      alert('Failed to export workspace');
+    } finally {
+      setExportingWorkspace(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#181818] text-[#cccccc] flex flex-col font-sans">
       {/* Top Header */}
@@ -60,7 +81,7 @@ export default function DashboardPage() {
             <h1 className="text-sm font-bold text-white tracking-wide flex items-center gap-2">
               CodeCollab
               <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                Level 2 IDE
+                Level 5 IDE
               </span>
             </h1>
           </div>
@@ -92,7 +113,7 @@ export default function DashboardPage() {
             </div>
             <h2 className="text-2xl font-bold text-white mb-2">Welcome to CodeCollab</h2>
             <p className="text-sm text-neutral-400 max-w-md mx-auto mb-6">
-              A professional browser-based collaborative IDE. Sign in or create an account to start coding in real-time with your peers.
+              A professional browser-based collaborative IDE with Git version control, GitHub synchronization, and workspace import/export.
             </p>
             <div className="flex items-center justify-center gap-3">
               <button
@@ -107,22 +128,53 @@ export default function DashboardPage() {
         ) : (
           <>
             {/* Banner */}
-            <div className="p-6 rounded-2xl bg-gradient-to-r from-[#252526] via-[#202228] to-[#1c2230] border border-[#333742] shadow-xl mb-8 flex items-center justify-between">
+            <div className="p-6 rounded-2xl bg-gradient-to-r from-[#252526] via-[#202228] to-[#1c2230] border border-[#333742] shadow-xl mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="space-y-1">
                 <h2 className="text-xl font-bold text-white">
                   Welcome back, {user?.full_name || 'Developer'}!
                 </h2>
                 <p className="text-xs text-neutral-400 max-w-xl">
-                  Open an existing project or spin up a new collaborative workspace. Share project links with registered peers to edit code simultaneously with live cursors and zero conflict.
+                  Create, import or restore workspaces. Work collaboratively with Git version control, push/pull with GitHub, and export your projects whenever needed.
                 </p>
               </div>
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-medium text-sm transition-all shadow-lg shadow-sky-600/25 hover:shadow-sky-500/40"
-              >
-                <Plus className="w-4 h-4" />
-                <span>New Project</span>
-              </button>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setIsImportProjectOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2a2a2a] hover:bg-[#333333] text-white border border-[#3e3e3e] font-medium text-xs transition-all"
+                  title="Import project from ZIP, Folder, or GitHub"
+                >
+                  <Upload className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Import Project</span>
+                </button>
+
+                <button
+                  onClick={() => setIsImportWorkspaceOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2a2a2a] hover:bg-[#333333] text-white border border-[#3e3e3e] font-medium text-xs transition-all"
+                  title="Restore complete workspace archive"
+                >
+                  <FolderArchive className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Restore Workspace</span>
+                </button>
+
+                <button
+                  onClick={handleExportAllWorkspaces}
+                  disabled={exportingWorkspace || projects.length === 0}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2a2a2a] hover:bg-[#333333] text-white border border-[#3e3e3e] font-medium text-xs transition-all disabled:opacity-50"
+                  title="Export all workspaces into codecollab-workspace.zip"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{exportingWorkspace ? 'Exporting...' : 'Export All'}</span>
+                </button>
+
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition-all shadow-lg shadow-sky-600/25 hover:shadow-sky-500/40"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>New Project</span>
+                </button>
+              </div>
             </div>
 
             {/* Projects Section */}
@@ -210,6 +262,26 @@ export default function DashboardPage() {
           setProjects([newP, ...projects]);
         }}
       />
+
+      {user && (
+        <>
+          <ImportProjectModal
+            isOpen={isImportProjectOpen}
+            onClose={() => setIsImportProjectOpen(false)}
+            user={user}
+            onProjectImported={(newP) => {
+              setProjects([newP, ...projects]);
+            }}
+          />
+
+          <ImportWorkspaceModal
+            isOpen={isImportWorkspaceOpen}
+            onClose={() => setIsImportWorkspaceOpen(false)}
+            user={user}
+            onSuccess={fetchProjects}
+          />
+        </>
+      )}
 
       <AuthModal
         isOpen={isAuthModalOpen}

@@ -6,6 +6,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import { WorkspaceManager } from './workspace-manager.mjs';
+import { GitManager } from './git-manager.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -200,6 +201,215 @@ const server = http.createServer((request, response) => {
     });
 
     socket.connect(probePort, '127.0.0.1');
+    return;
+  }
+
+  // 5. Level 5: Git Endpoints
+  if (parsedUrl.pathname.startsWith('/api/git/')) {
+    const action = parsedUrl.pathname.replace(/^\/api\/git\//, '');
+    let body = '';
+    request.on('data', chunk => body += chunk);
+    request.on('end', async () => {
+      try {
+        let payload = {};
+        if (body) {
+          try { payload = JSON.parse(body); } catch (e) {}
+        }
+        const projectId = payload.projectId || parsedUrl.searchParams.get('projectId');
+
+        if (!projectId) {
+          response.writeHead(400, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ error: 'Missing projectId' }));
+          return;
+        }
+
+        if (action === 'status') {
+          const status = await GitManager.getStatus(projectId);
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(status));
+          return;
+        }
+
+        if (action === 'init') {
+          const res = await GitManager.init(projectId, payload.userName, payload.userEmail);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'stage') {
+          const res = await GitManager.stage(projectId, payload.files);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'unstage') {
+          const res = await GitManager.unstage(projectId, payload.files);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'discard') {
+          const res = await GitManager.discard(projectId, payload.files);
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'commit') {
+          const res = await GitManager.commit(projectId, payload.message, payload.userName, payload.userEmail);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'log') {
+          const limit = parseInt(parsedUrl.searchParams.get('limit') || '40', 10);
+          const commits = await GitManager.getLog(projectId, limit);
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ commits }));
+          return;
+        }
+
+        if (action === 'diff') {
+          const file = parsedUrl.searchParams.get('file') || payload.file;
+          const staged = parsedUrl.searchParams.get('staged') === 'true' || payload.staged === true;
+          const commit = parsedUrl.searchParams.get('commit') || payload.commit;
+          const diffRes = await GitManager.getDiff(projectId, file, staged, commit);
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(diffRes));
+          return;
+        }
+
+        if (action === 'branches') {
+          const data = await GitManager.getBranches(projectId);
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(data));
+          return;
+        }
+
+        if (action === 'branch/create') {
+          const res = await GitManager.createBranch(projectId, payload.branchName);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'branch/switch') {
+          const res = await GitManager.switchBranch(projectId, payload.branchName);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'branch/delete') {
+          const res = await GitManager.deleteBranch(projectId, payload.branchName);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'merge') {
+          const res = await GitManager.mergeBranch(projectId, payload.branchName);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'remotes') {
+          const remotes = await GitManager.getRemotes(projectId);
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ remotes }));
+          return;
+        }
+
+        if (action === 'remote/set') {
+          const res = await GitManager.setRemote(projectId, payload.name || 'origin', payload.url);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'remote/remove') {
+          const res = await GitManager.removeRemote(projectId, payload.name || 'origin');
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'push') {
+          const res = await GitManager.push(projectId, payload.remote || 'origin', payload.branch, payload.token);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'pull') {
+          const res = await GitManager.pull(projectId, payload.remote || 'origin', payload.branch, payload.token);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        if (action === 'clone') {
+          const res = await GitManager.clone(projectId, payload.repoUrl, payload.token);
+          response.writeHead(res.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(res));
+          return;
+        }
+
+        response.writeHead(404, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: `Unknown Git action: ${action}` }));
+      } catch (err) {
+        console.error('[Git API Error]', err);
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 6. Read workspace files from disk for synchronization or import
+  if (parsedUrl.pathname === '/api/workspace/files') {
+    const projectId = parsedUrl.searchParams.get('projectId');
+    if (!projectId) {
+      response.writeHead(400, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: 'Missing projectId' }));
+      return;
+    }
+    const wsDir = WorkspaceManager.getWorkspaceDir(projectId);
+    
+    // Recursive scanner returning array of relative files
+    function scanDir(currentDir, relBase = '') {
+      let results = [];
+      if (!fs.existsSync(currentDir)) return results;
+      const items = fs.readdirSync(currentDir, { withFileTypes: true });
+      for (const item of items) {
+        if (item.name === '.git' || item.name === 'node_modules') continue;
+        const relPath = relBase ? `${relBase}/${item.name}` : item.name;
+        const fullItemPath = path.join(currentDir, item.name);
+        if (item.isDirectory()) {
+          results.push({ name: item.name, path: relPath, is_folder: true });
+          results = results.concat(scanDir(fullItemPath, relPath));
+        } else {
+          try {
+            const stat = fs.statSync(fullItemPath);
+            // Skip massive files > 5MB for json transfer
+            if (stat.size < 5 * 1024 * 1024) {
+              const content = fs.readFileSync(fullItemPath, 'utf8');
+              results.push({ name: item.name, path: relPath, is_folder: false, content });
+            }
+          } catch (e) {}
+        }
+      }
+      return results;
+    }
+
+    const files = scanDir(wsDir);
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ files }));
     return;
   }
 
