@@ -105,9 +105,9 @@ const server = http.createServer((request, response) => {
   }
   response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE, PUT');
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  response.setHeader('Vary', 'Origin');
-  // Allow iframe embedding from same origin for preview
-  response.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // Allow iframe embedding from frontend web app (localhost:3000, production domains)
+  // Do NOT set X-Frame-Options: SAMEORIGIN because the frontend runs on port 3000 / custom domain
+  response.setHeader('Content-Security-Policy', "frame-ancestors 'self' http://localhost:* http://127.0.0.1:* https://* *;");
 
   if (request.method === 'OPTIONS') {
     response.writeHead(204);

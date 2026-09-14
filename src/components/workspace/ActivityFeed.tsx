@@ -224,9 +224,9 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
   });
 
   return (
-    <div className="flex flex-col h-full bg-[#1e1e1e] text-[#cccccc]">
+    <div className="flex flex-col h-full w-full bg-[#1e1e1e] text-[#cccccc]">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#2d2d2d] shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#2d2d2d] shrink-0 w-full">
         <div className="flex items-center gap-1.5">
           <ActivityIcon className="w-3.5 h-3.5 text-neutral-400" />
           <span className="text-xs font-semibold text-neutral-300 tracking-wide uppercase">Activity Log</span>
@@ -242,12 +242,12 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
       </div>
 
       {/* Category filter pills */}
-      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[#2d2d2d] shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-[#2d2d2d] shrink-0 overflow-x-auto w-full">
         {CATEGORY_FILTERS.map((f) => (
           <button
             key={f.value}
             onClick={() => setFilter(f.value)}
-            className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+            className={`shrink-0 px-2.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
               filter === f.value
                 ? 'bg-sky-600/30 text-sky-300 border border-sky-700/50'
                 : 'text-neutral-500 hover:text-neutral-300 hover:bg-[#2d2d2d]'
@@ -259,7 +259,7 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
       </div>
 
       {/* Log rows */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 w-full overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center h-full gap-2 text-neutral-600 text-xs">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -272,12 +272,12 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
             <p className="text-[10px] text-neutral-700">Events appear here as the workspace is used</p>
           </div>
         ) : (
-          <div className="font-mono text-[11px] leading-none">
+          <div className="font-mono text-[11px] leading-none w-full">
             {/* Column headers */}
-            <div className="flex items-center px-2 py-1 border-b border-[#252525] text-[10px] text-neutral-600 uppercase tracking-wider select-none sticky top-0 bg-[#1e1e1e] z-10">
-              <span className="w-[72px] shrink-0">Time</span>
-              <span className="w-[90px] shrink-0">User</span>
-              <span className="w-[74px] shrink-0">Action</span>
+            <div className="flex items-center px-3 py-1.5 border-b border-[#252525] text-[10px] text-neutral-500 uppercase tracking-wider select-none sticky top-0 bg-[#1e1e1e] z-10 w-full">
+              <span className="w-20 shrink-0">Time</span>
+              <span className="w-28 shrink-0">User</span>
+              <span className="w-24 shrink-0">Action</span>
               <span className="flex-1 min-w-0">Target / Details</span>
             </div>
 
@@ -285,27 +285,26 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
               const meta = ACTION_META[event.action_type] || { verb: event.action_type, category: 'member' as Category };
               const verbColor = VERB_COLORS[meta.verb] || 'text-neutral-400';
               const target = event.target_object || '';
-              // Show target_object if present, otherwise fall back to details
-              const displayTarget = target ? truncate(target, 36) : truncate(event.details, 48);
+              const displayTarget = target ? `${target} — ${event.details}` : event.details;
 
               return (
                 <div
                   key={event.id}
-                  className="flex items-center px-2 py-[5px] hover:bg-[#252525] border-b border-[#232323] transition-colors group"
+                  className="flex items-center px-3 py-1.5 hover:bg-[#252525] border-b border-[#232323] transition-colors group w-full"
                   title={`${formatFull(event.created_at)} — ${event.details}`}
                 >
                   {/* Time */}
-                  <span className="w-[72px] shrink-0 text-neutral-600 group-hover:text-neutral-500">
+                  <span className="w-20 shrink-0 text-neutral-500 group-hover:text-neutral-400 font-mono text-[10px]">
                     {formatTime(event.created_at)}
                   </span>
 
                   {/* User */}
-                  <span className="w-[90px] shrink-0 text-neutral-300 truncate pr-1" title={event.user_name}>
-                    {truncate(event.user_name, 11)}
+                  <span className="w-28 shrink-0 text-neutral-300 truncate pr-2" title={event.user_name}>
+                    {event.user_name}
                   </span>
 
                   {/* Action verb — color-coded */}
-                  <span className={`w-[74px] shrink-0 ${verbColor} font-medium`}>
+                  <span className={`w-24 shrink-0 ${verbColor} font-medium`}>
                     {meta.verb}
                   </span>
 

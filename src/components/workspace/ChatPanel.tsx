@@ -191,9 +191,9 @@ export function ChatPanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#181818] text-neutral-200 select-none overflow-hidden relative">
+    <div className="flex flex-col h-full w-full bg-[#181818] text-neutral-200 select-none overflow-hidden relative">
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 w-full overflow-y-auto p-4 space-y-4">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
             <Loader2 className="w-5 h-5 animate-spin" />
@@ -217,7 +217,7 @@ export function ChatPanel({
             return (
               <div
                 key={msg.id}
-                className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+                className={`flex flex-col w-full ${isMe ? 'items-end' : 'items-start'}`}
               >
                 <div
                   className={`flex items-baseline gap-2 mb-1 px-1 text-[11px] ${
@@ -231,7 +231,7 @@ export function ChatPanel({
                 </div>
 
                 <div
-                  className={`flex items-end gap-2 max-w-[85%] ${
+                  className={`flex items-end gap-2 max-w-full md:max-w-[85%] ${
                     isMe ? 'flex-row-reverse' : 'flex-row'
                   }`}
                 >
@@ -259,7 +259,7 @@ export function ChatPanel({
                   >
                     {/* Media Attachment Rendering */}
                     {msg.media_url && (
-                      <div className="rounded-xl overflow-hidden bg-black/40 border border-black/30 my-0.5 max-w-sm group relative">
+                      <div className="rounded-xl overflow-hidden bg-black/40 border border-black/30 my-0.5 max-w-xl lg:max-w-2xl w-full group relative">
                         {msg.media_type === 'image' && (
                           <div className="relative">
                             {/* eslint-disable-next-line @next/next/no-img-element */}

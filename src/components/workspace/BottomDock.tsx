@@ -307,7 +307,7 @@ export function BottomDock({
       </div>
 
       {/* Dock Content Body */}
-      <div className="flex-1 w-full h-full min-h-0 overflow-hidden flex relative">
+      <div className="flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col relative">
         {activeTab === 'terminal' && (
           <TerminalPanel 
             projectId={projectId} 
