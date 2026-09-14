@@ -197,14 +197,16 @@ export function PreviewPanel({
             </div>
           )}
 
-          <button
-            onClick={handleOpenExternal}
-            title="Open in new browser tab"
-            className="flex items-center gap-1 px-2 py-1 rounded bg-[#333333] hover:bg-[#3e3e3e] text-white text-[11px] font-medium transition-colors border border-[#444444]"
+          <a
+            href={currentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Open ${currentUrl} in new browser tab`}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#333333] hover:bg-[#3e3e3e] text-white text-[11px] font-medium transition-colors border border-[#444444] no-underline cursor-pointer"
           >
             <ExternalLink className="w-3 h-3" />
             <span className="hidden md:inline">Open in Tab</span>
-          </button>
+          </a>
         </div>
       </div>
 

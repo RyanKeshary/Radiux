@@ -103,3 +103,60 @@ export function getUserColor(id: string): string {
   }
   return USER_COLORS[Math.abs(hash) % USER_COLORS.length];
 }
+
+// Level 4: Communication & Collaboration Types
+
+export interface ChatMessage {
+  id: string;
+  project_id: string;
+  user_id: string;
+  user_name: string;
+  user_avatar?: string;
+  content: string;
+  created_at: string;
+  media_type?: 'image' | 'video' | 'audio' | 'file';
+  media_url?: string;
+  media_name?: string;
+}
+
+export interface ActivityEvent {
+  id: string;
+  project_id: string;
+  user_id: string;
+  user_name: string;
+  action_type: 
+    | 'file_created' 
+    | 'file_renamed' 
+    | 'file_deleted' 
+    | 'voice_joined' 
+    | 'voice_left' 
+    | 'server_started' 
+    | 'server_stopped'
+    | 'member_joined'
+    | 'media_uploaded';
+  details: string;
+  created_at: string;
+}
+
+export function isMediaFile(fileName: string): { isMedia: boolean; type: 'image' | 'video' | 'none' } {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif'];
+  const videoExts = ['mp4', 'webm', 'ogg', 'mov', 'mkv', 'avi'];
+
+  if (ext && imageExts.includes(ext)) {
+    return { isMedia: true, type: 'image' };
+  }
+  if (ext && videoExts.includes(ext)) {
+    return { isMedia: true, type: 'video' };
+  }
+  return { isMedia: false, type: 'none' };
+}
+
+export interface VoicePeer {
+  peerId: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  isMuted: boolean;
+}
+

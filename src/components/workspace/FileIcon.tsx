@@ -44,6 +44,20 @@ export function FileIcon({ name, isFolder, isOpen = false, className = "w-4 h-4"
     case 'css':
     case 'scss':
       return <FileCode className={`${className} text-teal-400`} />;
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'gif':
+    case 'svg':
+    case 'webp':
+    case 'ico':
+    case 'bmp':
+      return <FileSpreadsheet className={`${className} text-rose-400`} />;
+    case 'mp4':
+    case 'webm':
+    case 'mov':
+    case 'ogg':
+      return <FileText className={`${className} text-purple-400`} />;
     case 'json':
       return <FileJson className={`${className} text-yellow-300`} />;
     case 'md':

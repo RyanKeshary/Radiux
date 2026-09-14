@@ -52,7 +52,15 @@ export const WorkspaceManager = {
       if (!fs.existsSync(dirName)) {
         fs.mkdirSync(dirName, { recursive: true });
       }
-      fs.writeFileSync(fullPath, content ?? '', 'utf8');
+
+      if (typeof content === 'string' && content.startsWith('data:') && content.includes(';base64,')) {
+        // Decode base64 media data URL to binary buffer
+        const base64Data = content.split(';base64,')[1];
+        const buffer = Buffer.from(base64Data, 'base64');
+        fs.writeFileSync(fullPath, buffer);
+      } else {
+        fs.writeFileSync(fullPath, content ?? '', 'utf8');
+      }
     } catch (err) {
       console.error(`[WorkspaceManager] Failed to sync file ${relativePath}:`, err);
     }

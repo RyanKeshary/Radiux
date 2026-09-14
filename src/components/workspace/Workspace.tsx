@@ -4,12 +4,14 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
-import { Project, FileItem, ProjectMember } from '@/lib/types';
+import { Project, FileItem, ProjectMember, getUserColor, isMediaFile } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
 import { useAuth } from '@/context/AuthContext';
+import { useVoiceChat } from '@/hooks/useVoiceChat';
 import { FileTree } from './FileTree';
 import { OpenTabs } from './OpenTabs';
 import { MonacoEditorWrapper } from './MonacoEditorWrapper';
+import { MediaViewer } from './MediaViewer';
 import { ProjectPresence } from './ProjectPresence';
 import { InviteMemberModal } from './InviteMemberModal';
 import { UserMenu } from '@/components/auth/UserMenu';
@@ -17,7 +19,7 @@ import { CommandPalette, CommandItem } from './CommandPalette';
 import { QuickOpenModal } from './QuickOpenModal';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { EditorSettingsModal, EditorSettings } from './EditorSettingsModal';
-import { BottomDock } from './BottomDock';
+import { BottomDock, DockOrientation } from './BottomDock';
 import { 
   ChevronLeft, 
   UserPlus, 
@@ -30,7 +32,10 @@ import {
   Command,
   FileSearch,
   Terminal,
-  MonitorPlay
+  MonitorPlay,
+  MessageSquare,
+  Mic,
+  Activity
 } from 'lucide-react';
 
 interface WorkspaceProps {
@@ -59,8 +64,71 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [loading, setLoading] = useState(true);
   const [unauthorized, setUnauthorized] = useState(false);
 
-  // Terminal & Preview Bottom Dock
+  // Level 4: Communication & Collaboration States
+  const [unreadCount, setUnreadCount] = useState(0);
+  const userColor = getUserColor(user?.id || 'guest');
+
+  // Activity Broadcast helper
+  const logAndBroadcastActivity = useCallback(async (actionType: any, details: string) => {
+    try {
+      const act = await DataService.logActivity(
+        projectId,
+        user?.id || 'guest',
+        user?.full_name || 'Anonymous Peer',
+        actionType,
+        details
+      );
+      // Broadcast via comm room
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.hostname}:1234/comm?projectId=${projectId}`;
+      const tempWs = new WebSocket(wsUrl);
+      tempWs.onopen = () => {
+        tempWs.send(JSON.stringify({ type: 'activity_event', activity: act }));
+        setTimeout(() => tempWs.close(), 300);
+      };
+    } catch (e) {}
+  }, [projectId, user?.id, user?.full_name]);
+
+  // WebRTC Voice hook
+  const {
+    isInVoice,
+    isMuted,
+    voicePeers,
+    connectionState: voiceConnectionState,
+    joinVoice,
+    leaveVoice,
+    toggleMute,
+  } = useVoiceChat({
+    projectId,
+    userId: user?.id || 'guest',
+    userName: user?.full_name || 'Anonymous Peer',
+    userColor,
+    onActivityEvent: (details) => {
+      logAndBroadcastActivity(
+        details.includes('joined') ? 'voice_joined' : 'voice_left',
+        details
+      );
+    },
+  });
+
+  // Terminal, Preview, Chat & Voice Bottom Dock
   const [isDockOpen, setIsDockOpen] = useState(false);
+  const [dockOrientation, setDockOrientation] = useState<DockOrientation>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('codecollab_dock_orientation');
+      if (saved === 'bottom' || saved === 'right' || saved === 'left' || saved === 'fullscreen') {
+        return saved;
+      }
+    }
+    return 'bottom';
+  });
+
+  const handleOrientationChange = (newOrientation: DockOrientation) => {
+    setDockOrientation(newOrientation);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('codecollab_dock_orientation', newOrientation);
+    }
+  };
 
   // Modals & IDE Tools
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -140,12 +208,22 @@ export function Workspace({ projectId }: WorkspaceProps) {
         setOpenFiles([firstCodeFile]);
         setActiveFileId(firstCodeFile.id);
       }
+
+      // Record workspace entry in project activity timeline
+      const sessionKey = `workspace_entered_${projectId}_${user.id}`;
+      if (typeof window !== 'undefined' && !sessionStorage.getItem(sessionKey)) {
+        sessionStorage.setItem(sessionKey, 'true');
+        logAndBroadcastActivity(
+          'member_joined',
+          `${user.full_name || 'A user'} entered the workspace`
+        );
+      }
     } catch (err) {
       console.error('Failed to load workspace data:', err);
     } finally {
       setLoading(false);
     }
-  }, [projectId, user]);
+  }, [projectId, user, logAndBroadcastActivity]);
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -260,6 +338,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
         syncFileToWorkspace(name, newFile.content || '');
       }
       broadcastFileChange();
+      logAndBroadcastActivity(
+        'file_created',
+        `Created ${isFolder ? 'folder' : 'file'} "${name}"`
+      );
     } catch (err) {
       console.error(err);
     }
@@ -267,6 +349,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
   const handleRenameFile = async (fileId: string, newName: string) => {
     try {
+      const oldFile = files.find((f) => f.id === fileId);
       await DataService.renameFile(fileId, newName);
       setFiles((prev) =>
         prev.map((f) => (f.id === fileId ? { ...f, name: newName } : f))
@@ -275,6 +358,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
         prev.map((f) => (f.id === fileId ? { ...f, name: newName } : f))
       );
       broadcastFileChange();
+      logAndBroadcastActivity(
+        'file_renamed',
+        `Renamed "${oldFile?.name || 'file'}" → "${newName}"`
+      );
     } catch (err) {
       console.error(err);
     }
@@ -282,12 +369,55 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
   const handleDeleteFile = async (fileId: string) => {
     try {
+      const oldFile = files.find((f) => f.id === fileId);
       await DataService.deleteFile(fileId);
       setFiles((prev) => prev.filter((f) => f.id !== fileId && f.parent_id !== fileId));
       handleCloseTab(fileId);
       broadcastFileChange();
+      logAndBroadcastActivity(
+        'file_deleted',
+        `Deleted "${oldFile?.name || 'file'}"`
+      );
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleUploadFiles = async (parentId: string | null, uploadedFiles: FileList) => {
+    try {
+      const fileArray = Array.from(uploadedFiles);
+      for (const f of fileArray) {
+        // Read file as base64 Data URL to save in database & disk
+        const base64DataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(f);
+        });
+
+        const newFile = await DataService.createFile(
+          projectId,
+          parentId,
+          f.name,
+          false,
+          base64DataUrl
+        );
+
+        setFiles((prev) => [...prev.filter((item) => item.id !== newFile.id), newFile]);
+        setOpenFiles((prev) => [...prev.filter((item) => item.id !== newFile.id), newFile]);
+        setActiveFileId(newFile.id);
+
+        // Sync to remote workspace disk
+        syncFileToWorkspace(newFile.name, base64DataUrl);
+
+        logAndBroadcastActivity(
+          'media_uploaded',
+          `Uploaded media "${f.name}" (${(f.size / 1024).toFixed(1)} KB)`
+        );
+      }
+      broadcastFileChange();
+    } catch (err) {
+      console.error('Upload failed:', err);
     }
   };
 
@@ -443,7 +573,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
         {/* Right Controls */}
         <div className="flex items-center gap-2">
-          {/* Toggle Terminal Button */}
+          {/* Toggle Terminal / Comm Dock Button */}
           <button
             onClick={() => setIsDockOpen(!isDockOpen)}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors border ${
@@ -451,11 +581,40 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 ? 'bg-sky-600 text-white border-sky-500'
                 : 'bg-[#1e1e1e] text-neutral-300 hover:text-white border-[#3c3c3c] hover:bg-[#2a2a2a]'
             }`}
-            title="Toggle Terminal & Preview (Ctrl+`)"
+            title="Toggle Terminal & Communication Dock (Ctrl+`)"
           >
             <Terminal className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Terminal</span>
+            <span className="hidden sm:inline">Dock</span>
+            {unreadCount > 0 && !isDockOpen && (
+              <span className="px-1.5 py-0.2 rounded-full bg-sky-500 text-[9px] font-bold text-white">
+                {unreadCount}
+              </span>
+            )}
           </button>
+
+          {/* Quick Voice Call Indicator Button */}
+          {isInVoice ? (
+            <button
+              onClick={() => setIsDockOpen(true)}
+              className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-medium animate-pulse"
+              title="You are in voice chat. Click to open dock."
+            >
+              <Mic className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Voice Active</span>
+            </button>
+          ) : voicePeers.length > 0 ? (
+            <button
+              onClick={() => {
+                setIsDockOpen(true);
+                joinVoice();
+              }}
+              className="flex items-center gap-1 px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-[#3c3c3c] text-xs font-medium"
+              title="Collaborators are in voice. Click to join."
+            >
+              <Mic className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Join Voice ({voicePeers.length})</span>
+            </button>
+          ) : null}
 
           {/* Active Collaborators Presence */}
           <ProjectPresence
@@ -463,6 +622,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
             activeFileId={activeFileId}
             activeFileName={activeFile ? activeFile.name : null}
             members={members}
+            isInVoice={isInVoice}
+            voicePeers={voicePeers}
           />
 
           {/* Share / Invite Collaborators Button */}
@@ -499,59 +660,187 @@ export function Workspace({ projectId }: WorkspaceProps) {
             onCreateFile={handleCreateFile}
             onRenameFile={handleRenameFile}
             onDeleteFile={handleDeleteFile}
+            onUploadFiles={handleUploadFiles}
           />
         </aside>
 
-        {/* Center / Right: Editor Area + Bottom Dock */}
-        <main className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e] overflow-hidden">
-          {/* Tabs */}
-          <OpenTabs
-            openFiles={openFiles}
-            activeFileId={activeFileId}
-            onSelectTab={handleSelectFile}
-            onCloseTab={handleCloseTab}
-          />
+        {/* Center / Right: Editor Area + Dock in left/right/bottom orientation */}
+        <div className={`flex-1 flex min-w-0 bg-[#1e1e1e] overflow-hidden ${
+          isDockOpen && (dockOrientation === 'left' || dockOrientation === 'right')
+            ? 'flex-row'
+            : 'flex-col'
+        }`}>
+          {/* Dock on Left (if orientation === 'left') */}
+          {isDockOpen && dockOrientation === 'left' && (
+            <BottomDock
+              projectId={projectId}
+              isOpen={isDockOpen}
+              onClose={() => setIsDockOpen(false)}
+              activeFileName={activeFile?.name}
+              userId={user?.id || 'guest'}
+              userName={user?.full_name || 'Anonymous Peer'}
+              userAvatar={user?.avatar_url}
+              userColor={userColor}
+              unreadCount={unreadCount}
+              onClearUnread={() => setUnreadCount(0)}
+              onNewMessageReceived={() => {
+                if (!isDockOpen) {
+                  setUnreadCount((c) => c + 1);
+                }
+              }}
+              isInVoice={isInVoice}
+              isMuted={isMuted}
+              voicePeers={voicePeers}
+              voiceConnectionState={voiceConnectionState}
+              onJoinVoice={joinVoice}
+              onLeaveVoice={leaveVoice}
+              onToggleMute={toggleMute}
+              orientation={dockOrientation}
+              onChangeOrientation={handleOrientationChange}
+            />
+          )}
 
-          {/* Monaco Editor or Empty State */}
-          <div className="flex-1 w-full h-full relative overflow-hidden">
-            {activeFile ? (
-              <MonacoEditorWrapper
-                key={activeFile.id}
-                projectId={projectId}
-                file={activeFile}
-                settings={settings}
-                onContentSaved={(latestText) => {
-                  setFiles((prev) =>
-                    prev.map((f) => (f.id === activeFile.id ? { ...f, content: latestText } : f))
-                  );
-                  setOpenFiles((prev) =>
-                    prev.map((f) => (f.id === activeFile.id ? { ...f, content: latestText } : f))
-                  );
-                  syncFileToWorkspace(activeFile.name, latestText);
-                }}
-                onCursorChange={(line, col) => setCursorPos({ line, col })}
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-3 select-none">
-                <Command className="w-12 h-12 text-neutral-600" />
-                <div className="text-center">
-                  <p className="text-sm font-medium text-neutral-400">No file is open</p>
-                  <p className="text-xs text-neutral-500 mt-1">
-                    Press <kbd className="px-1.5 py-0.5 bg-[#252526] rounded text-neutral-300 border border-[#3c3c3c]">Ctrl+P</kbd> to open a file, or <kbd className="px-1.5 py-0.5 bg-[#252526] rounded text-neutral-300 border border-[#3c3c3c]">Ctrl+`</kbd> to open terminal.
-                  </p>
+          {/* Main Editor Center Area */}
+          <main className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e] overflow-hidden relative">
+            {/* Tabs */}
+            <OpenTabs
+              openFiles={openFiles}
+              activeFileId={activeFileId}
+              onSelectTab={handleSelectFile}
+              onCloseTab={handleCloseTab}
+            />
+
+            {/* Media Viewer, Monaco Editor, or Empty State */}
+            <div className="flex-1 w-full h-full relative overflow-hidden">
+              {activeFile ? (
+                isMediaFile(activeFile.name).isMedia ? (
+                  <MediaViewer
+                    key={activeFile.id}
+                    file={activeFile}
+                    projectId={projectId}
+                  />
+                ) : (
+                  <MonacoEditorWrapper
+                    key={activeFile.id}
+                    projectId={projectId}
+                    file={activeFile}
+                    settings={settings}
+                    onContentSaved={(latestText) => {
+                      setFiles((prev) =>
+                        prev.map((f) => (f.id === activeFile.id ? { ...f, content: latestText } : f))
+                      );
+                      setOpenFiles((prev) =>
+                        prev.map((f) => (f.id === activeFile.id ? { ...f, content: latestText } : f))
+                      );
+                      syncFileToWorkspace(activeFile.name, latestText);
+                    }}
+                    onCursorChange={(line, col) => setCursorPos({ line, col })}
+                  />
+                )
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-3 select-none">
+                  <Command className="w-12 h-12 text-neutral-600" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-neutral-400">No file is open</p>
+                    <p className="text-xs text-neutral-500 mt-1">
+                      Press <kbd className="px-1.5 py-0.5 bg-[#252526] rounded text-neutral-300 border border-[#3c3c3c]">Ctrl+P</kbd> to open a file, or <kbd className="px-1.5 py-0.5 bg-[#252526] rounded text-neutral-300 border border-[#3c3c3c]">Ctrl+`</kbd> to open terminal.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          {/* Bottom Dock: Terminal & Live Web Preview */}
-          <BottomDock
-            projectId={projectId}
-            isOpen={isDockOpen}
-            onClose={() => setIsDockOpen(false)}
-            activeFileName={activeFile?.name}
-          />
-        </main>
+            {/* Dock on Bottom (if orientation === 'bottom') */}
+            {isDockOpen && dockOrientation === 'bottom' && (
+              <BottomDock
+                projectId={projectId}
+                isOpen={isDockOpen}
+                onClose={() => setIsDockOpen(false)}
+                activeFileName={activeFile?.name}
+                userId={user?.id || 'guest'}
+                userName={user?.full_name || 'Anonymous Peer'}
+                userAvatar={user?.avatar_url}
+                userColor={userColor}
+                unreadCount={unreadCount}
+                onClearUnread={() => setUnreadCount(0)}
+                onNewMessageReceived={() => {
+                  if (!isDockOpen) {
+                    setUnreadCount((c) => c + 1);
+                  }
+                }}
+                isInVoice={isInVoice}
+                isMuted={isMuted}
+                voicePeers={voicePeers}
+                voiceConnectionState={voiceConnectionState}
+                onJoinVoice={joinVoice}
+                onLeaveVoice={leaveVoice}
+                onToggleMute={toggleMute}
+                orientation={dockOrientation}
+                onChangeOrientation={handleOrientationChange}
+              />
+            )}
+          </main>
+
+          {/* Dock on Right (if orientation === 'right') */}
+          {isDockOpen && dockOrientation === 'right' && (
+            <BottomDock
+              projectId={projectId}
+              isOpen={isDockOpen}
+              onClose={() => setIsDockOpen(false)}
+              activeFileName={activeFile?.name}
+              userId={user?.id || 'guest'}
+              userName={user?.full_name || 'Anonymous Peer'}
+              userAvatar={user?.avatar_url}
+              userColor={userColor}
+              unreadCount={unreadCount}
+              onClearUnread={() => setUnreadCount(0)}
+              onNewMessageReceived={() => {
+                if (!isDockOpen) {
+                  setUnreadCount((c) => c + 1);
+                }
+              }}
+              isInVoice={isInVoice}
+              isMuted={isMuted}
+              voicePeers={voicePeers}
+              voiceConnectionState={voiceConnectionState}
+              onJoinVoice={joinVoice}
+              onLeaveVoice={leaveVoice}
+              onToggleMute={toggleMute}
+              orientation={dockOrientation}
+              onChangeOrientation={handleOrientationChange}
+            />
+          )}
+
+          {/* Dock in Fullscreen Overlay (if orientation === 'fullscreen') */}
+          {isDockOpen && dockOrientation === 'fullscreen' && (
+            <BottomDock
+              projectId={projectId}
+              isOpen={isDockOpen}
+              onClose={() => setIsDockOpen(false)}
+              activeFileName={activeFile?.name}
+              userId={user?.id || 'guest'}
+              userName={user?.full_name || 'Anonymous Peer'}
+              userAvatar={user?.avatar_url}
+              userColor={userColor}
+              unreadCount={unreadCount}
+              onClearUnread={() => setUnreadCount(0)}
+              onNewMessageReceived={() => {
+                if (!isDockOpen) {
+                  setUnreadCount((c) => c + 1);
+                }
+              }}
+              isInVoice={isInVoice}
+              isMuted={isMuted}
+              voicePeers={voicePeers}
+              voiceConnectionState={voiceConnectionState}
+              onJoinVoice={joinVoice}
+              onLeaveVoice={leaveVoice}
+              onToggleMute={toggleMute}
+              orientation={dockOrientation}
+              onChangeOrientation={handleOrientationChange}
+            />
+          )}
+        </div>
       </div>
 
       {/* Bottom Status Bar */}
@@ -562,8 +851,15 @@ export function Workspace({ projectId }: WorkspaceProps) {
             className="flex items-center gap-1.5 hover:underline font-semibold"
           >
             <Terminal className="w-3 h-3" />
-            <span>{isDockOpen ? 'Hide Terminal' : 'Terminal (Ctrl+`)'}</span>
+            <span>{isDockOpen ? 'Hide Dock' : 'Dock (Ctrl+`)'}</span>
           </button>
+
+          {isInVoice && (
+            <span className="flex items-center gap-1 text-emerald-200 bg-emerald-700/50 px-2 py-0.5 rounded font-semibold">
+              <Mic className="w-3 h-3 text-emerald-300 animate-pulse" />
+              <span>Voice: {isMuted ? 'Muted' : 'Speaking'} ({voicePeers.length + 1})</span>
+            </span>
+          )}
 
           {activeFile && (
             <span>
@@ -576,7 +872,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
           <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
           <span>Spaces: {settings.tabSize}</span>
           <span>UTF-8</span>
-          <span className="font-semibold">CodeCollab Level 3</span>
+          <span className="font-semibold">CodeCollab Level 4</span>
         </div>
       </footer>
 

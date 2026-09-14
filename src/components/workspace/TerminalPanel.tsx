@@ -152,9 +152,24 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName }: Ter
 
     window.addEventListener('resize', handleResize);
 
+    // Watch container DOM node with ResizeObserver so maximize, dock resize, or tab switches immediately refit
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && containerEl) {
+      resizeObserver = new ResizeObserver(() => {
+        // Small delay so layout styles have fully painted
+        requestAnimationFrame(() => {
+          handleResize();
+        });
+      });
+      resizeObserver.observe(containerEl);
+    }
+
     return () => {
       if (containerEl) {
         containerEl.removeEventListener('keydown', handleKeyDown);
+      }
+      if (resizeObserver) {
+        resizeObserver.disconnect();
       }
       window.removeEventListener('resize', handleResize);
       ws.close();
@@ -305,7 +320,7 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName }: Ter
           e.preventDefault();
           handlePaste();
         }}
-        className="flex-1 w-full h-full p-2 overflow-hidden cursor-text" 
+        className="flex-1 w-full h-full min-h-0 p-1.5 overflow-hidden cursor-text relative" 
       />
     </div>
   );

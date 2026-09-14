@@ -188,3 +188,94 @@ create policy "Project members can delete files"
       )
     )
   );
+
+-- ==============================================================================
+-- Level 4: Communication & Collaboration (Messages and Activities)
+-- ==============================================================================
+
+-- 5. Project Chat Messages table
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  user_name text not null,
+  user_avatar text default '',
+  content text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_messages_project on public.messages(project_id, created_at);
+
+-- 6. Project Activities table
+create table if not exists public.activities (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  user_name text not null,
+  action_type text not null,
+  details text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_activities_project on public.activities(project_id, created_at desc);
+
+-- Enable RLS for messages and activities
+alter table public.messages enable row level security;
+alter table public.activities enable row level security;
+
+-- Messages Policies
+create policy "Project members can view messages"
+  on public.messages for select using (
+    exists (
+      select 1 from public.projects p
+      where p.id = messages.project_id and (
+        p.owner_id = auth.uid() or exists (
+          select 1 from public.project_members pm
+          where pm.project_id = p.id and pm.user_id = auth.uid()
+        )
+      )
+    )
+  );
+
+create policy "Project members can insert messages"
+  on public.messages for insert with check (
+    auth.uid() = user_id and
+    exists (
+      select 1 from public.projects p
+      where p.id = messages.project_id and (
+        p.owner_id = auth.uid() or exists (
+          select 1 from public.project_members pm
+          where pm.project_id = p.id and pm.user_id = auth.uid()
+        )
+      )
+    )
+  );
+
+-- Activities Policies
+create policy "Project members can view activities"
+  on public.activities for select using (
+    exists (
+      select 1 from public.projects p
+      where p.id = activities.project_id and (
+        p.owner_id = auth.uid() or exists (
+          select 1 from public.project_members pm
+          where pm.project_id = p.id and pm.user_id = auth.uid()
+        )
+      )
+    )
+  );
+
+create policy "Project members can insert activities"
+  on public.activities for insert with check (
+    auth.uid() = user_id and
+    exists (
+      select 1 from public.projects p
+      where p.id = activities.project_id and (
+        p.owner_id = auth.uid() or exists (
+          select 1 from public.project_members pm
+          where pm.project_id = p.id and pm.user_id = auth.uid()
+        )
+      )
+    )
+  );
+

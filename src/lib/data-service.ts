@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase/client';
 import { StorageMock } from './storage-mock';
-import { Project, ProjectMember, FileItem, UserProfile, detectLanguage } from './types';
+import { Project, ProjectMember, FileItem, UserProfile, detectLanguage, ChatMessage, ActivityEvent } from './types';
 
 export const DataService = {
   isSupabaseActive(): boolean {
@@ -206,8 +206,15 @@ export const DataService = {
     return StorageMock.getFiles(projectId);
   },
 
-  async createFile(projectId: string, parentId: string | null, name: string, isFolder: boolean): Promise<FileItem> {
+  async createFile(
+    projectId: string, 
+    parentId: string | null, 
+    name: string, 
+    isFolder: boolean,
+    initialContent?: string
+  ): Promise<FileItem> {
     const language = isFolder ? undefined : detectLanguage(name);
+    const content = isFolder ? '' : (initialContent !== undefined ? initialContent : `// ${name}\n`);
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase
         .from('files')
@@ -217,7 +224,7 @@ export const DataService = {
           name,
           is_folder: isFolder,
           language,
-          content: isFolder ? '' : `// ${name}\n`,
+          content,
         })
         .select()
         .single();
@@ -229,7 +236,7 @@ export const DataService = {
         };
       }
     }
-    return StorageMock.createFile(projectId, parentId, name, isFolder);
+    return StorageMock.createFile(projectId, parentId, name, isFolder, initialContent);
   },
 
   async renameFile(fileId: string, newName: string): Promise<boolean> {
@@ -271,5 +278,122 @@ export const DataService = {
       if (!error) return true;
     }
     return StorageMock.updateFileContent(fileId, content);
+  },
+
+  // ============================================================================
+  // Level 4: Project Chat & Activity Persistence
+  // ============================================================================
+
+  async getMessages(projectId: string): Promise<ChatMessage[]> {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: true })
+        .limit(150);
+
+      if (!error && data) {
+        return data as ChatMessage[];
+      }
+    }
+    return StorageMock.getMessages(projectId);
+  },
+
+  async sendMessage(
+    projectId: string,
+    userId: string,
+    userName: string,
+    userAvatar: string | undefined,
+    content: string,
+    media?: {
+      type: 'image' | 'video' | 'audio' | 'file';
+      url: string;
+      name: string;
+    }
+  ): Promise<ChatMessage> {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          project_id: projectId,
+          user_id: userId,
+          user_name: userName,
+          user_avatar: userAvatar || '',
+          content: content.trim(),
+          media_type: media?.type,
+          media_url: media?.url,
+          media_name: media?.name,
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        // Also mirror to storage mock for resilience
+        StorageMock.saveMessage(data);
+        return data as ChatMessage;
+      }
+    }
+    return StorageMock.saveMessage({
+      project_id: projectId,
+      user_id: userId,
+      user_name: userName,
+      user_avatar: userAvatar,
+      content: content.trim(),
+      media_type: media?.type,
+      media_url: media?.url,
+      media_name: media?.name,
+    });
+  },
+
+  async getActivities(projectId: string): Promise<ActivityEvent[]> {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (!error && data) {
+        return data as ActivityEvent[];
+      }
+    }
+    return StorageMock.getActivities(projectId);
+  },
+
+  async logActivity(
+    projectId: string,
+    userId: string,
+    userName: string,
+    actionType: ActivityEvent['action_type'],
+    details: string
+  ): Promise<ActivityEvent> {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('activities')
+        .insert({
+          project_id: projectId,
+          user_id: userId,
+          user_name: userName,
+          action_type: actionType,
+          details: details.trim(),
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        StorageMock.logActivity(data);
+        return data as ActivityEvent;
+      }
+    }
+    return StorageMock.logActivity({
+      project_id: projectId,
+      user_id: userId,
+      user_name: userName,
+      action_type: actionType,
+      details: details.trim(),
+    });
   }
 };
+

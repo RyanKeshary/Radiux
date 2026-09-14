@@ -1,9 +1,11 @@
-import { Project, FileItem, ProjectMember, UserProfile, detectLanguage } from '@/lib/types';
+import { Project, FileItem, ProjectMember, UserProfile, detectLanguage, ChatMessage, ActivityEvent } from '@/lib/types';
 
 const STORAGE_KEY_PROJECTS = 'codecollab_projects';
 const STORAGE_KEY_MEMBERS = 'codecollab_members';
 const STORAGE_KEY_FILES = 'codecollab_files';
 const STORAGE_KEY_USERS = 'codecollab_users';
+const STORAGE_KEY_MESSAGES = 'codecollab_messages';
+const STORAGE_KEY_ACTIVITIES = 'codecollab_activities';
 
 export const DEMO_USERS: UserProfile[] = [
   {
@@ -253,7 +255,13 @@ export const StorageMock = {
     return files.filter(f => f.project_id === projectId);
   },
 
-  createFile(projectId: string, parentId: string | null, name: string, isFolder: boolean): FileItem {
+  createFile(
+    projectId: string, 
+    parentId: string | null, 
+    name: string, 
+    isFolder: boolean,
+    initialContent?: string
+  ): FileItem {
     const files = getStored<FileItem[]>(STORAGE_KEY_FILES, []);
     const now = new Date().toISOString();
     const newFile: FileItem = {
@@ -263,7 +271,7 @@ export const StorageMock = {
       name,
       is_folder: isFolder,
       language: isFolder ? undefined : detectLanguage(name),
-      content: isFolder ? undefined : `// ${name}\n`,
+      content: isFolder ? undefined : (initialContent !== undefined ? initialContent : `// ${name}\n`),
       created_at: now,
       updated_at: now,
     };
@@ -315,5 +323,46 @@ export const StorageMock = {
     target.updated_at = new Date().toISOString();
     setStored(STORAGE_KEY_FILES, files);
     return true;
+  },
+
+  // Level 4: Messages & Activities Mock Storage
+  getMessages(projectId: string): ChatMessage[] {
+    const messages = getStored<ChatMessage[]>(STORAGE_KEY_MESSAGES, []);
+    return messages
+      .filter(m => m.project_id === projectId)
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  },
+
+  saveMessage(message: Omit<ChatMessage, 'id' | 'created_at'>): ChatMessage {
+    const messages = getStored<ChatMessage[]>(STORAGE_KEY_MESSAGES, []);
+    const newMessage: ChatMessage = {
+      ...message,
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      created_at: new Date().toISOString(),
+    };
+    messages.push(newMessage);
+    setStored(STORAGE_KEY_MESSAGES, messages);
+    return newMessage;
+  },
+
+  getActivities(projectId: string): ActivityEvent[] {
+    const activities = getStored<ActivityEvent[]>(STORAGE_KEY_ACTIVITIES, []);
+    return activities
+      .filter(a => a.project_id === projectId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  logActivity(activity: Omit<ActivityEvent, 'id' | 'created_at'>): ActivityEvent {
+    const activities = getStored<ActivityEvent[]>(STORAGE_KEY_ACTIVITIES, []);
+    const newActivity: ActivityEvent = {
+      ...activity,
+      id: `act-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      created_at: new Date().toISOString(),
+    };
+    activities.unshift(newActivity);
+    // Keep last 200 activities from the beginning
+    setStored(STORAGE_KEY_ACTIVITIES, activities.slice(0, 200));
+    return newActivity;
   }
 };
+

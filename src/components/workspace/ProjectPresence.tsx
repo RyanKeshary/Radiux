@@ -10,6 +10,7 @@ import { Users, FileCode, ChevronDown } from 'lucide-react';
 interface ExtendedPresenceUser extends PresenceUser {
   fileName?: string;
   email?: string;
+  inVoice?: boolean;
 }
 
 interface ProjectPresenceProps {
@@ -17,6 +18,8 @@ interface ProjectPresenceProps {
   activeFileId: string | null;
   activeFileName: string | null;
   members: ProjectMember[];
+  isInVoice?: boolean;
+  voicePeers?: { userId: string; userName: string; isMuted: boolean }[];
 }
 
 export function ProjectPresence({
@@ -24,6 +27,8 @@ export function ProjectPresence({
   activeFileId,
   activeFileName,
   members,
+  isInVoice = false,
+  voicePeers = [],
 }: ProjectPresenceProps) {
   const { user } = useAuth();
   const [onlineUsers, setOnlineUsers] = useState<ExtendedPresenceUser[]>([]);
@@ -66,6 +71,7 @@ export function ProjectPresence({
             color: state.user.color,
             currentFileId: state.user.currentFileId,
             fileName: state.user.fileName,
+            inVoice: Boolean(state.user.inVoice),
           });
         }
       });
@@ -103,10 +109,11 @@ export function ProjectPresence({
       color: userColor,
       currentFileId: activeFileId,
       fileName: activeFileName || undefined,
+      inVoice: isInVoice,
     };
 
     awareness.setLocalStateField('user', currentUserState);
-  }, [activeFileId, activeFileName, user?.full_name, user?.email]);
+  }, [activeFileId, activeFileName, user?.full_name, user?.email, isInVoice]);
 
   return (
     <div className="relative">
@@ -173,6 +180,11 @@ export function ProjectPresence({
                       {isCurrentUser && (
                         <span className="text-[9px] px-1 py-0.1 rounded bg-white/10 text-neutral-300">
                           You
+                        </span>
+                      )}
+                      {u.inVoice && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-medium flex items-center gap-0.5 border border-emerald-500/30">
+                          🎙 Voice
                         </span>
                       )}
                     </div>

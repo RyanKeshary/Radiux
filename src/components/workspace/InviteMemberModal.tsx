@@ -67,6 +67,24 @@ export function InviteMemberModal({
       // 3. Add to project
       const added = await DataService.addMember(project.id, targetUser);
       onMemberAdded(added);
+
+      // Log activity to project timeline
+      try {
+        const act = await DataService.logActivity(
+          project.id,
+          user?.id || 'guest',
+          user?.full_name || 'Project Owner',
+          'member_joined',
+          `Added ${targetUser.full_name} (${targetUser.email}) to the project`
+        );
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${wsProtocol}//${window.location.hostname}:1234/comm?projectId=${project.id}`);
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: 'activity_event', activity: act }));
+          setTimeout(() => ws.close(), 300);
+        };
+      } catch (e) {}
+
       setSuccessMsg(`Successfully added ${targetUser.full_name} (${targetUser.email}) to the project!`);
       setEmail('');
     } catch (err: any) {
