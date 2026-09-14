@@ -22,7 +22,8 @@ import {
   AlertCircle,
   Clock,
   User,
-  Github
+  Github,
+  X
 } from 'lucide-react';
 import { DataService } from '@/lib/data-service';
 import { GitStatus, GitCommit, GitFileChange } from '@/lib/types';
@@ -61,6 +62,8 @@ export function GitPanel({
   const [showNewBranchInput, setShowNewBranchInput] = useState(false);
   const [selectedMergeBranch, setSelectedMergeBranch] = useState('');
   const [showMergeDropdown, setShowMergeDropdown] = useState(false);
+  const [syncing, setSyncing] = useState<'push' | 'pull' | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // Load Git status, commits and branches
   const refreshGit = async () => {
@@ -287,7 +290,100 @@ export function GitPanel({
     }
   };
 
-  // If not a git repository yet
+  // Direct Push & Pull operations
+  const handleDirectPush = async () => {
+    setSyncing('push');
+    setFeedback(null);
+    try {
+      const remotes = await DataService.getGitHubRemotes(projectId);
+      if (!remotes || remotes.length === 0) {
+        setIsGitHubModalOpen(true);
+        setFeedback({
+          type: 'info',
+          text: 'No GitHub remote repository connected. Please connect your GitHub repository URL first.'
+        });
+        return;
+      }
+
+      const res = await DataService.pushToGitHub(projectId, currentBranch);
+      if (res.success) {
+        setFeedback({
+          type: 'success',
+          text: `Successfully pushed commits on branch '${currentBranch}' to remote!`
+        });
+        if (onActivityEvent) onActivityEvent(`pushed commits on branch ${currentBranch} to remote`);
+        await refreshGit();
+      } else {
+        // If push requires authentication or token
+        if (res.stderr?.toLowerCase().includes('authentication') ||
+            res.stderr?.toLowerCase().includes('permission') ||
+            res.stderr?.toLowerCase().includes('password') ||
+            res.stderr?.toLowerCase().includes('support for password') ||
+            res.stderr?.toLowerCase().includes('token')) {
+          setIsGitHubModalOpen(true);
+          setFeedback({
+            type: 'error',
+            text: 'GitHub authentication required. Please enter your Personal Access Token in the GitHub modal.'
+          });
+        } else {
+          setFeedback({
+            type: 'error',
+            text: res.stderr || 'Push failed. Ensure remote exists and branch is up to date.'
+          });
+        }
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', text: e.message || 'Push failed due to network error.' });
+    } finally {
+      setSyncing(null);
+    }
+  };
+
+  const handleDirectPull = async () => {
+    setSyncing('pull');
+    setFeedback(null);
+    try {
+      const remotes = await DataService.getGitHubRemotes(projectId);
+      if (!remotes || remotes.length === 0) {
+        setIsGitHubModalOpen(true);
+        setFeedback({
+          type: 'info',
+          text: 'No GitHub remote repository connected. Please connect your GitHub repository URL first.'
+        });
+        return;
+      }
+
+      const res = await DataService.pullFromGitHub(projectId, currentBranch);
+      if (res.success) {
+        setFeedback({
+          type: 'success',
+          text: `Successfully pulled latest changes on branch '${currentBranch}'!`
+        });
+        if (onActivityEvent) onActivityEvent(`pulled changes on branch ${currentBranch} from remote`);
+        await refreshGit();
+      } else {
+        if (res.stderr?.toLowerCase().includes('authentication') ||
+            res.stderr?.toLowerCase().includes('permission') ||
+            res.stderr?.toLowerCase().includes('token')) {
+          setIsGitHubModalOpen(true);
+          setFeedback({
+            type: 'error',
+            text: 'GitHub authentication required. Please enter your Personal Access Token in the GitHub modal.'
+          });
+        } else {
+          setFeedback({
+            type: 'error',
+            text: res.stderr || 'Pull failed. Check credentials or git conflicts.'
+          });
+        }
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', text: e.message || 'Pull failed due to network error.' });
+    } finally {
+      setSyncing(null);
+    }
+  };
+
   if (status && !status.isRepo) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-[#181818] text-neutral-300">
@@ -324,18 +420,35 @@ export function GitPanel({
             <span className="font-semibold">{currentBranch}</span>
           </div>
 
-          {status && (status.ahead > 0 || status.behind > 0) && (
-            <div className="flex items-center gap-1.5 text-[11px] text-neutral-400">
-              {status.ahead > 0 && (
-                <span className="text-emerald-400 flex items-center gap-0.5" title={`${status.ahead} commits to push`}>
-                  <ArrowUp className="w-3 h-3" /> {status.ahead}
-                </span>
-              )}
-              {status.behind > 0 && (
-                <span className="text-sky-400 flex items-center gap-0.5" title={`${status.behind} commits to pull`}>
-                  <ArrowDown className="w-3 h-3" /> {status.behind}
-                </span>
-              )}
+          {status && (
+            <div className="flex items-center gap-1 text-[11px]">
+              <button
+                onClick={handleDirectPush}
+                disabled={syncing !== null || status.ahead === 0}
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
+                  status.ahead > 0
+                    ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 font-semibold cursor-pointer border border-emerald-500/30'
+                    : 'text-neutral-500 cursor-default opacity-60'
+                }`}
+                title={status.ahead > 0 ? `Click to push ${status.ahead} commit(s) to remote` : 'No outgoing commits'}
+              >
+                <ArrowUp className={`w-3 h-3 ${syncing === 'push' ? 'animate-bounce' : ''}`} />
+                <span>{status.ahead}</span>
+              </button>
+
+              <button
+                onClick={handleDirectPull}
+                disabled={syncing !== null || status.behind === 0}
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
+                  status.behind > 0
+                    ? 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 font-semibold cursor-pointer border border-sky-500/30'
+                    : 'text-neutral-500 cursor-default opacity-60'
+                }`}
+                title={status.behind > 0 ? `Click to pull ${status.behind} commit(s) from remote` : 'No incoming commits'}
+              >
+                <ArrowDown className={`w-3 h-3 ${syncing === 'pull' ? 'animate-bounce' : ''}`} />
+                <span>{status.behind}</span>
+              </button>
             </div>
           )}
         </div>
@@ -374,8 +487,41 @@ export function GitPanel({
           </button>
         </div>
 
-        {/* Right Tools: Refresh & GitHub */}
-        <div className="flex items-center gap-2">
+        {/* Right Tools: Push, Pull, Refresh & GitHub */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={handleDirectPush}
+            disabled={syncing !== null}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors border ${
+              status && status.ahead > 0
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-sm font-semibold'
+                : 'bg-[#2a2a2a] hover:bg-[#333333] text-neutral-300 border-[#404040]'
+            }`}
+            title="Push commits to GitHub remote"
+          >
+            {syncing === 'push' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span className="hidden sm:inline">Push</span>
+            {status && status.ahead > 0 && <span className="text-[10px]">({status.ahead})</span>}
+          </button>
+
+          <button
+            onClick={handleDirectPull}
+            disabled={syncing !== null}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-[#2a2a2a] hover:bg-[#333333] text-xs text-neutral-300 hover:text-white border border-[#404040] transition-colors"
+            title="Pull changes from GitHub remote"
+          >
+            {syncing === 'pull' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <ArrowDown className="w-3.5 h-3.5 text-sky-400" />
+            )}
+            <span className="hidden sm:inline">Pull</span>
+          </button>
+
           <button
             onClick={() => setIsGitHubModalOpen(true)}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#2a2a2a] hover:bg-[#333333] text-xs text-white border border-[#404040] transition-colors"
@@ -395,6 +541,32 @@ export function GitPanel({
           </button>
         </div>
       </div>
+
+      {/* Sync Feedback Alert Banner */}
+      {feedback && (
+        <div className={`px-4 py-2 text-xs flex items-center justify-between border-b ${
+          feedback.type === 'success'
+            ? 'bg-emerald-950/80 border-emerald-800 text-emerald-300'
+            : feedback.type === 'error'
+            ? 'bg-rose-950/80 border-rose-800 text-rose-300'
+            : 'bg-sky-950/80 border-sky-800 text-sky-300'
+        }`}>
+          <div className="flex items-center gap-2 min-w-0">
+            {feedback.type === 'success' ? (
+              <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+            ) : (
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            )}
+            <span className="truncate">{feedback.text}</span>
+          </div>
+          <button
+            onClick={() => setFeedback(null)}
+            className="p-0.5 hover:opacity-75 text-neutral-400 hover:text-white"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Body Subtab Views */}
       <div className="flex-1 overflow-hidden flex flex-col">
@@ -617,6 +789,31 @@ export function GitPanel({
                       Stage all changes & commit
                     </button>
                   )}
+
+                  {/* Push Changes to Remote Button */}
+                  <div className="pt-2 border-t border-[#333333]">
+                    <button
+                      type="button"
+                      onClick={handleDirectPush}
+                      disabled={syncing !== null}
+                      className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all shadow-sm ${
+                        status && status.ahead > 0
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                          : 'bg-[#2a2a2a] hover:bg-[#333333] text-neutral-300 border border-[#3c3c3c]'
+                      }`}
+                    >
+                      {syncing === 'push' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+                      )}
+                      <span>
+                        {status && status.ahead > 0
+                          ? `Push ${status.ahead} commit${status.ahead > 1 ? 's' : ''} to Remote`
+                          : 'Push to Remote'}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </form>
 
