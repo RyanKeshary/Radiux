@@ -90,9 +90,12 @@ export function ActivityBar({
               onClick={() => onSelectView(item.id)}
               className={`relative w-10 h-10 flex items-center justify-center rounded transition-all group ${
                 isActive
-                  ? 'text-white'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+                  ? 'opacity-100 font-semibold'
+                  : 'opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10'
               }`}
+              style={{
+                color: isActive ? 'var(--ide-accent)' : 'var(--ide-text)',
+              }}
               title={`${item.label} (${item.shortcut})`}
               aria-label={item.label}
               aria-pressed={isActive}
@@ -122,11 +125,11 @@ export function ActivityBar({
       </div>
 
       {/* Bottom Utility Actions */}
-      <div className="flex flex-col items-center gap-1 w-full">
+      <div className="flex flex-col items-center gap-1 w-full" style={{ color: 'var(--ide-text)' }}>
         {/* Notifications Bell */}
         <button
           onClick={onOpenNotifications}
-          className="relative w-10 h-10 flex items-center justify-center rounded text-neutral-400 hover:text-neutral-200 hover:bg-white/5 transition-all"
+          className="relative w-10 h-10 flex items-center justify-center rounded opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-all"
           title="Notifications"
           aria-label="Notifications"
         >
@@ -139,7 +142,7 @@ export function ActivityBar({
         {/* Keyboard Shortcuts */}
         <button
           onClick={onOpenShortcuts}
-          className="w-10 h-10 flex items-center justify-center rounded text-neutral-400 hover:text-neutral-200 hover:bg-white/5 transition-all"
+          className="w-10 h-10 flex items-center justify-center rounded opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-all"
           title="Keyboard Shortcuts (Ctrl+K Ctrl+S)"
           aria-label="Keyboard Shortcuts"
         >
@@ -149,7 +152,7 @@ export function ActivityBar({
         {/* IDE Preferences & Settings */}
         <button
           onClick={onOpenSettings}
-          className="w-10 h-10 flex items-center justify-center rounded text-neutral-400 hover:text-neutral-200 hover:bg-white/5 transition-all"
+          className="w-10 h-10 flex items-center justify-center rounded opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-all"
           title="IDE Settings (Ctrl+,)"
           aria-label="Settings"
         >
@@ -159,7 +162,7 @@ export function ActivityBar({
         {/* User Account / Profile */}
         <button
           onClick={onOpenProfile}
-          className="w-10 h-10 flex items-center justify-center rounded hover:bg-white/5 transition-all mt-1"
+          className="w-10 h-10 flex items-center justify-center rounded hover:bg-black/10 dark:hover:bg-white/10 transition-all mt-1"
           title={`Developer Profile: ${userName}`}
           aria-label="Developer Profile"
         >

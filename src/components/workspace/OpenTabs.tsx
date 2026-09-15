@@ -103,13 +103,14 @@ export function OpenTabs({
               onContextMenu={(e) => handleContextMenu(e, file.id)}
               className={`group flex items-center gap-2 px-3 h-full text-xs cursor-pointer border-r transition-colors min-w-[120px] max-w-[210px] relative ${
                 isActive
-                  ? 'text-white font-medium border-t-2'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+                  ? 'font-semibold border-t-2'
+                  : 'hover:bg-black/5 dark:hover:bg-white/5 opacity-80 hover:opacity-100'
               }`}
               style={{
                 backgroundColor: isActive ? 'var(--ide-bg)' : 'var(--ide-tab-inactive)',
                 borderColor: 'var(--ide-border)',
                 borderTopColor: isActive ? 'var(--ide-accent)' : undefined,
+                color: isActive ? 'var(--ide-text)' : 'var(--ide-text-muted)',
               }}
               title={file.name}
             >
@@ -197,17 +198,16 @@ export function OpenTabs({
       {contextMenu && (
         <div
           ref={menuRef}
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          className="fixed z-50 py-1 rounded shadow-2xl border text-xs min-w-[160px] animate-in fade-in zoom-in-95 duration-75"
-          style-extra={{
+          style={{ 
+            top: contextMenu.y, 
+            left: contextMenu.x,
             backgroundColor: 'var(--ide-card-bg)',
             borderColor: 'var(--ide-border)',
             color: 'var(--ide-text)',
           }}
+          className="fixed z-50 py-1 rounded shadow-2xl border text-xs min-w-[160px] animate-in fade-in zoom-in-95 duration-75"
         >
-          <div 
-            className="bg-[#252526] border border-[#3c3c3c] rounded py-1 text-neutral-200 shadow-2xl"
-          >
+          <div>
             <button
               onClick={() => {
                 onCloseTab(contextMenu.fileId);

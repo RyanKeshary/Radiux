@@ -118,13 +118,18 @@ export function ProblemsPanel({ problems, onNavigateToProblem }: ProblemsPanelPr
 
         {/* Filter Input */}
         <div className="relative flex items-center">
-          <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2 pointer-events-none" />
+          <Search className="w-3.5 h-3.5 absolute left-2 pointer-events-none" style={{ color: 'var(--ide-text-muted)' }} />
           <input
             type="text"
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
             placeholder="Filter problems (text, file)..."
-            className="w-48 pl-7 pr-2 py-0.5 rounded bg-black/30 border border-neutral-700 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono"
+            className="w-48 pl-7 pr-2 py-0.5 rounded border text-xs focus:outline-none focus:border-sky-500 font-mono"
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text)',
+            }}
           />
         </div>
       </div>
@@ -132,10 +137,10 @@ export function ProblemsPanel({ problems, onNavigateToProblem }: ProblemsPanelPr
       {/* Problems List Body */}
       <div className="flex-1 overflow-y-auto font-mono text-[11.5px] p-2 space-y-1">
         {groupedProblems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2 py-8 select-none">
+          <div className="flex flex-col items-center justify-center h-full gap-2 py-8 select-none" style={{ color: 'var(--ide-text-muted)' }}>
             <CheckCircle2 className="w-8 h-8 text-emerald-500/70" />
-            <p className="text-xs text-neutral-400 font-medium">No problems have been detected in the workspace.</p>
-            <p className="text-[11px] text-neutral-500">Syntax errors and language diagnostics will appear here automatically.</p>
+            <p className="text-xs font-medium" style={{ color: 'var(--ide-text)' }}>No problems have been detected in the workspace.</p>
+            <p className="text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>Syntax errors and language diagnostics will appear here automatically.</p>
           </div>
         ) : (
           groupedProblems.map((group) => {
@@ -144,21 +149,26 @@ export function ProblemsPanel({ problems, onNavigateToProblem }: ProblemsPanelPr
             const groupWarnings = group.items.filter(i => i.severity === 'warning').length;
 
             return (
-              <div key={group.filePath} className="border border-white/5 rounded overflow-hidden">
+              <div 
+                key={group.filePath} 
+                className="border rounded overflow-hidden"
+                style={{ borderColor: 'var(--ide-border)' }}
+              >
                 {/* File Header */}
                 <div
                   onClick={() => toggleFileCollapse(group.filePath)}
-                  className="flex items-center justify-between px-2.5 py-1.5 bg-white/[0.03] hover:bg-white/[0.06] cursor-pointer transition-colors"
+                  className="flex items-center justify-between px-2.5 py-1.5 cursor-pointer transition-colors"
+                  style={{ backgroundColor: 'var(--ide-card-bg)' }}
                 >
                   <div className="flex items-center gap-2">
                     {isCollapsed ? (
-                      <ChevronRight className="w-3.5 h-3.5 text-neutral-500" />
+                      <ChevronRight className="w-3.5 h-3.5" style={{ color: 'var(--ide-text-muted)' }} />
                     ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-neutral-500" />
+                      <ChevronDown className="w-3.5 h-3.5" style={{ color: 'var(--ide-text-muted)' }} />
                     )}
                     <FileIcon name={group.fileName} isFolder={false} className="w-3.5 h-3.5" />
-                    <span className="font-semibold text-neutral-200">{group.fileName}</span>
-                    <span className="text-[10px] text-neutral-500 font-normal">{group.filePath}</span>
+                    <span className="font-semibold" style={{ color: 'var(--ide-text)' }}>{group.fileName}</span>
+                    <span className="text-[10px] font-normal" style={{ color: 'var(--ide-text-muted)' }}>{group.filePath}</span>
                   </div>
 
                   <div className="flex items-center gap-2 text-[10px]">
@@ -177,7 +187,7 @@ export function ProblemsPanel({ problems, onNavigateToProblem }: ProblemsPanelPr
 
                 {/* Problem Items in File */}
                 {!isCollapsed && (
-                  <div className="divide-y divide-white/[0.03]">
+                  <div className="divide-y" style={{ borderColor: 'var(--ide-border)' }}>
                     {group.items.map((item) => (
                       <div
                         key={item.id}
@@ -197,15 +207,15 @@ export function ProblemsPanel({ problems, onNavigateToProblem }: ProblemsPanelPr
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <p className="text-neutral-300 group-hover:text-white leading-relaxed break-words">
+                          <p className="leading-relaxed break-words" style={{ color: 'var(--ide-text)' }}>
                             {item.message}
                           </p>
                           {item.source && (
-                            <span className="text-[10px] text-neutral-500">[{item.source}]</span>
+                            <span className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>[{item.source}]</span>
                           )}
                         </div>
 
-                        <div className="text-neutral-500 group-hover:text-neutral-300 text-[11px] flex-shrink-0 tabular-nums">
+                        <div className="text-[11px] flex-shrink-0 tabular-nums" style={{ color: 'var(--ide-text-muted)' }}>
                           Ln {item.startLineNumber}, Col {item.startColumn}
                         </div>
                       </div>

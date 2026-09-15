@@ -82,11 +82,21 @@ export function MediaPreviewModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 p-4 sm:p-6">
       <div 
-        className="relative flex flex-col w-full max-w-5xl h-[85vh] bg-[#1a1a1a] border border-[#333333] rounded-2xl shadow-2xl overflow-hidden"
+        className="relative flex flex-col w-full max-w-5xl h-[85vh] border rounded-2xl shadow-2xl overflow-hidden"
+        style={{
+          backgroundColor: 'var(--ide-card-bg)',
+          borderColor: 'var(--ide-border)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 bg-[#222222] border-b border-[#333333] select-none">
+        <div 
+          className="flex items-center justify-between px-5 py-3.5 border-b select-none"
+          style={{
+            backgroundColor: 'var(--ide-dock-header)',
+            borderColor: 'var(--ide-border)',
+          }}
+        >
           <div className="flex items-center gap-3 min-w-0">
             <div className="p-1.5 rounded-lg bg-black/40 border border-white/10 text-white flex-shrink-0">
               {media.type === 'image' && <ImageIcon className="w-5 h-5 text-rose-400" />}
@@ -95,15 +105,15 @@ export function MediaPreviewModal({
               {media.type === 'file' && <FileText className="w-5 h-5 text-sky-400" />}
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-white truncate max-w-md">
+              <h3 className="text-sm font-semibold truncate max-w-md" style={{ color: 'var(--ide-text)' }}>
                 {media.name}
               </h3>
-              <div className="flex items-center gap-2 text-[11px] text-neutral-400">
-                <span className="uppercase font-mono px-1.5 py-0.2 rounded bg-neutral-800 text-neutral-300">
+              <div className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>
+                <span className="uppercase font-mono px-1.5 py-0.2 rounded border" style={{ backgroundColor: 'var(--ide-input-bg)', borderColor: 'var(--ide-border)', color: 'var(--ide-text)' }}>
                   {media.type}
                 </span>
                 {media.senderName && (
-                  <span>Shared by <strong className="text-neutral-200">{media.senderName}</strong></span>
+                  <span>Shared by <strong style={{ color: 'var(--ide-text)' }}>{media.senderName}</strong></span>
                 )}
                 {media.timestamp && <span>&bull; {media.timestamp}</span>}
               </div>
@@ -112,37 +122,47 @@ export function MediaPreviewModal({
 
           <div className="flex items-center gap-2">
             {media.type === 'image' && (
-              <div className="hidden sm:flex items-center gap-1 bg-[#161616] rounded-lg px-2 py-1 border border-[#333333] mr-2">
+              <div 
+                className="hidden sm:flex items-center gap-1 rounded-lg px-2 py-1 border mr-2"
+                style={{
+                  backgroundColor: 'var(--ide-input-bg)',
+                  borderColor: 'var(--ide-border)',
+                }}
+              >
                 <button
                   onClick={handleZoomOut}
                   disabled={zoom <= 0.25}
                   title="Zoom Out"
-                  className="p-1 text-neutral-300 hover:text-white disabled:opacity-30 rounded hover:bg-neutral-800 transition-colors"
+                  className="p-1 disabled:opacity-30 rounded transition-colors"
+                  style={{ color: 'var(--ide-text)' }}
                 >
                   <ZoomOut className="w-4 h-4" />
                 </button>
-                <span className="text-xs font-mono px-2 text-neutral-300 min-w-[48px] text-center">
+                <span className="text-xs font-mono px-2 min-w-[48px] text-center" style={{ color: 'var(--ide-text)' }}>
                   {Math.round(zoom * 100)}%
                 </span>
                 <button
                   onClick={handleZoomIn}
                   disabled={zoom >= 3}
                   title="Zoom In"
-                  className="p-1 text-neutral-300 hover:text-white disabled:opacity-30 rounded hover:bg-neutral-800 transition-colors"
+                  className="p-1 disabled:opacity-30 rounded transition-colors"
+                  style={{ color: 'var(--ide-text)' }}
                 >
                   <ZoomIn className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleRotate}
                   title="Rotate 90°"
-                  className="p-1 text-neutral-300 hover:text-white rounded hover:bg-neutral-800 transition-colors"
+                  className="p-1 rounded transition-colors"
+                  style={{ color: 'var(--ide-text)' }}
                 >
                   <RotateCw className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleReset}
                   title="Reset"
-                  className="p-1 text-neutral-300 hover:text-white rounded hover:bg-neutral-800 transition-colors"
+                  className="p-1 rounded transition-colors"
+                  style={{ color: 'var(--ide-text)' }}
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
@@ -163,7 +183,12 @@ export function MediaPreviewModal({
             <button
               onClick={handleDownload}
               title="Download file"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2d2d2d] hover:bg-[#383838] text-white rounded-lg text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors"
+              style={{
+                backgroundColor: 'var(--ide-input-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text)',
+              }}
             >
               <Download className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Download</span>
@@ -172,7 +197,8 @@ export function MediaPreviewModal({
             <button
               onClick={onClose}
               title="Close (Esc)"
-              className="p-1.5 text-neutral-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors ml-1"
+              className="p-1.5 hover:opacity-80 rounded-lg transition-colors ml-1"
+              style={{ color: 'var(--ide-text-muted)' }}
             >
               <X className="w-5 h-5" />
             </button>
@@ -180,7 +206,10 @@ export function MediaPreviewModal({
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-auto flex items-center justify-center p-6 relative bg-[#121212] bg-[radial-gradient(#262626_1px,transparent_1px)] [background-size:16px_16px]">
+        <div 
+          className="flex-1 overflow-auto flex items-center justify-center p-6 relative"
+          style={{ backgroundColor: 'var(--ide-dock)' }}
+        >
           {media.type === 'image' && (
             <div 
               className="transition-transform duration-100 ease-out flex items-center justify-center max-w-full max-h-full"
@@ -193,7 +222,8 @@ export function MediaPreviewModal({
               <img
                 src={media.url}
                 alt={media.name}
-                className="max-h-[65vh] max-w-full object-contain rounded-lg shadow-2xl border border-white/10"
+                className="max-h-[65vh] max-w-full object-contain rounded-lg shadow-2xl border"
+                style={{ borderColor: 'var(--ide-border)' }}
               />
             </div>
           )}
@@ -205,7 +235,8 @@ export function MediaPreviewModal({
                 autoPlay
                 playsInline
                 src={media.url}
-                className="max-h-[65vh] w-full rounded-xl shadow-2xl border border-white/10 bg-black"
+                className="max-h-[65vh] w-full rounded-xl shadow-2xl border bg-black"
+                style={{ borderColor: 'var(--ide-border)' }}
               >
                 Your browser does not support the video tag.
               </video>
@@ -213,13 +244,19 @@ export function MediaPreviewModal({
           )}
 
           {media.type === 'audio' && (
-            <div className="max-w-md w-full p-8 rounded-2xl bg-[#1e1e1e] border border-[#333333] shadow-2xl flex flex-col items-center gap-5">
+            <div 
+              className="max-w-md w-full p-8 rounded-2xl border shadow-2xl flex flex-col items-center gap-5"
+              style={{
+                backgroundColor: 'var(--ide-card-bg)',
+                borderColor: 'var(--ide-border)',
+              }}
+            >
               <div className="w-24 h-24 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
                 <Music className="w-12 h-12 animate-pulse" />
               </div>
               <div className="text-center w-full">
-                <h3 className="font-semibold text-white text-base truncate">{media.name}</h3>
-                <p className="text-xs text-neutral-400 mt-1">Audio Recording / Track</p>
+                <h3 className="font-semibold text-base truncate" style={{ color: 'var(--ide-text)' }}>{media.name}</h3>
+                <p className="text-xs mt-1" style={{ color: 'var(--ide-text-muted)' }}>Audio Recording / Track</p>
               </div>
               <audio
                 controls
@@ -231,13 +268,19 @@ export function MediaPreviewModal({
           )}
 
           {media.type === 'file' && (
-            <div className="max-w-sm w-full p-8 rounded-2xl bg-[#1e1e1e] border border-[#333333] shadow-2xl flex flex-col items-center text-center gap-4">
+            <div 
+              className="max-w-sm w-full p-8 rounded-2xl border shadow-2xl flex flex-col items-center text-center gap-4"
+              style={{
+                backgroundColor: 'var(--ide-card-bg)',
+                borderColor: 'var(--ide-border)',
+              }}
+            >
               <div className="w-20 h-20 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
                 <FileText className="w-10 h-10" />
               </div>
               <div>
-                <p className="font-semibold text-white text-base break-all">{media.name}</p>
-                <p className="text-xs text-neutral-400 mt-1">Project Document / File</p>
+                <p className="font-semibold text-base break-all" style={{ color: 'var(--ide-text)' }}>{media.name}</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--ide-text-muted)' }}>Project Document / File</p>
               </div>
               <button
                 onClick={handleDownload}
@@ -251,12 +294,19 @@ export function MediaPreviewModal({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-2.5 bg-[#1c1c1c] border-t border-[#2e2e2e] flex items-center justify-between text-xs text-neutral-400">
+        <div 
+          className="px-5 py-2.5 border-t flex items-center justify-between text-xs"
+          style={{
+            backgroundColor: 'var(--ide-dock-header)',
+            borderColor: 'var(--ide-border)',
+            color: 'var(--ide-text-muted)',
+          }}
+        >
           <div className="flex items-center gap-4">
             <span>CodeCollab In-Project Media Viewer</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-neutral-500">Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 font-mono">Esc</kbd> to close</span>
+            <span className="text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>Press <kbd className="px-1.5 py-0.5 rounded border font-mono" style={{ backgroundColor: 'var(--ide-input-bg)', borderColor: 'var(--ide-border)', color: 'var(--ide-text)' }}>Esc</kbd> to close</span>
           </div>
         </div>
       </div>

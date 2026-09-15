@@ -76,6 +76,7 @@ interface BottomDockProps {
   activeTab?: DockTab;
   onTabChange?: (tab: DockTab) => void;
   onNavigateToFile?: (filePath: string, line?: number) => void;
+  theme?: string;
 }
 
 export function BottomDock({
@@ -110,6 +111,7 @@ export function BottomDock({
   activeTab: externalActiveTab,
   onTabChange,
   onNavigateToFile,
+  theme,
 }: BottomDockProps) {
   const [internalActiveTab, setInternalActiveTab] = useState<DockTab>('terminal');
   const activeTab = externalActiveTab || internalActiveTab;
@@ -171,13 +173,13 @@ export function BottomDock({
           {/* Terminal Tab */}
           <button
             onClick={() => setActiveTab('terminal')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'terminal'
-                ? 'text-white border-t-2 border-t-sky-500 font-semibold'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
+              activeTab === 'terminal' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
             }`}
             style={{
               backgroundColor: activeTab === 'terminal' ? 'var(--ide-dock)' : undefined,
+              color: activeTab === 'terminal' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+              borderTopColor: activeTab === 'terminal' ? 'var(--ide-accent)' : undefined,
             }}
           >
             <Terminal className="w-3.5 h-3.5 text-emerald-400" />
@@ -187,13 +189,13 @@ export function BottomDock({
           {/* Problems Tab (Level 7) */}
           <button
             onClick={() => setActiveTab('problems')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'problems'
-                ? 'text-white border-t-2 border-t-amber-500 font-semibold'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
+              activeTab === 'problems' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
             }`}
             style={{
               backgroundColor: activeTab === 'problems' ? 'var(--ide-dock)' : undefined,
+              color: activeTab === 'problems' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+              borderTopColor: activeTab === 'problems' ? 'var(--ide-accent)' : undefined,
             }}
           >
             <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
@@ -213,13 +215,13 @@ export function BottomDock({
           {/* Output Tab (Level 7) */}
           <button
             onClick={() => setActiveTab('output')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'output'
-                ? 'text-white border-t-2 border-t-sky-500 font-semibold'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
+              activeTab === 'output' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
             }`}
             style={{
               backgroundColor: activeTab === 'output' ? 'var(--ide-dock)' : undefined,
+              color: activeTab === 'output' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+              borderTopColor: activeTab === 'output' ? 'var(--ide-accent)' : undefined,
             }}
           >
             <FileText className="w-3.5 h-3.5 text-sky-400" />
@@ -229,13 +231,13 @@ export function BottomDock({
           {/* Web Preview Tab */}
           <button
             onClick={() => setActiveTab('preview')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'preview'
-                ? 'text-white border-t-2 border-t-sky-500 font-semibold'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
+              activeTab === 'preview' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
             }`}
             style={{
               backgroundColor: activeTab === 'preview' ? 'var(--ide-dock)' : undefined,
+              color: activeTab === 'preview' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+              borderTopColor: activeTab === 'preview' ? 'var(--ide-accent)' : undefined,
             }}
           >
             <MonitorPlay className="w-3.5 h-3.5 text-sky-400" />
@@ -248,13 +250,13 @@ export function BottomDock({
           {/* Source Control / Git Tab */}
           <button
             onClick={() => setActiveTab('git')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'git'
-                ? 'text-white border-t-2 border-t-indigo-500 font-semibold'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
+              activeTab === 'git' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
             }`}
             style={{
               backgroundColor: activeTab === 'git' ? 'var(--ide-dock)' : undefined,
+              color: activeTab === 'git' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+              borderTopColor: activeTab === 'git' ? 'var(--ide-accent)' : undefined,
             }}
             title="Git Version Control & Source Control"
           >
@@ -265,13 +267,13 @@ export function BottomDock({
           {/* Split Tab */}
           <button
             onClick={() => setActiveTab('split')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'split'
-                ? 'text-white border-t-2 border-t-sky-500 font-semibold'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
+              activeTab === 'split' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
             }`}
             style={{
               backgroundColor: activeTab === 'split' ? 'var(--ide-dock)' : undefined,
+              color: activeTab === 'split' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+              borderTopColor: activeTab === 'split' ? 'var(--ide-accent)' : undefined,
             }}
             title="Split view: Terminal and Live Preview side-by-side"
           >
@@ -279,7 +281,10 @@ export function BottomDock({
             <span>Split</span>
           </button>
 
-          <div className="h-3.5 w-px bg-neutral-700 mx-0.5 flex-shrink-0" />
+          <div 
+            className="h-3.5 w-px mx-0.5 flex-shrink-0" 
+            style={{ backgroundColor: 'var(--ide-border)' }} 
+          />
 
           {/* Project Chat Tab */}
           <button
@@ -287,13 +292,13 @@ export function BottomDock({
               setActiveTab('chat');
               onClearUnread();
             }}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors relative whitespace-nowrap ${
-              activeTab === 'chat'
-                ? 'text-white border-t-2 border-t-sky-400 font-semibold'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors relative whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
+              activeTab === 'chat' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
             }`}
             style={{
               backgroundColor: activeTab === 'chat' ? 'var(--ide-dock)' : undefined,
+              color: activeTab === 'chat' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+              borderTopColor: activeTab === 'chat' ? 'var(--ide-accent)' : undefined,
             }}
           >
             <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
@@ -308,16 +313,16 @@ export function BottomDock({
           {/* WebRTC Voice Tab */}
           <button
             onClick={() => setActiveTab('voice')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors relative whitespace-nowrap ${
-              activeTab === 'voice'
-                ? 'text-white border-t-2 border-t-emerald-500 font-semibold'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors relative whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
+              activeTab === 'voice' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
             }`}
             style={{
               backgroundColor: activeTab === 'voice' ? 'var(--ide-dock)' : undefined,
+              color: activeTab === 'voice' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+              borderTopColor: activeTab === 'voice' ? 'var(--ide-accent)' : undefined,
             }}
           >
-            <Mic className={`w-3.5 h-3.5 ${isInVoice ? 'text-emerald-400' : 'text-neutral-400'}`} />
+            <Mic className={`w-3.5 h-3.5 ${isInVoice ? 'text-emerald-400' : 'opacity-60'}`} />
             <span>Voice</span>
             {isInVoice && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -332,13 +337,13 @@ export function BottomDock({
           {/* Project Activity Feed Tab */}
           <button
             onClick={() => setActiveTab('activity')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'activity'
-                ? 'text-white border-t-2 border-t-amber-400 font-semibold'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
+              activeTab === 'activity' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
             }`}
             style={{
               backgroundColor: activeTab === 'activity' ? 'var(--ide-dock)' : undefined,
+              color: activeTab === 'activity' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+              borderTopColor: activeTab === 'activity' ? 'var(--ide-accent)' : undefined,
             }}
           >
             <Activity className="w-3.5 h-3.5 text-amber-400" />
@@ -348,14 +353,21 @@ export function BottomDock({
 
         {/* DevTools-Style Dock Orientation Switchers & Controls */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <div className="flex items-center bg-black/20 p-0.5 rounded border border-white/10 mr-1">
+          <div 
+            className="flex items-center p-0.5 rounded border mr-1"
+            style={{
+              backgroundColor: 'var(--ide-card-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text-muted)',
+            }}
+          >
             <button
               onClick={() => onChangeOrientation('bottom')}
               title="Dock to bottom"
               className={`p-1 rounded transition-colors ${
                 orientation === 'bottom'
                   ? 'bg-sky-600 text-white'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                  : 'hover:text-sky-400 hover:bg-black/5 dark:hover:bg-white/10'
               }`}
             >
               <PanelBottom className="w-3.5 h-3.5" />
@@ -367,7 +379,7 @@ export function BottomDock({
               className={`p-1 rounded transition-colors ${
                 orientation === 'right'
                   ? 'bg-sky-600 text-white'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                  : 'hover:text-sky-400 hover:bg-black/5 dark:hover:bg-white/10'
               }`}
             >
               <PanelRight className="w-3.5 h-3.5" />
@@ -379,7 +391,7 @@ export function BottomDock({
               className={`p-1 rounded transition-colors ${
                 orientation === 'left'
                   ? 'bg-sky-600 text-white'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                  : 'hover:text-sky-400 hover:bg-black/5 dark:hover:bg-white/10'
               }`}
             >
               <PanelLeft className="w-3.5 h-3.5" />
@@ -391,7 +403,7 @@ export function BottomDock({
               className={`p-1 rounded transition-colors ${
                 orientation === 'fullscreen'
                   ? 'bg-sky-600 text-white'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                  : 'hover:text-sky-400 hover:bg-black/5 dark:hover:bg-white/10'
               }`}
             >
               {orientation === 'fullscreen' ? (
@@ -405,7 +417,8 @@ export function BottomDock({
           <button
             onClick={onClose}
             title="Close Dock"
-            className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            style={{ color: 'var(--ide-text-muted)' }}
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -419,6 +432,7 @@ export function BottomDock({
             projectId={projectId} 
             onPortDetected={handlePortDetected} 
             activeFileName={activeFileName}
+            theme={theme}
           />
         )}
 
@@ -492,6 +506,7 @@ export function BottomDock({
                 projectId={projectId} 
                 onPortDetected={handlePortDetected} 
                 activeFileName={activeFileName}
+                theme={theme}
               />
             </div>
             <div className="w-1/2 h-full min-h-0">

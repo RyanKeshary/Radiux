@@ -33,17 +33,23 @@ export function EditorSettingsModal({
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-lg bg-[#252526] border border-[#3c3c3c] rounded-xl shadow-2xl p-6 text-[#cccccc]"
+        style={{
+          backgroundColor: 'var(--ide-bg)',
+          borderColor: 'var(--ide-border)',
+          color: 'var(--ide-text)',
+        }}
+        className="w-full max-w-lg border rounded-xl shadow-2xl p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#3c3c3c]">
-          <div className="flex items-center gap-2 text-white font-semibold text-base">
+        <div className="flex items-center justify-between pb-3 mb-4 border-b" style={{ borderColor: 'var(--ide-border)' }}>
+          <div className="flex items-center gap-2 font-semibold text-base" style={{ color: 'var(--ide-text)' }}>
             <Sliders className="w-5 h-5 text-sky-400" />
             <span>IDE & Editor Settings</span>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white hover:bg-[#333333]"
+            style={{ color: 'var(--ide-text-muted)' }}
+            className="p-1 rounded hover:opacity-80 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -52,7 +58,7 @@ export function EditorSettingsModal({
         <div className="space-y-4 text-xs">
           {/* Theme */}
           <div>
-            <label className="block text-neutral-300 font-medium mb-1.5">
+            <label className="block font-medium mb-1.5" style={{ color: 'var(--ide-text)' }}>
               Color Theme
             </label>
             <div className="grid grid-cols-4 gap-2">
@@ -64,10 +70,15 @@ export function EditorSettingsModal({
                     key={tId}
                     type="button"
                     onClick={() => onUpdateSettings({ theme: tId })}
+                    style={{
+                      backgroundColor: isSelected ? undefined : 'var(--ide-card-bg)',
+                      borderColor: isSelected ? undefined : 'var(--ide-border)',
+                      color: isSelected ? undefined : 'var(--ide-text)',
+                    }}
                     className={`p-2 rounded-lg border text-left font-medium transition-all ${
                       isSelected
                         ? 'bg-sky-600/30 border-sky-500 text-sky-300'
-                        : 'bg-[#1e1e1e] border-[#3c3c3c] text-neutral-400 hover:text-white'
+                        : 'hover:opacity-80'
                     }`}
                   >
                     <div className="truncate font-semibold text-[11px] mb-1">{t.name}</div>
@@ -83,7 +94,7 @@ export function EditorSettingsModal({
 
           {/* Font Size */}
           <div>
-            <div className="flex items-center justify-between text-neutral-300 font-medium mb-1.5">
+            <div className="flex items-center justify-between font-medium mb-1.5" style={{ color: 'var(--ide-text)' }}>
               <span>Font Size</span>
               <span className="text-sky-400 font-mono font-bold">{settings.fontSize}px</span>
             </div>
@@ -93,13 +104,13 @@ export function EditorSettingsModal({
               max={22}
               value={settings.fontSize}
               onChange={(e) => onUpdateSettings({ fontSize: Number(e.target.value) })}
-              className="w-full accent-sky-500 bg-[#1e1e1e]"
+              className="w-full accent-sky-500"
             />
           </div>
 
           {/* Tab Size */}
           <div>
-            <label className="block text-neutral-300 font-medium mb-1.5">
+            <label className="block font-medium mb-1.5" style={{ color: 'var(--ide-text)' }}>
               Tab Size (Spaces)
             </label>
             <div className="flex gap-2">
@@ -107,10 +118,15 @@ export function EditorSettingsModal({
                 <button
                   key={size}
                   onClick={() => onUpdateSettings({ tabSize: size })}
+                  style={{
+                    backgroundColor: settings.tabSize === size ? undefined : 'var(--ide-card-bg)',
+                    borderColor: settings.tabSize === size ? undefined : 'var(--ide-border)',
+                    color: settings.tabSize === size ? undefined : 'var(--ide-text)',
+                  }}
                   className={`flex-1 py-1.5 rounded-lg border text-center font-medium transition-all ${
                     settings.tabSize === size
                       ? 'bg-sky-600/30 border-sky-500 text-sky-300'
-                      : 'bg-[#1e1e1e] border-[#3c3c3c] text-neutral-400 hover:text-white'
+                      : 'hover:opacity-80'
                   }`}
                 >
                   {size} spaces
@@ -122,15 +138,20 @@ export function EditorSettingsModal({
           {/* Word Wrap */}
           <div className="flex items-center justify-between pt-1">
             <div>
-              <div className="text-neutral-300 font-medium">Word Wrap</div>
-              <div className="text-[10px] text-neutral-500">Wrap long lines to fit editor viewport</div>
+              <div className="font-medium" style={{ color: 'var(--ide-text)' }}>Word Wrap</div>
+              <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Wrap long lines to fit editor viewport</div>
             </div>
             <button
               onClick={() => onUpdateSettings({ wordWrap: settings.wordWrap === 'on' ? 'off' : 'on' })}
+              style={{
+                backgroundColor: settings.wordWrap === 'on' ? undefined : 'var(--ide-card-bg)',
+                borderColor: settings.wordWrap === 'on' ? undefined : 'var(--ide-border)',
+                color: settings.wordWrap === 'on' ? undefined : 'var(--ide-text)',
+              }}
               className={`px-3 py-1 rounded font-medium transition-all ${
                 settings.wordWrap === 'on'
                   ? 'bg-sky-600 text-white'
-                  : 'bg-[#1e1e1e] border border-[#3c3c3c] text-neutral-400'
+                  : 'border hover:opacity-80'
               }`}
             >
               {settings.wordWrap.toUpperCase()}
@@ -138,17 +159,22 @@ export function EditorSettingsModal({
           </div>
 
           {/* Minimap */}
-          <div className="flex items-center justify-between pt-1 border-t border-[#3c3c3c]">
+          <div className="flex items-center justify-between pt-1 border-t" style={{ borderColor: 'var(--ide-border)' }}>
             <div>
-              <div className="text-neutral-300 font-medium">Editor Minimap</div>
-              <div className="text-[10px] text-neutral-500">Display code miniature overview on the right</div>
+              <div className="font-medium" style={{ color: 'var(--ide-text)' }}>Editor Minimap</div>
+              <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Display code miniature overview on the right</div>
             </div>
             <button
               onClick={() => onUpdateSettings({ minimap: !settings.minimap })}
+              style={{
+                backgroundColor: settings.minimap ? undefined : 'var(--ide-card-bg)',
+                borderColor: settings.minimap ? undefined : 'var(--ide-border)',
+                color: settings.minimap ? undefined : 'var(--ide-text)',
+              }}
               className={`px-3 py-1 rounded font-medium transition-all ${
                 settings.minimap
                   ? 'bg-sky-600 text-white'
-                  : 'bg-[#1e1e1e] border border-[#3c3c3c] text-neutral-400'
+                  : 'border hover:opacity-80'
               }`}
             >
               {settings.minimap ? 'ON' : 'OFF'}

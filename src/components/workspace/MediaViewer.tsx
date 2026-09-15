@@ -52,28 +52,55 @@ export function MediaViewer({ file, projectId }: MediaViewerProps) {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#181818] overflow-hidden select-none">
+    <div
+      style={{
+        backgroundColor: 'var(--ide-bg)',
+        color: 'var(--ide-text)',
+      }}
+      className="flex flex-col h-full w-full overflow-hidden select-none"
+    >
       {/* Top Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-[#333333] text-xs text-neutral-300">
+      <div
+        style={{
+          backgroundColor: 'var(--ide-dock-header)',
+          borderColor: 'var(--ide-border)',
+          color: 'var(--ide-text)',
+        }}
+        className="flex items-center justify-between px-4 py-2 border-b text-xs"
+      >
         <div className="flex items-center gap-2">
           {isImage && <ImageIcon className="w-4 h-4 text-rose-400" />}
           {isVideo && <Film className="w-4 h-4 text-purple-400" />}
           {isAudio && <Music className="w-4 h-4 text-amber-400" />}
           {isOther && <FileText className="w-4 h-4 text-sky-400" />}
-          <span className="font-semibold text-white truncate max-w-xs">{file.name}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#333333] text-neutral-400 uppercase font-mono">
+          <span className="font-semibold truncate max-w-xs" style={{ color: 'var(--ide-text)' }}>{file.name}</span>
+          <span
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text-muted)',
+            }}
+            className="text-[10px] px-1.5 py-0.5 rounded border uppercase font-mono"
+          >
             {file.name.split('.').pop() || 'FILE'}
           </span>
         </div>
 
         <div className="flex items-center gap-2">
           {isImage && (
-            <div className="flex items-center gap-1 bg-[#1e1e1e] rounded-md px-1.5 py-0.5 border border-[#3c3c3c]">
+            <div
+              style={{
+                backgroundColor: 'var(--ide-input-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text)',
+              }}
+              className="flex items-center gap-1 rounded-md px-1.5 py-0.5 border"
+            >
               <button
                 onClick={handleZoomOut}
                 disabled={zoom <= 0.25}
                 title="Zoom Out"
-                className="p-1 hover:text-white disabled:opacity-30 rounded hover:bg-[#333333]"
+                className="p-1 hover:opacity-80 disabled:opacity-30 rounded"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
@@ -84,21 +111,21 @@ export function MediaViewer({ file, projectId }: MediaViewerProps) {
                 onClick={handleZoomIn}
                 disabled={zoom >= 4}
                 title="Zoom In"
-                className="p-1 hover:text-white disabled:opacity-30 rounded hover:bg-[#333333]"
+                className="p-1 hover:opacity-80 disabled:opacity-30 rounded"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={handleRotate}
                 title="Rotate 90°"
-                className="p-1 hover:text-white rounded hover:bg-[#333333]"
+                className="p-1 hover:opacity-80 rounded"
               >
                 <RotateCw className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={handleResetZoom}
                 title="Reset View"
-                className="p-1 hover:text-white rounded hover:bg-[#333333] ml-0.5"
+                className="p-1 hover:opacity-80 rounded ml-0.5"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
@@ -108,7 +135,12 @@ export function MediaViewer({ file, projectId }: MediaViewerProps) {
           <button
             onClick={handleDownload}
             title="Download Media File"
-            className="flex items-center gap-1 px-2.5 py-1 bg-[#333333] hover:bg-[#3c3c3c] text-white rounded font-medium transition-colors"
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text)',
+            }}
+            className="flex items-center gap-1 px-2.5 py-1 rounded font-medium transition-colors border hover:opacity-90"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Download</span>
@@ -117,7 +149,7 @@ export function MediaViewer({ file, projectId }: MediaViewerProps) {
       </div>
 
       {/* Media Canvas / Preview Area */}
-      <div className="flex-1 overflow-auto flex items-center justify-center p-6 relative bg-[radial-gradient(#262626_1px,transparent_1px)] [background-size:16px_16px]">
+      <div className="flex-1 overflow-auto flex items-center justify-center p-6 relative">
         {isImage && (
           <div 
             className="transition-transform duration-100 ease-out flex items-center justify-center max-w-full max-h-full"
@@ -130,7 +162,8 @@ export function MediaViewer({ file, projectId }: MediaViewerProps) {
             <img
               src={srcUrl}
               alt={file.name}
-              className="max-h-[75vh] max-w-[85vw] object-contain rounded shadow-2xl border border-[#333333] bg-[#0c0c0d]"
+              style={{ borderColor: 'var(--ide-border)' }}
+              className="max-h-[75vh] max-w-[85vw] object-contain rounded shadow-2xl border"
             />
           </div>
         )}
@@ -142,24 +175,31 @@ export function MediaViewer({ file, projectId }: MediaViewerProps) {
               autoPlay
               playsInline
               src={srcUrl}
-              className="max-h-[75vh] w-full rounded-lg shadow-2xl border border-[#333333] bg-black"
+              style={{ borderColor: 'var(--ide-border)' }}
+              className="max-h-[75vh] w-full rounded-lg shadow-2xl border bg-black"
             >
               Your browser does not support the video tag.
             </video>
-            <div className="mt-3 text-xs text-neutral-500 font-mono">
+            <div className="mt-3 text-xs font-mono" style={{ color: 'var(--ide-text-muted)' }}>
               Video Player &bull; HTML5 Compatible
             </div>
           </div>
         )}
 
         {isAudio && (
-          <div className="max-w-md w-full p-6 rounded-2xl bg-[#1e1e1e] border border-[#333333] shadow-2xl flex flex-col items-center gap-5">
+          <div
+            style={{
+              backgroundColor: 'var(--ide-card-bg)',
+              borderColor: 'var(--ide-border)',
+            }}
+            className="max-w-md w-full p-6 rounded-2xl border shadow-2xl flex flex-col items-center gap-5"
+          >
             <div className="w-20 h-20 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
               <Music className="w-10 h-10 animate-pulse" />
             </div>
             <div className="text-center w-full">
-              <h3 className="font-semibold text-white text-base truncate">{file.name}</h3>
-              <p className="text-xs text-neutral-400 mt-1 font-mono uppercase">Audio Playback</p>
+              <h3 className="font-semibold text-base truncate" style={{ color: 'var(--ide-text)' }}>{file.name}</h3>
+              <p className="text-xs mt-1 font-mono uppercase" style={{ color: 'var(--ide-text-muted)' }}>Audio Playback</p>
             </div>
             <audio
               controls
@@ -171,13 +211,19 @@ export function MediaViewer({ file, projectId }: MediaViewerProps) {
         )}
 
         {isOther && (
-          <div className="max-w-sm w-full p-6 rounded-xl bg-[#1e1e1e] border border-[#333333] shadow-xl flex flex-col items-center text-center gap-4">
+          <div
+            style={{
+              backgroundColor: 'var(--ide-card-bg)',
+              borderColor: 'var(--ide-border)',
+            }}
+            className="max-w-sm w-full p-6 rounded-xl border shadow-xl flex flex-col items-center text-center gap-4"
+          >
             <div className="w-16 h-16 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
               <FileText className="w-8 h-8" />
             </div>
             <div>
-              <p className="font-medium text-white text-sm break-all">{file.name}</p>
-              <p className="text-xs text-neutral-400 mt-1">Uploaded Project Attachment</p>
+              <p className="font-medium text-sm break-all" style={{ color: 'var(--ide-text)' }}>{file.name}</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--ide-text-muted)' }}>Uploaded Project Attachment</p>
             </div>
             <button
               onClick={handleDownload}

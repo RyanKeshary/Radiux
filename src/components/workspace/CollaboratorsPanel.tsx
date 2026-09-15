@@ -132,7 +132,7 @@ export function CollaboratorsPanel({
                           </div>
                         )}
 
-                        <span className="truncate font-medium text-white group-hover:text-sky-300 transition-colors">
+                        <span className="truncate font-medium group-hover:text-sky-400 transition-colors" style={{ color: 'var(--ide-text)' }}>
                           {member.profile?.full_name || 'Anonymous Peer'}
                         </span>
 
@@ -154,7 +154,7 @@ export function CollaboratorsPanel({
 
                     {/* Active File indicator & Jump to file */}
                     {onlineData?.currentFileName && (
-                      <div className="flex items-center justify-between pl-7 text-[11px] text-neutral-400">
+                      <div className="flex items-center justify-between pl-7 text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>
                         <div className="flex items-center gap-1 truncate">
                           <FileCode className="w-3 h-3 text-sky-400 flex-shrink-0" />
                           <span className="truncate font-mono text-[10.5px]">{onlineData.currentFileName}</span>
@@ -181,8 +181,8 @@ export function CollaboratorsPanel({
 
         {/* Offline Section */}
         <div>
-          <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
-            <Circle className="w-1.5 h-1.5 text-neutral-600" />
+          <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--ide-text-muted)' }}>
+            <Circle className="w-1.5 h-1.5 opacity-60" />
             <span>Offline ({offlineMembers.length})</span>
           </div>
 
@@ -191,7 +191,8 @@ export function CollaboratorsPanel({
               <div
                 key={member.id}
                 onClick={() => onSelectMemberProfile(member.user_id)}
-                className="flex items-center gap-2 p-2 rounded hover:bg-white/5 cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors"
+                style={{ color: 'var(--ide-text-muted)' }}
+                className="flex items-center gap-2 p-2 rounded hover:bg-white/5 cursor-pointer transition-colors"
                 title="Click to view developer profile"
               >
                 {member.profile?.avatar_url ? (
@@ -210,7 +211,7 @@ export function CollaboratorsPanel({
 
                 {member.role === 'owner' && (
                   <span title="Project Owner">
-                    <Shield className="w-3 h-3 text-neutral-600" />
+                    <Shield className="w-3 h-3 opacity-60" />
                   </span>
                 )}
               </div>

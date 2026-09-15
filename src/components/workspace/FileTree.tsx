@@ -205,16 +205,19 @@ export function FileTree({
             }
           }}
           onContextMenu={(e) => handleContextMenu(e, item)}
-          style={{ paddingLeft: `${depth * 12 + 10}px` }}
           className={`group flex items-center justify-between pr-2 py-1 cursor-pointer transition-colors ${
             isActive
-              ? 'bg-sky-500/15 text-white font-medium border-l-2 border-sky-400'
-              : 'text-neutral-300 hover:bg-white/5 hover:text-white'
+              ? 'bg-sky-500/15 font-medium border-l-2 border-sky-400'
+              : 'hover:bg-black/5 dark:hover:bg-white/5'
           }`}
+          style={{ 
+            paddingLeft: `${depth * 12 + 10}px`,
+            color: isActive ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+          }}
         >
           <div className="flex items-center gap-1.5 overflow-hidden flex-1 min-w-0 pr-1">
             {isFolder ? (
-              <span className="text-neutral-500 flex-shrink-0">
+              <span className="flex-shrink-0" style={{ color: 'var(--ide-text-muted)' }}>
                 {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
               </span>
             ) : (
@@ -234,12 +237,16 @@ export function FileTree({
                     if (e.key === 'Escape') setEditingId(null);
                   }}
                   autoFocus
-                  className="bg-[#1e1e1e] border border-sky-500 rounded px-1 py-0.2 text-xs text-white outline-none w-full"
+                  className="border border-sky-500 rounded px-1 py-0.2 text-xs outline-none w-full"
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    color: 'var(--ide-text)',
+                  }}
                 />
                 <button onClick={() => handleSaveRename(item.id)} className="text-emerald-400 hover:text-emerald-300 p-0.5">
                   <Check className="w-3 h-3" />
                 </button>
-                <button onClick={() => setEditingId(null)} className="text-neutral-400 hover:text-neutral-300 p-0.5">
+                <button onClick={() => setEditingId(null)} className="p-0.5 hover:opacity-80" style={{ color: 'var(--ide-text-muted)' }}>
                   <X className="w-3 h-3" />
                 </button>
               </div>
@@ -340,7 +347,11 @@ export function FileTree({
                 if (e.key === 'Escape') setCreatingInParent(null);
               }}
               autoFocus
-              className="bg-[#1e1e1e] border border-sky-500 rounded px-1.5 py-0.5 text-xs text-white outline-none flex-1"
+              className="border border-sky-500 rounded px-1.5 py-0.5 text-xs outline-none flex-1"
+              style={{
+                backgroundColor: 'var(--ide-input-bg)',
+                color: 'var(--ide-text)',
+              }}
             />
             <button onClick={handleSaveCreate} className="text-emerald-400 hover:text-emerald-300 p-0.5">
               <Check className="w-3.5 h-3.5" />
@@ -393,8 +404,8 @@ export function FileTree({
 
       {/* Explorer Header */}
       <div 
-        className="flex items-center justify-between px-3 py-2 border-b text-[11px] font-bold uppercase tracking-wider text-neutral-400 flex-shrink-0"
-        style={{ borderColor: 'var(--ide-border)' }}
+        className="flex items-center justify-between px-3 py-2 border-b text-[11px] font-bold uppercase tracking-wider flex-shrink-0"
+        style={{ borderColor: 'var(--ide-border)', color: 'var(--ide-text-muted)' }}
       >
         <span>Files Explorer</span>
         <div className="flex items-center gap-1">
@@ -417,14 +428,14 @@ export function FileTree({
           <button
             onClick={() => setCreatingInParent({ parentId: null, isFolder: false })}
             title="New File in Root"
-            className="p-1 hover:text-white rounded hover:bg-white/10 transition-colors"
+            className="p-1 hover:opacity-80 rounded hover:bg-white/10 transition-colors"
           >
             <FilePlus className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setCreatingInParent({ parentId: null, isFolder: true })}
             title="New Folder in Root"
-            className="p-1 hover:text-white rounded hover:bg-white/10 transition-colors"
+            className="p-1 hover:opacity-80 rounded hover:bg-white/10 transition-colors"
           >
             <FolderPlus className="w-3.5 h-3.5" />
           </button>
@@ -456,7 +467,11 @@ export function FileTree({
               if (e.key === 'Escape') setCreatingInParent(null);
             }}
             autoFocus
-            className="bg-black/30 border border-sky-500 rounded px-1.5 py-0.5 text-xs text-white outline-none flex-1"
+            className="border border-sky-500 rounded px-1.5 py-0.5 text-xs outline-none flex-1"
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              color: 'var(--ide-text)',
+            }}
           />
           <button onClick={handleSaveCreate} className="text-emerald-400 hover:text-emerald-300 p-0.5">
             <Check className="w-3.5 h-3.5" />
@@ -482,8 +497,14 @@ export function FileTree({
       {contextMenu && (
         <div
           ref={menuRef}
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          className="fixed z-50 py-1 rounded shadow-2xl border text-xs min-w-[170px] bg-[#252526] border-[#3c3c3c] text-neutral-200"
+          style={{ 
+            top: contextMenu.y, 
+            left: contextMenu.x,
+            backgroundColor: 'var(--ide-card-bg)',
+            borderColor: 'var(--ide-border)',
+            color: 'var(--ide-text)',
+          }}
+          className="fixed z-50 py-1 rounded shadow-2xl border text-xs min-w-[170px]"
         >
           <button
             onClick={() => {
@@ -515,7 +536,7 @@ export function FileTree({
 
           {contextMenu.item && (
             <>
-              <div className="h-px bg-neutral-700 my-1" />
+              <div className="h-px my-1" style={{ backgroundColor: 'var(--ide-border)' }} />
 
               <button
                 onClick={(e) => {
@@ -544,7 +565,7 @@ export function FileTree({
                 <span>Copy File Name</span>
               </button>
 
-              <div className="h-px bg-neutral-700 my-1" />
+              <div className="h-px my-1" style={{ backgroundColor: 'var(--ide-border)' }} />
 
               <button
                 onClick={async () => {

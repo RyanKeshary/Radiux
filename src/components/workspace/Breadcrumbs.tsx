@@ -46,11 +46,11 @@ export function Breadcrumbs({ file, allFiles, onSelectFolder }: BreadcrumbsProps
           <React.Fragment key={crumb.id}>
             <div 
               onClick={() => crumb.isFolder && onSelectFolder && onSelectFolder(crumb.id)}
-              className={`flex items-center gap-1 px-1 py-0.5 rounded cursor-pointer transition-colors ${
-                isLast 
-                  ? 'text-white font-medium hover:bg-white/5' 
-                  : 'hover:text-neutral-200 hover:bg-white/5'
-              }`}
+              className="flex items-center gap-1 px-1 py-0.5 rounded cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+              style={{
+                color: isLast ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+                fontWeight: isLast ? 600 : 400,
+              }}
             >
               {crumb.isFolder ? (
                 <Folder className="w-3 h-3 text-sky-400" />

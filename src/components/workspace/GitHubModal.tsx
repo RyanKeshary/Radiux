@@ -146,21 +146,42 @@ export function GitHubModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-      <div className="bg-[#1e1e1e] border border-[#3c3c3c] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden text-neutral-200">
+      <div
+        style={{
+          backgroundColor: 'var(--ide-bg)',
+          borderColor: 'var(--ide-border)',
+          color: 'var(--ide-text)',
+        }}
+        className="border rounded-xl shadow-2xl w-full max-w-lg overflow-hidden"
+      >
         {/* Header */}
-        <div className="px-5 py-4 bg-[#252526] border-b border-[#3c3c3c] flex items-center justify-between">
+        <div
+          style={{
+            backgroundColor: 'var(--ide-dock-header)',
+            borderColor: 'var(--ide-border)',
+          }}
+          className="px-5 py-4 border-b flex items-center justify-between"
+        >
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-neutral-800 text-white border border-[#444444]">
+            <div
+              style={{
+                backgroundColor: 'var(--ide-input-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text)',
+              }}
+              className="p-1.5 rounded-lg border"
+            >
               <Github className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-white">GitHub Synchronization</h2>
-              <p className="text-[11px] text-neutral-400">Push, pull, and connect {projectName} with GitHub</p>
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--ide-text)' }}>GitHub Synchronization</h2>
+              <p className="text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>Push, pull, and connect {projectName} with GitHub</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white hover:bg-[#333333] transition-colors"
+            style={{ color: 'var(--ide-text-muted)' }}
+            className="p-1 rounded hover:opacity-80 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -185,11 +206,17 @@ export function GitHubModal({
 
           {/* Connected Repo Status */}
           {originRemote ? (
-            <div className="p-4 rounded-xl bg-[#252526] border border-[#383838] space-y-3">
+            <div
+              style={{
+                backgroundColor: 'var(--ide-card-bg)',
+                borderColor: 'var(--ide-border)',
+              }}
+              className="p-4 rounded-xl border space-y-3"
+            >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs text-neutral-300">
+                <div className="flex items-center gap-2 text-xs">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span className="font-semibold text-white">Connected Repository</span>
+                  <span className="font-semibold" style={{ color: 'var(--ide-text)' }}>Connected Repository</span>
                 </div>
                 <button
                   onClick={handleDisconnect}
@@ -201,14 +228,21 @@ export function GitHubModal({
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 text-xs font-mono bg-[#181818] p-2.5 rounded-lg border border-[#333333] text-sky-400 break-all">
-                <Github className="w-4 h-4 flex-shrink-0 text-neutral-400" />
+              <div
+                style={{
+                  backgroundColor: 'var(--ide-input-bg)',
+                  borderColor: 'var(--ide-border)',
+                }}
+                className="flex items-center gap-2 text-xs font-mono p-2.5 rounded-lg border text-sky-400 break-all"
+              >
+                <Github className="w-4 h-4 flex-shrink-0 opacity-70" />
                 <span className="flex-1 truncate">{originRemote.url}</span>
                 <a
                   href={originRemote.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-neutral-400 hover:text-white"
+                  style={{ color: 'var(--ide-text-muted)' }}
+                  className="hover:opacity-80"
                   title="Open on GitHub"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -218,8 +252,8 @@ export function GitHubModal({
               {/* Personal Access Token Input */}
               <div className="space-y-1.5 pt-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-neutral-300 flex items-center gap-1.5">
-                    <Lock className="w-3 h-3 text-neutral-400" />
+                  <label className="text-xs font-medium flex items-center gap-1.5" style={{ color: 'var(--ide-text)' }}>
+                    <Lock className="w-3 h-3 opacity-60" />
                     GitHub Token (Optional for public pull, Required for push)
                   </label>
                   <a
@@ -236,9 +270,14 @@ export function GitHubModal({
                   placeholder="ghp_xxxxxxxxxxxx..."
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs bg-[#181818] border border-[#3c3c3c] rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono"
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    borderColor: 'var(--ide-border)',
+                    color: 'var(--ide-text)',
+                  }}
+                  className="w-full px-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-sky-500 font-mono"
                 />
-                <p className="text-[10px] text-neutral-500">
+                <p className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>
                   Tokens are only transmitted ephemerally to execute authenticated git operations and are never written to disk or client env.
                 </p>
               </div>
@@ -248,7 +287,12 @@ export function GitHubModal({
                 <button
                   onClick={handlePull}
                   disabled={syncing !== null}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#2e2e2e] hover:bg-[#383838] border border-[#444444] text-xs font-semibold text-white transition-all disabled:opacity-50"
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    borderColor: 'var(--ide-border)',
+                    color: 'var(--ide-text)',
+                  }}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-semibold hover:opacity-90 transition-all disabled:opacity-50"
                 >
                   {syncing === 'pull' ? (
                     <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
@@ -276,7 +320,7 @@ export function GitHubModal({
             /* Link GitHub Repository Form */
             <form onSubmit={handleConnect} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-neutral-300">
+                <label className="text-xs font-medium" style={{ color: 'var(--ide-text)' }}>
                   GitHub Repository URL
                 </label>
                 <input
@@ -285,17 +329,22 @@ export function GitHubModal({
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
                   required
-                  className="w-full px-3 py-2 text-xs bg-[#181818] border border-[#3c3c3c] rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono"
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    borderColor: 'var(--ide-border)',
+                    color: 'var(--ide-text)',
+                  }}
+                  className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:border-sky-500 font-mono"
                 />
-                <p className="text-[11px] text-neutral-400">
+                <p className="text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>
                   Enter HTTPS clone URL from your GitHub repository.
                 </p>
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-neutral-300 flex items-center gap-1.5">
-                    <Lock className="w-3 h-3 text-neutral-400" />
+                  <label className="text-xs font-medium flex items-center gap-1.5" style={{ color: 'var(--ide-text)' }}>
+                    <Lock className="w-3 h-3 opacity-60" />
                     Personal Access Token (Recommended)
                   </label>
                   <a
@@ -312,7 +361,12 @@ export function GitHubModal({
                   placeholder="ghp_xxxxxxxxxxxx..."
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs bg-[#181818] border border-[#3c3c3c] rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono"
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    borderColor: 'var(--ide-border)',
+                    color: 'var(--ide-text)',
+                  }}
+                  className="w-full px-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-sky-500 font-mono"
                 />
               </div>
 
@@ -335,16 +389,35 @@ export function GitHubModal({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-[#252526] border-t border-[#3c3c3c] flex items-center justify-between text-xs text-neutral-400">
+        <div
+          style={{
+            backgroundColor: 'var(--ide-dock-header)',
+            borderColor: 'var(--ide-border)',
+            color: 'var(--ide-text-muted)',
+          }}
+          className="px-5 py-3 border-t flex items-center justify-between text-xs"
+        >
           <div className="flex items-center gap-2">
-            <span className="text-neutral-500">Current branch:</span>
-            <span className="font-mono font-semibold text-white bg-[#1e1e1e] px-2 py-0.5 rounded border border-[#3c3c3c]">
+            <span style={{ color: 'var(--ide-text-muted)' }}>Current branch:</span>
+            <span
+              style={{
+                backgroundColor: 'var(--ide-input-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text)',
+              }}
+              className="font-mono font-semibold px-2 py-0.5 rounded border"
+            >
               {currentBranch || 'main'}
             </span>
           </div>
           <button
             onClick={onClose}
-            className="px-3 py-1 rounded bg-[#333333] hover:bg-[#3e3e3e] text-white text-xs transition-colors"
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text)',
+            }}
+            className="px-3 py-1 rounded border text-xs hover:opacity-90 transition-colors"
           >
             Done
           </button>

@@ -74,31 +74,39 @@ export function ProjectSwitcherModal({
         {/* Search Header */}
         <div 
           className="p-3 border-b flex items-center gap-2"
-          style={{ borderColor: 'var(--ide-border)' }}
+          style={{ 
+            borderColor: 'var(--ide-border)',
+            backgroundColor: 'var(--ide-dock-header)',
+          }}
         >
-          <Search className="w-4 h-4 text-neutral-500 flex-shrink-0" />
+          <Search className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--ide-text-muted)' }} />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Switch workspace / project (search name)..."
             autoFocus
-            className="flex-1 bg-transparent text-white placeholder-neutral-500 text-xs focus:outline-none"
+            className="flex-1 bg-transparent text-xs focus:outline-none placeholder:opacity-50"
+            style={{ color: 'var(--ide-text)' }}
           />
           <button
             onClick={onClose}
-            className="p-1 text-neutral-400 hover:text-white rounded hover:bg-white/10"
+            className="p-1 rounded hover:bg-white/10"
+            style={{ color: 'var(--ide-text-muted)' }}
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Project List */}
-        <div className="max-h-80 overflow-y-auto divide-y divide-white/5 p-1">
+        <div 
+          className="max-h-80 overflow-y-auto divide-y p-1"
+          style={{ borderColor: 'var(--ide-border)' }}
+        >
           {loading ? (
-            <div className="py-8 text-center text-neutral-500">Loading workspaces...</div>
+            <div className="py-8 text-center" style={{ color: 'var(--ide-text-muted)' }}>Loading workspaces...</div>
           ) : filtered.length === 0 ? (
-            <div className="py-8 text-center text-neutral-500">No workspaces match &quot;{search}&quot;.</div>
+            <div className="py-8 text-center" style={{ color: 'var(--ide-text-muted)' }}>No workspaces match &quot;{search}&quot;.</div>
           ) : (
             filtered.map((proj) => {
               const isCurrent = proj.id === currentProjectId;
@@ -108,15 +116,18 @@ export function ProjectSwitcherModal({
                   onClick={() => handleSelect(proj.id)}
                   className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
                     isCurrent
-                      ? 'bg-sky-500/15 text-white font-medium border border-sky-500/30'
-                      : 'hover:bg-white/5 text-neutral-300 hover:text-white'
+                      ? 'bg-sky-500/15 font-medium border border-sky-500/30'
+                      : 'hover:bg-black/5 dark:hover:bg-white/5'
                   }`}
+                  style={{
+                    color: isCurrent ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+                  }}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <FolderOpen className={`w-4 h-4 flex-shrink-0 ${isCurrent ? 'text-sky-400' : 'text-neutral-500'}`} />
+                    <FolderOpen className={`w-4 h-4 flex-shrink-0 ${isCurrent ? 'text-sky-400' : ''}`} style={{ color: isCurrent ? undefined : 'var(--ide-text-muted)' }} />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white truncate text-[12px]">{proj.name}</span>
+                        <span className="font-semibold truncate text-[12px]" style={{ color: 'var(--ide-text)' }}>{proj.name}</span>
                         {proj.role === 'owner' ? (
                           <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 uppercase">
                             Owner
@@ -128,7 +139,7 @@ export function ProjectSwitcherModal({
                         )}
                       </div>
                       {proj.description && (
-                        <p className="text-[11px] text-neutral-500 truncate mt-0.5">{proj.description}</p>
+                        <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--ide-text-muted)' }}>{proj.description}</p>
                       )}
                     </div>
                   </div>

@@ -49,11 +49,16 @@ export function OutputPanel({ logs, onClearLogs }: OutputPanelProps) {
         style={{ borderColor: 'var(--ide-border)' }}
       >
         <div className="flex items-center gap-2">
-          <span className="text-neutral-500 font-sans">Channel:</span>
+          <span className="font-sans" style={{ color: 'var(--ide-text-muted)' }}>Channel:</span>
           <select
             value={selectedChannel}
             onChange={(e) => setSelectedChannel(e.target.value as any)}
-            className="bg-black/30 border border-neutral-700 text-neutral-300 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-sky-500"
+            className="border rounded px-2 py-0.5 text-xs focus:outline-none focus:border-sky-500"
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text)',
+            }}
           >
             <option value="all">All Channels</option>
             <option value="system">CodeCollab System</option>
@@ -66,7 +71,8 @@ export function OutputPanel({ logs, onClearLogs }: OutputPanelProps) {
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopy}
-            className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors flex items-center gap-1"
+            className="p-1 rounded hover:bg-white/10 transition-colors flex items-center gap-1"
+            style={{ color: 'var(--ide-text-muted)' }}
             title="Copy Output"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -76,7 +82,8 @@ export function OutputPanel({ logs, onClearLogs }: OutputPanelProps) {
           {onClearLogs && (
             <button
               onClick={onClearLogs}
-              className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors flex items-center gap-1"
+              className="p-1 rounded hover:bg-white/10 transition-colors flex items-center gap-1"
+              style={{ color: 'var(--ide-text-muted)' }}
               title="Clear Output"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -87,13 +94,16 @@ export function OutputPanel({ logs, onClearLogs }: OutputPanelProps) {
       </div>
 
       {/* Log Stream */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-1 font-mono text-[11px] text-neutral-300 leading-relaxed select-text">
+      <div 
+        className="flex-1 overflow-y-auto p-3 space-y-1 font-mono text-[11px] leading-relaxed select-text"
+        style={{ color: 'var(--ide-text)' }}
+      >
         {filteredLogs.length === 0 ? (
-          <div className="text-neutral-500 italic py-4">No output in this channel.</div>
+          <div className="italic py-4" style={{ color: 'var(--ide-text-muted)' }}>No output in this channel.</div>
         ) : (
           filteredLogs.map((log) => (
             <div key={log.id} className="flex items-start gap-2 hover:bg-white/[0.02] px-1 py-0.5 rounded">
-              <span className="text-neutral-600 select-none flex-shrink-0">[{log.timestamp}]</span>
+              <span className="select-none flex-shrink-0" style={{ color: 'var(--ide-text-muted)' }}>[{log.timestamp}]</span>
               <span className={`px-1.5 py-0.2 rounded text-[9px] uppercase font-bold select-none flex-shrink-0 ${
                 log.channel === 'system' ? 'bg-sky-500/20 text-sky-400' :
                 log.channel === 'git' ? 'bg-indigo-500/20 text-indigo-400' :

@@ -74,11 +74,22 @@ export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProp
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-lg bg-[#252526] border border-[#3c3c3c] rounded-xl shadow-2xl overflow-hidden text-[#cccccc]"
+        className="w-full max-w-lg border rounded-xl shadow-2xl overflow-hidden"
+        style={{
+          backgroundColor: 'var(--ide-card-bg)',
+          borderColor: 'var(--ide-border)',
+          color: 'var(--ide-text)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Input */}
-        <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-[#3c3c3c] bg-[#1e1e1e]">
+        <div 
+          className="flex items-center gap-2 px-3.5 py-2.5 border-b"
+          style={{
+            backgroundColor: 'var(--ide-dock-header)',
+            borderColor: 'var(--ide-border)',
+          }}
+        >
           <Search className="w-4 h-4 text-sky-400 flex-shrink-0" />
           <input
             ref={inputRef}
@@ -90,9 +101,17 @@ export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProp
               setSelectedIndex(0);
             }}
             onKeyDown={handleKeyDown}
-            className="w-full bg-transparent text-sm text-white focus:outline-none placeholder:text-neutral-500"
+            className="w-full bg-transparent text-sm focus:outline-none placeholder:opacity-50"
+            style={{ color: 'var(--ide-text)' }}
           />
-          <kbd className="text-[10px] bg-[#333333] text-neutral-400 px-1.5 py-0.5 rounded border border-[#444444]">
+          <kbd 
+            className="text-[10px] px-1.5 py-0.5 rounded border"
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text-muted)',
+            }}
+          >
             ESC
           </kbd>
         </div>
@@ -100,7 +119,7 @@ export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProp
         {/* Command List */}
         <div className="max-h-72 overflow-y-auto p-1.5">
           {filtered.length === 0 ? (
-            <div className="p-4 text-center text-xs text-neutral-500">
+            <div className="p-4 text-center text-xs" style={{ color: 'var(--ide-text-muted)' }}>
               No matching commands found.
             </div>
           ) : (
@@ -115,25 +134,40 @@ export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProp
                   }}
                   onMouseEnter={() => setSelectedIndex(idx)}
                   className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-xs transition-colors ${
-                    isSelected ? 'bg-sky-600 text-white font-medium' : 'text-neutral-300 hover:bg-[#2e2e2e]'
+                    isSelected ? 'bg-sky-600 text-white font-medium' : 'hover:bg-black/5 dark:hover:bg-white/5'
                   }`}
+                  style={{
+                    color: isSelected ? '#ffffff' : 'var(--ide-text)',
+                  }}
                 >
                   <div className="flex items-center gap-2.5">
-                    <span className={isSelected ? 'text-white' : 'text-neutral-400'}>
+                    <span style={{ color: isSelected ? '#ffffff' : 'var(--ide-text-muted)' }}>
                       {cmd.icon}
                     </span>
                     <span>{cmd.title}</span>
-                    <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.2 rounded ${
-                      isSelected ? 'bg-white/20 text-white' : 'bg-neutral-800 text-neutral-400'
-                    }`}>
+                    <span 
+                      className={`text-[10px] uppercase font-semibold px-1.5 py-0.2 rounded border ${
+                        isSelected ? 'bg-white/20 text-white border-transparent' : ''
+                      }`}
+                      style={{
+                        backgroundColor: isSelected ? undefined : 'var(--ide-input-bg)',
+                        borderColor: isSelected ? undefined : 'var(--ide-border)',
+                        color: isSelected ? undefined : 'var(--ide-text-muted)',
+                      }}
+                    >
                       {cmd.category}
                     </span>
                   </div>
 
                   {cmd.shortcut && (
-                    <kbd className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                      isSelected ? 'bg-white/20 text-white' : 'bg-[#1e1e1e] text-neutral-400 border border-[#333333]'
-                    }`}>
+                    <kbd 
+                      className="text-[10px] px-1.5 py-0.5 rounded font-mono border"
+                      style={{
+                        backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : 'var(--ide-input-bg)',
+                        borderColor: isSelected ? 'transparent' : 'var(--ide-border)',
+                        color: isSelected ? '#ffffff' : 'var(--ide-text-muted)',
+                      }}
+                    >
                       {cmd.shortcut}
                     </kbd>
                   )}

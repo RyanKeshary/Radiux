@@ -66,12 +66,13 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
         >
           <div className="flex items-center gap-2">
             <Keyboard className="w-4 h-4 text-sky-400" />
-            <span className="text-sm font-semibold text-white">Keyboard Shortcuts Reference</span>
+            <span className="text-sm font-semibold" style={{ color: 'var(--ide-text)' }}>Keyboard Shortcuts Reference</span>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10"
+            className="p-1 rounded hover:bg-white/10"
+            style={{ color: 'var(--ide-text-muted)' }}
           >
             <X className="w-4 h-4" />
           </button>
@@ -84,17 +85,31 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
               <h4 className="font-bold text-[11px] uppercase tracking-wider text-sky-400 mb-2">
                 {section.category}
               </h4>
-              <div className="rounded-lg border border-white/5 divide-y divide-white/5 overflow-hidden">
+              <div 
+                className="rounded-lg border divide-y overflow-hidden"
+                style={{ borderColor: 'var(--ide-border)' }}
+              >
                 {section.shortcuts.map((sc, i) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-2 bg-black/20 hover:bg-white/[0.02]">
-                    <span className="text-neutral-300 text-[11.5px]">{sc.desc}</span>
+                  <div 
+                    key={i} 
+                    className="flex items-center justify-between px-3 py-2 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                    style={{ backgroundColor: 'var(--ide-dock-header)' }}
+                  >
+                    <span className="text-[11.5px]" style={{ color: 'var(--ide-text)' }}>{sc.desc}</span>
                     <div className="flex items-center gap-1 font-mono">
                       {sc.keys.map((k, ki) => (
                         <React.Fragment key={ki}>
-                          <kbd className="px-2 py-0.5 rounded bg-white/10 text-white border border-white/20 text-[11px] shadow-sm font-semibold">
+                          <kbd 
+                            className="px-2 py-0.5 rounded border text-[11px] shadow-sm font-semibold"
+                            style={{
+                              backgroundColor: 'var(--ide-input-bg)',
+                              borderColor: 'var(--ide-border)',
+                              color: 'var(--ide-text)',
+                            }}
+                          >
                             {k}
                           </kbd>
-                          {ki < sc.keys.length - 1 && <span className="text-neutral-500 text-[10px]">+</span>}
+                          {ki < sc.keys.length - 1 && <span className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>+</span>}
                         </React.Fragment>
                       ))}
                     </div>

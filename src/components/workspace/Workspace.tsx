@@ -1021,13 +1021,15 @@ export function Workspace({ projectId }: WorkspaceProps) {
         style={{
           backgroundColor: 'var(--ide-activity)',
           borderColor: 'var(--ide-border)',
+          color: 'var(--ide-text)',
         }}
       >
         {/* Left branding & Workspace Switcher */}
         <div className="flex items-center gap-2">
           <Link
             href="/"
-            className="flex items-center gap-1.5 px-1.5 py-1 text-neutral-400 hover:text-white rounded hover:bg-white/10 transition-colors"
+            className="flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            style={{ color: 'var(--ide-text-muted)' }}
             title="Return to Dashboard"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -1035,19 +1037,25 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
           <button
             onClick={() => setIsProjectSwitcherOpen(true)}
-            className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/10 transition-colors group text-left"
+            className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors group text-left"
             title="Switch Workspace (Ctrl+Alt+O)"
           >
-            <span className="font-bold text-white tracking-wide group-hover:text-sky-300 transition-colors">
+            <span 
+              className="font-bold tracking-wide group-hover:text-sky-400 transition-colors"
+              style={{ color: 'var(--ide-text)' }}
+            >
               CodeCollab
             </span>
-            <span className="text-neutral-500">/</span>
-            <span className="font-medium text-neutral-200 truncate max-w-[140px] group-hover:underline">
+            <span className="opacity-50">/</span>
+            <span 
+              className="font-medium truncate max-w-[140px] group-hover:underline opacity-80"
+              style={{ color: 'var(--ide-text)' }}
+            >
               {project.name}
             </span>
           </button>
 
-          <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded font-bold uppercase bg-sky-500/20 text-sky-300 border border-sky-500/30">
+          <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded font-bold uppercase bg-sky-500/20 text-sky-400 border border-sky-500/30">
             {role}
           </span>
         </div>
@@ -1056,17 +1064,25 @@ export function Workspace({ projectId }: WorkspaceProps) {
         <div className="flex-1 max-w-md mx-4 hidden md:block">
           <button
             onClick={() => setIsQuickOpen(true)}
-            className="w-full flex items-center justify-between px-3 py-1 rounded-md text-xs text-neutral-400 border transition-all hover:border-neutral-500 hover:text-neutral-200"
+            className="w-full flex items-center justify-between px-3 py-1 rounded-md text-xs border transition-all hover:border-sky-500"
             style={{
-              backgroundColor: 'var(--ide-card-bg)',
+              backgroundColor: 'var(--ide-input-bg)',
               borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text-muted)',
             }}
           >
             <div className="flex items-center gap-2">
-              <Search className="w-3.5 h-3.5 text-neutral-400" />
+              <Search className="w-3.5 h-3.5 opacity-70" />
               <span>Search files ({project.name})</span>
             </div>
-            <kbd className="px-1.5 py-0.2 bg-black/40 rounded text-[10px] text-neutral-400 border border-white/10 font-mono">
+            <kbd 
+              className="px-1.5 py-0.2 rounded text-[10px] border font-mono"
+              style={{
+                backgroundColor: 'var(--ide-card-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text-muted)',
+              }}
+            >
               Ctrl+P
             </kbd>
           </button>
@@ -1108,7 +1124,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
           {/* GitHub Sync Button */}
           <button
             onClick={() => setIsGitHubOpen(true)}
-            className="flex items-center gap-1 px-2 py-1 rounded hover:bg-white/10 text-neutral-300 hover:text-white transition-colors"
+            className="flex items-center gap-1 px-2 py-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            style={{ color: 'var(--ide-text)' }}
             title="GitHub Integration"
           >
             <Github className="w-3.5 h-3.5" />
@@ -1118,7 +1135,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
           {/* Export Project ZIP */}
           <button
             onClick={handleExportProject}
-            className="p-1.5 rounded hover:bg-white/10 text-neutral-300 hover:text-white transition-colors"
+            className="p-1.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            style={{ color: 'var(--ide-text)' }}
             title="Export Project ZIP"
           >
             <Download className="w-3.5 h-3.5" />
@@ -1422,6 +1440,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 activeTab={activeDockTab}
                 onTabChange={setActiveDockTab}
                 onNavigateToFile={handleNavigateToLocation}
+                theme={settings.theme}
               />
             )}
           </main>
@@ -1464,6 +1483,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
               activeTab={activeDockTab}
               onTabChange={setActiveDockTab}
               onNavigateToFile={handleNavigateToLocation}
+              theme={settings.theme}
             />
           )}
 
@@ -1505,6 +1525,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
               activeTab={activeDockTab}
               onTabChange={setActiveDockTab}
               onNavigateToFile={handleNavigateToLocation}
+              theme={settings.theme}
             />
           )}
         </div>

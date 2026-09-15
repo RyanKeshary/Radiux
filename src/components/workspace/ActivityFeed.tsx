@@ -224,33 +224,48 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
   });
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#1e1e1e] text-[#cccccc]">
+    <div 
+      className="flex flex-col h-full w-full select-none"
+      style={{
+        backgroundColor: 'var(--ide-dock)',
+        color: 'var(--ide-text)',
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#2d2d2d] shrink-0 w-full">
+      <div 
+        className="flex items-center justify-between px-3 py-2 border-b shrink-0 w-full"
+        style={{
+          backgroundColor: 'var(--ide-dock-header)',
+          borderColor: 'var(--ide-border)',
+        }}
+      >
         <div className="flex items-center gap-1.5">
-          <ActivityIcon className="w-3.5 h-3.5 text-neutral-400" />
-          <span className="text-xs font-semibold text-neutral-300 tracking-wide uppercase">Activity Log</span>
-          <span className="ml-1 text-[10px] text-neutral-600 font-mono">{filtered.length}</span>
+          <ActivityIcon className="w-3.5 h-3.5 text-sky-400" />
+          <span className="text-xs font-semibold tracking-wide uppercase" style={{ color: 'var(--ide-text)' }}>Activity Log</span>
+          <span className="ml-1 text-[10px] opacity-60 font-mono">{filtered.length}</span>
         </div>
         <button
           onClick={() => fetchActivities(true)}
           title="Refresh"
-          className="p-1 rounded text-neutral-500 hover:text-neutral-200 hover:bg-[#2d2d2d] transition-colors"
+          className="p-1 rounded opacity-60 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
         >
           <RefreshCw className="w-3 h-3" />
         </button>
       </div>
 
       {/* Category filter pills */}
-      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-[#2d2d2d] shrink-0 overflow-x-auto w-full">
+      <div 
+        className="flex items-center gap-1 px-3 py-1.5 border-b shrink-0 overflow-x-auto w-full"
+        style={{ borderColor: 'var(--ide-border)' }}
+      >
         {CATEGORY_FILTERS.map((f) => (
           <button
             key={f.value}
             onClick={() => setFilter(f.value)}
             className={`shrink-0 px-2.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
               filter === f.value
-                ? 'bg-sky-600/30 text-sky-300 border border-sky-700/50'
-                : 'text-neutral-500 hover:text-neutral-300 hover:bg-[#2d2d2d]'
+                ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40 font-semibold'
+                : 'opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5'
             }`}
           >
             {f.label}
@@ -261,20 +276,27 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
       {/* Log rows */}
       <div className="flex-1 w-full overflow-y-auto">
         {loading ? (
-          <div className="flex items-center justify-center h-full gap-2 text-neutral-600 text-xs">
-            <Loader2 className="w-4 h-4 animate-spin" />
+          <div className="flex items-center justify-center h-full gap-2 opacity-60 text-xs">
+            <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
             <span>Loading activity…</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-neutral-600 text-xs gap-2">
-            <ActivityIcon className="w-8 h-8 text-neutral-700" />
+          <div className="flex flex-col items-center justify-center h-full opacity-60 text-xs gap-2">
+            <ActivityIcon className="w-8 h-8 opacity-40" />
             <p className="font-mono">No activity yet</p>
-            <p className="text-[10px] text-neutral-700">Events appear here as the workspace is used</p>
+            <p className="text-[10px] opacity-70">Events appear here as the workspace is used</p>
           </div>
         ) : (
           <div className="font-mono text-[11px] leading-none w-full">
             {/* Column headers */}
-            <div className="flex items-center px-3 py-1.5 border-b border-[#252525] text-[10px] text-neutral-500 uppercase tracking-wider select-none sticky top-0 bg-[#1e1e1e] z-10 w-full">
+            <div 
+              className="flex items-center px-3 py-1.5 border-b text-[10px] uppercase tracking-wider select-none sticky top-0 z-10 w-full"
+              style={{
+                backgroundColor: 'var(--ide-dock)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text-muted)',
+              }}
+            >
               <span className="w-20 shrink-0">Time</span>
               <span className="w-28 shrink-0">User</span>
               <span className="w-24 shrink-0">Action</span>
@@ -290,16 +312,17 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
               return (
                 <div
                   key={event.id}
-                  className="flex items-center px-3 py-1.5 hover:bg-[#252525] border-b border-[#232323] transition-colors group w-full"
+                  className="flex items-center px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 border-b transition-colors group w-full"
+                  style={{ borderColor: 'var(--ide-border)' }}
                   title={`${formatFull(event.created_at)} — ${event.details}`}
                 >
                   {/* Time */}
-                  <span className="w-20 shrink-0 text-neutral-500 group-hover:text-neutral-400 font-mono text-[10px]">
+                  <span className="w-20 shrink-0 opacity-60 font-mono text-[10px]">
                     {formatTime(event.created_at)}
                   </span>
 
                   {/* User */}
-                  <span className="w-28 shrink-0 text-neutral-300 truncate pr-2" title={event.user_name}>
+                  <span className="w-28 shrink-0 font-medium truncate pr-2" style={{ color: 'var(--ide-text)' }} title={event.user_name}>
                     {event.user_name}
                   </span>
 
@@ -309,7 +332,7 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
                   </span>
 
                   {/* Target / Details */}
-                  <span className="flex-1 min-w-0 text-neutral-400 truncate" title={event.details}>
+                  <span className="flex-1 min-w-0 opacity-80 truncate" style={{ color: 'var(--ide-text-muted)' }} title={event.details}>
                     {displayTarget}
                   </span>
                 </div>
@@ -320,7 +343,8 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
             {hasMore && (
               <button
                 onClick={() => fetchActivities(false)}
-                className="w-full flex items-center justify-center gap-1.5 py-2 text-[10px] text-neutral-600 hover:text-neutral-400 hover:bg-[#252525] transition-colors border-t border-[#252525]"
+                className="w-full flex items-center justify-center gap-1.5 py-2 text-[10px] opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-colors border-t"
+                style={{ borderColor: 'var(--ide-border)' }}
               >
                 <ChevronDown className="w-3 h-3" />
                 Load older events

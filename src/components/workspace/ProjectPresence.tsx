@@ -122,16 +122,21 @@ export function ProjectPresence({
     <div className="relative">
       <button
         onClick={() => setShowDrawer(!showDrawer)}
-        className="flex items-center gap-2 px-2.5 py-1 rounded bg-[#252526] hover:bg-[#2d2d2d] border border-[#383b3d] transition-colors shadow-sm"
+        style={{
+          backgroundColor: 'var(--ide-card-bg)',
+          borderColor: 'var(--ide-border)',
+          color: 'var(--ide-text)',
+        }}
+        className="flex items-center gap-2 px-2.5 py-1 rounded border transition-colors shadow-sm hover:opacity-90"
         title="View active collaborators and their files"
       >
-        <div className="flex items-center gap-1.5 text-xs text-neutral-300">
+        <div className="flex items-center gap-1.5 text-xs">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span className="font-semibold text-white">{onlineUsers.length}</span>
-          <span className="hidden sm:inline text-neutral-400">online</span>
+          <span className="font-semibold" style={{ color: 'var(--ide-text)' }}>{onlineUsers.length}</span>
+          <span className="hidden sm:inline" style={{ color: 'var(--ide-text-muted)' }}>online</span>
         </div>
 
         {/* Avatars */}
@@ -139,26 +144,33 @@ export function ProjectPresence({
           {onlineUsers.slice(0, 4).map((u, idx) => (
             <div
               key={u.id + idx}
-              style={{ backgroundColor: u.color }}
-              className="w-5 h-5 rounded-full border border-[#1e1e1e] flex items-center justify-center text-[9px] font-bold text-black shadow-sm"
+              style={{ backgroundColor: u.color, borderColor: 'var(--ide-border)' }}
+              className="w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-bold text-black shadow-sm"
               title={`${u.name}${u.fileName ? ` (Editing: ${u.fileName})` : ''}`}
             >
               {u.name.charAt(0).toUpperCase()}
             </div>
           ))}
         </div>
-        <ChevronDown className="w-3 h-3 text-neutral-400" />
+        <ChevronDown className="w-3 h-3" style={{ color: 'var(--ide-text-muted)' }} />
       </button>
 
       {/* Collaborator details popover */}
       {showDrawer && (
-        <div className="absolute right-0 mt-2 w-72 rounded-xl bg-[#252526] border border-[#3c3c3c] shadow-2xl z-50 p-3 text-xs text-[#cccccc]">
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#3c3c3c]">
-            <div className="font-semibold text-white flex items-center gap-1.5">
+        <div
+          style={{
+            backgroundColor: 'var(--ide-bg)',
+            borderColor: 'var(--ide-border)',
+            color: 'var(--ide-text)',
+          }}
+          className="absolute right-0 mt-2 w-72 rounded-xl border shadow-2xl z-50 p-3 text-xs"
+        >
+          <div className="flex items-center justify-between pb-2 mb-2 border-b" style={{ borderColor: 'var(--ide-border)' }}>
+            <div className="font-semibold flex items-center gap-1.5" style={{ color: 'var(--ide-text)' }}>
               <Users className="w-3.5 h-3.5 text-sky-400" />
               <span>Collaborator Presence</span>
             </div>
-            <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-medium">
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-medium">
               {onlineUsers.length} Active
             </span>
           </div>
@@ -169,7 +181,11 @@ export function ProjectPresence({
               return (
                 <div
                   key={u.id + idx}
-                  className="p-2 rounded-lg bg-[#1e1e1e] border border-[#333333] flex items-start gap-2.5"
+                  style={{
+                    backgroundColor: 'var(--ide-card-bg)',
+                    borderColor: 'var(--ide-border)',
+                  }}
+                  className="p-2 rounded-lg border flex items-start gap-2.5"
                 >
                   <div
                     style={{ backgroundColor: u.color }}
@@ -178,15 +194,21 @@ export function ProjectPresence({
                     {u.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-white flex items-center gap-1.5 truncate">
+                    <div className="font-medium flex items-center gap-1.5 truncate" style={{ color: 'var(--ide-text)' }}>
                       <span>{u.name}</span>
                       {isCurrentUser && (
-                        <span className="text-[9px] px-1 py-0.1 rounded bg-white/10 text-neutral-300">
+                        <span
+                          style={{
+                            backgroundColor: 'var(--ide-input-bg)',
+                            color: 'var(--ide-text-muted)',
+                          }}
+                          className="text-[9px] px-1 py-0.1 rounded border"
+                        >
                           You
                         </span>
                       )}
                       {u.inVoice && (
-                        <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-medium flex items-center gap-0.5 border border-emerald-500/30">
+                        <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 font-medium flex items-center gap-0.5 border border-emerald-500/30">
                           🎙 Voice
                         </span>
                       )}
@@ -197,7 +219,7 @@ export function ProjectPresence({
                         <span>Editing: {u.fileName}</span>
                       </div>
                     ) : (
-                      <div className="text-[10px] text-neutral-500 mt-0.5">
+                      <div className="text-[10px] mt-0.5" style={{ color: 'var(--ide-text-muted)' }}>
                         Browsing files
                       </div>
                     )}

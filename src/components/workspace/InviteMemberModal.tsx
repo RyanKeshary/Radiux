@@ -107,15 +107,23 @@ export function InviteMemberModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="w-full max-w-md bg-[#252526] border border-[#3c3c3c] rounded-xl shadow-2xl p-6 text-[#cccccc]">
-        <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#3c3c3c]">
-          <div className="flex items-center gap-2 text-white font-semibold text-base">
+      <div 
+        style={{
+          backgroundColor: 'var(--ide-bg)',
+          borderColor: 'var(--ide-border)',
+          color: 'var(--ide-text)',
+        }}
+        className="w-full max-w-md border rounded-xl shadow-2xl p-6"
+      >
+        <div className="flex items-center justify-between pb-3 mb-4 border-b" style={{ borderColor: 'var(--ide-border)' }}>
+          <div className="flex items-center gap-2 font-semibold text-base" style={{ color: 'var(--ide-text)' }}>
             <UserPlus className="w-5 h-5 text-sky-400" />
             <span>Project Collaborators</span>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white hover:bg-[#333333]"
+            style={{ color: 'var(--ide-text-muted)' }}
+            className="p-1 rounded hover:opacity-80 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -123,7 +131,7 @@ export function InviteMemberModal({
 
         {/* Share Link Section */}
         <div className="mb-5">
-          <label className="block text-xs font-medium text-neutral-400 mb-1.5">
+          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ide-text-muted)' }}>
             Shareable Project URL
           </label>
           <div className="flex items-center gap-2">
@@ -131,17 +139,27 @@ export function InviteMemberModal({
               type="text"
               readOnly
               value={typeof window !== 'undefined' ? window.location.href : ''}
-              className="flex-1 bg-[#1e1e1e] border border-[#3c3c3c] rounded-lg px-3 py-2 text-xs text-neutral-300 select-all outline-none font-mono"
+              style={{
+                backgroundColor: 'var(--ide-input-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text)',
+              }}
+              className="flex-1 border rounded-lg px-3 py-2 text-xs select-all outline-none font-mono"
             />
             <button
               onClick={handleCopyLink}
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#333333] hover:bg-[#3e3e3e] text-white rounded-lg text-xs font-medium transition-colors border border-[#444444]"
+              style={{
+                backgroundColor: 'var(--ide-input-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text)',
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors border hover:opacity-90"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
-          <p className="text-[11px] text-neutral-500 mt-1">
+          <p className="text-[11px] mt-1" style={{ color: 'var(--ide-text-muted)' }}>
             Note: Only added members can access this project link.
           </p>
         </div>
@@ -149,7 +167,7 @@ export function InviteMemberModal({
         {/* Add User form (Only Owner can invite) */}
         {isOwner ? (
           <form onSubmit={handleInviteUser} className="mb-5">
-            <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ide-text)' }}>
               Add Registered Collaborator by Email
             </label>
             <div className="flex items-center gap-2">
@@ -159,9 +177,14 @@ export function InviteMemberModal({
                   placeholder="collaborator@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-lg pl-8 pr-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    borderColor: 'var(--ide-border)',
+                    color: 'var(--ide-text)',
+                  }}
+                  className="w-full border rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:border-sky-500"
                 />
-                <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 top-2.5" />
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5" style={{ color: 'var(--ide-text-muted)' }} />
               </div>
               <button
                 type="submit"
@@ -195,7 +218,7 @@ export function InviteMemberModal({
 
         {/* Current Members List */}
         <div>
-          <label className="block text-xs font-medium text-neutral-300 mb-2">
+          <label className="block text-xs font-medium mb-2" style={{ color: 'var(--ide-text)' }}>
             Project Members ({members.length})
           </label>
           <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
@@ -207,14 +230,18 @@ export function InviteMemberModal({
               return (
                 <div
                   key={m.id}
-                  className="flex items-center justify-between p-2 rounded-lg bg-[#1e1e1e] border border-[#333333] text-xs"
+                  style={{
+                    backgroundColor: 'var(--ide-card-bg)',
+                    borderColor: 'var(--ide-border)',
+                  }}
+                  className="flex items-center justify-between p-2 rounded-lg border text-xs"
                 >
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-full bg-gradient-to-br from-neutral-700 to-neutral-800 flex items-center justify-center font-bold text-[10px] text-white">
                       {name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <div className="font-medium text-white flex items-center gap-1.5">
+                      <div className="font-medium flex items-center gap-1.5" style={{ color: 'var(--ide-text)' }}>
                         <span>{name}</span>
                         {isMemberOwner && (
                           <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
@@ -223,7 +250,7 @@ export function InviteMemberModal({
                         )}
                       </div>
                       {memberEmail && (
-                        <div className="text-[10px] text-neutral-400">{memberEmail}</div>
+                        <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>{memberEmail}</div>
                       )}
                     </div>
                   </div>

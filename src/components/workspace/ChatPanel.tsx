@@ -309,22 +309,28 @@ export function ChatPanel({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#181818] text-neutral-200 select-none overflow-hidden relative">
+    <div 
+      className="flex flex-col h-full w-full select-none overflow-hidden relative"
+      style={{
+        backgroundColor: 'var(--ide-dock)',
+        color: 'var(--ide-text)',
+      }}
+    >
       {/* Messages Scroll Area */}
       <div className="flex-1 w-full overflow-y-auto p-4 space-y-4">
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-2">
+          <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: 'var(--ide-text-muted)' }}>
             <Loader2 className="w-5 h-5 animate-spin" />
             <span className="text-xs">Loading chat history...</span>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-3">
-            <div className="p-3 bg-[#252526] rounded-full">
-              <MessageSquare className="w-6 h-6 text-neutral-400" />
+          <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: 'var(--ide-text-muted)' }}>
+            <div className="p-3 rounded-full border shadow-sm" style={{ backgroundColor: 'var(--ide-card-bg)', borderColor: 'var(--ide-border)' }}>
+              <MessageSquare className="w-6 h-6" style={{ color: 'var(--ide-text-muted)' }} />
             </div>
             <div className="text-center">
-              <p className="text-xs font-semibold text-neutral-300">No messages yet</p>
-              <p className="text-[11px] text-neutral-500">Start the conversation with your team!</p>
+              <p className="text-xs font-semibold" style={{ color: 'var(--ide-text)' }}>No messages yet</p>
+              <p className="text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>Start the conversation with your team!</p>
             </div>
           </div>
         ) : (
@@ -342,10 +348,10 @@ export function ChatPanel({
                     isMe ? 'flex-row-reverse' : 'flex-row'
                   }`}
                 >
-                  <span className="font-semibold text-neutral-300">
+                  <span className="font-semibold" style={{ color: 'var(--ide-text)' }}>
                     {isMe ? 'You' : msg.user_name}
                   </span>
-                  <span className="text-neutral-500 text-[10px]">{timeStr}</span>
+                  <span className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>{timeStr}</span>
                 </div>
 
                 <div
@@ -354,7 +360,14 @@ export function ChatPanel({
                   }`}
                 >
                   {!isMe && (
-                    <div className="w-7 h-7 rounded-full bg-[#333333] border border-neutral-700 flex items-center justify-center text-xs font-semibold text-white flex-shrink-0 overflow-hidden">
+                    <div 
+                      className="w-7 h-7 rounded-full border flex items-center justify-center text-xs font-semibold flex-shrink-0 overflow-hidden"
+                      style={{
+                        backgroundColor: 'var(--ide-card-bg)',
+                        borderColor: 'var(--ide-border)',
+                        color: 'var(--ide-text)',
+                      }}
+                    >
                       {msg.user_avatar ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
@@ -372,8 +385,13 @@ export function ChatPanel({
                     className={`px-3 py-2 rounded-2xl text-xs leading-relaxed break-words shadow-sm flex flex-col gap-2 ${
                       isMe
                         ? 'bg-sky-600 text-white rounded-tr-none'
-                        : 'bg-[#252526] text-neutral-200 border border-[#3c3c3c] rounded-tl-none'
+                        : 'border rounded-tl-none'
                     }`}
+                    style={{
+                      backgroundColor: isMe ? undefined : 'var(--ide-card-bg)',
+                      borderColor: isMe ? undefined : 'var(--ide-border)',
+                      color: isMe ? undefined : 'var(--ide-text)',
+                    }}
                   >
                     {/* Media Attachment Rendering */}
                     {msg.media_url && (
@@ -567,11 +585,17 @@ export function ChatPanel({
 
       {/* Media Attachment Preview Banner before sending */}
       {pendingMedia && (
-        <div className="px-3 py-2 bg-[#2a2d2e] border-t border-[#3c3c3c] flex items-center justify-between gap-2">
+        <div 
+          className="px-3 py-2 border-t flex items-center justify-between gap-2"
+          style={{
+            backgroundColor: 'var(--ide-dock-header)',
+            borderColor: 'var(--ide-border)',
+          }}
+        >
           <div className="flex items-center gap-2 min-w-0">
             {pendingMedia.type === 'image' ? (
               /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={pendingMedia.previewUrl} alt="preview" className="w-10 h-10 object-cover rounded border border-neutral-600" />
+              <img src={pendingMedia.previewUrl} alt="preview" className="w-10 h-10 object-cover rounded border" style={{ borderColor: 'var(--ide-border)' }} />
             ) : pendingMedia.type === 'video' ? (
               <div className="w-10 h-10 rounded bg-purple-900/40 border border-purple-500/50 flex items-center justify-center">
                 <Film className="w-5 h-5 text-purple-300" />
@@ -586,13 +610,14 @@ export function ChatPanel({
               </div>
             )}
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-white truncate max-w-[200px]">{pendingMedia.name}</p>
-              <p className="text-[10px] text-neutral-400">{pendingMedia.size} &bull; {pendingMedia.type.toUpperCase()}</p>
+              <p className="text-xs font-semibold truncate max-w-[200px]" style={{ color: 'var(--ide-text)' }}>{pendingMedia.name}</p>
+              <p className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>{pendingMedia.size} &bull; {pendingMedia.type.toUpperCase()}</p>
             </div>
           </div>
           <button
             onClick={() => setPendingMedia(null)}
-            className="p-1 hover:bg-neutral-700 text-neutral-400 hover:text-white rounded transition-colors"
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--ide-text-muted)' }}
           >
             <X className="w-4 h-4" />
           </button>
@@ -600,7 +625,14 @@ export function ChatPanel({
       )}
 
       {/* Input / Attachment Bar */}
-      <form onSubmit={handleSendMessage} className="p-3 bg-[#202020] border-t border-[#333333] flex items-center gap-2">
+      <form 
+        onSubmit={handleSendMessage} 
+        className="p-3 border-t flex items-center gap-2"
+        style={{
+          backgroundColor: 'var(--ide-dock-header)',
+          borderColor: 'var(--ide-border)',
+        }}
+      >
         {/* Hidden File Input */}
         <input
           type="file"
@@ -611,12 +643,12 @@ export function ChatPanel({
         />
 
         {/* Attachment Options */}
-        <div className="flex items-center gap-1 text-neutral-400">
+        <div className="flex items-center gap-1" style={{ color: 'var(--ide-text-muted)' }}>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             title="Attach file or image"
-            className="p-1.5 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+            className="p-1.5 hover:opacity-80 rounded-lg transition-colors"
           >
             <Paperclip className="w-4 h-4" />
           </button>
@@ -629,7 +661,7 @@ export function ChatPanel({
               }
             }}
             title="Attach photo/screenshot"
-            className="p-1.5 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+            className="p-1.5 hover:opacity-80 rounded-lg transition-colors"
           >
             <ImageIcon className="w-4 h-4" />
           </button>
@@ -641,7 +673,12 @@ export function ChatPanel({
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           placeholder={pendingMedia ? `Add a caption for ${pendingMedia.name}...` : 'Type a message...'}
-          className="flex-1 bg-[#2c2c2c] border border-[#3e3e3e] focus:border-sky-500 rounded-lg px-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none transition-colors"
+          className="flex-1 border focus:border-sky-500 rounded-lg px-3 py-1.5 text-xs focus:outline-none transition-colors"
+          style={{
+            backgroundColor: 'var(--ide-input-bg)',
+            borderColor: 'var(--ide-border)',
+            color: 'var(--ide-text)',
+          }}
         />
 
         {/* Send Button */}

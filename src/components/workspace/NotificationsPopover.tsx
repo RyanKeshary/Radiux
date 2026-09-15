@@ -67,7 +67,7 @@ export function NotificationsPopover({
       >
         <div className="flex items-center gap-2">
           <Bell className="w-4 h-4 text-sky-400" />
-          <span className="font-semibold text-xs text-white">Notifications</span>
+          <span className="font-semibold text-xs" style={{ color: 'var(--ide-text)' }}>Notifications</span>
           {unreadCount > 0 && (
             <span 
               className="px-1.5 py-0.2 text-[10px] font-bold text-white rounded-full leading-none"
@@ -92,7 +92,8 @@ export function NotificationsPopover({
 
           <button
             onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10"
+            style={{ color: 'var(--ide-text-muted)' }}
+            className="p-1 rounded hover:opacity-80 transition-colors"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -102,7 +103,7 @@ export function NotificationsPopover({
       {/* Notification Items List */}
       <div className="flex-1 overflow-y-auto divide-y divide-white/5 text-xs">
         {notifications.length === 0 ? (
-          <div className="p-6 text-center text-neutral-500 text-xs">
+          <div className="p-6 text-center text-xs" style={{ color: 'var(--ide-text-muted)' }}>
             <Bell className="w-6 h-6 mx-auto mb-2 opacity-30" />
             <p>No notifications yet.</p>
           </div>
@@ -134,10 +135,10 @@ export function NotificationsPopover({
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <p className="font-semibold text-white text-[11.5px] truncate">{n.title}</p>
-                    <span className="text-[10px] text-neutral-500">{n.createdAt}</span>
+                    <p className="font-semibold text-[11.5px] truncate" style={{ color: 'var(--ide-text)' }}>{n.title}</p>
+                    <span className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>{n.createdAt}</span>
                   </div>
-                  <p className="text-neutral-300 text-[11px] mt-0.5 leading-relaxed">{n.message}</p>
+                  <p className="text-[11px] mt-0.5 leading-relaxed" style={{ color: 'var(--ide-text-muted)' }}>{n.message}</p>
 
                   {/* Actions for Partner Requests */}
                   {n.type === 'partner_request' && n.partnerRequestId && (
@@ -150,7 +151,12 @@ export function NotificationsPopover({
                       </button>
                       <button
                         onClick={() => onDeclinePartnerRequest && onDeclinePartnerRequest(n.partnerRequestId!)}
-                        className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded text-[11px] transition-colors"
+                        style={{
+                          backgroundColor: 'var(--ide-input-bg)',
+                          borderColor: 'var(--ide-border)',
+                          color: 'var(--ide-text)',
+                        }}
+                        className="px-2 py-0.5 rounded text-[11px] border transition-colors hover:opacity-80"
                       >
                         Decline
                       </button>
@@ -175,7 +181,8 @@ export function NotificationsPopover({
                 {onDismissNotification && (
                   <button
                     onClick={() => onDismissNotification(n.id)}
-                    className="text-neutral-500 hover:text-neutral-300 p-0.5"
+                    style={{ color: 'var(--ide-text-muted)' }}
+                    className="hover:opacity-80 p-0.5"
                     title="Dismiss"
                   >
                     <X className="w-3 h-3" />

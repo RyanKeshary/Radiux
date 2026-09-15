@@ -62,10 +62,21 @@ export function QuickOpenModal({
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-md bg-[#252526] border border-[#3c3c3c] rounded-xl shadow-2xl overflow-hidden text-[#cccccc]"
+        className="w-full max-w-md border rounded-xl shadow-2xl overflow-hidden"
+        style={{
+          backgroundColor: 'var(--ide-card-bg)',
+          borderColor: 'var(--ide-border)',
+          color: 'var(--ide-text)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-[#3c3c3c] bg-[#1e1e1e]">
+        <div 
+          className="flex items-center gap-2 px-3.5 py-2.5 border-b"
+          style={{
+            backgroundColor: 'var(--ide-dock-header)',
+            borderColor: 'var(--ide-border)',
+          }}
+        >
           <Search className="w-4 h-4 text-sky-400 flex-shrink-0" />
           <input
             ref={inputRef}
@@ -77,16 +88,24 @@ export function QuickOpenModal({
               setSelectedIndex(0);
             }}
             onKeyDown={handleKeyDown}
-            className="w-full bg-transparent text-sm text-white focus:outline-none placeholder:text-neutral-500"
+            className="w-full bg-transparent text-sm focus:outline-none placeholder:opacity-50"
+            style={{ color: 'var(--ide-text)' }}
           />
-          <kbd className="text-[10px] bg-[#333333] text-neutral-400 px-1.5 py-0.5 rounded border border-[#444444]">
+          <kbd 
+            className="text-[10px] px-1.5 py-0.5 rounded border"
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text-muted)',
+            }}
+          >
             ESC
           </kbd>
         </div>
 
         <div className="max-h-72 overflow-y-auto p-1.5">
           {filtered.length === 0 ? (
-            <div className="p-4 text-center text-xs text-neutral-500">
+            <div className="p-4 text-center text-xs" style={{ color: 'var(--ide-text-muted)' }}>
               No files found matching "{query}"
             </div>
           ) : (
@@ -101,16 +120,24 @@ export function QuickOpenModal({
                   }}
                   onMouseEnter={() => setSelectedIndex(idx)}
                   className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-xs transition-colors ${
-                    isSelected ? 'bg-sky-600 text-white font-medium' : 'text-neutral-300 hover:bg-[#2e2e2e]'
+                    isSelected ? 'bg-sky-600 text-white font-medium' : 'hover:bg-black/5 dark:hover:bg-white/5'
                   }`}
+                  style={{
+                    color: isSelected ? '#ffffff' : 'var(--ide-text)',
+                  }}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <FileIcon name={file.name} isFolder={false} className="w-4 h-4 flex-shrink-0" />
                     <span className="truncate">{file.name}</span>
                   </div>
-                  <span className={`text-[10px] uppercase font-mono px-1.5 py-0.5 rounded ${
-                    isSelected ? 'bg-white/20 text-white' : 'text-neutral-500'
-                  }`}>
+                  <span 
+                    className={`text-[10px] uppercase font-mono px-1.5 py-0.5 rounded ${
+                      isSelected ? 'bg-white/20 text-white' : ''
+                    }`}
+                    style={{
+                      color: isSelected ? '#ffffff' : 'var(--ide-text-muted)',
+                    }}
+                  >
                     {file.language}
                   </span>
                 </div>

@@ -161,12 +161,13 @@ export function UserProfileModal({
         >
           <div className="flex items-center gap-2">
             <User className="w-4 h-4 text-sky-400" />
-            <span className="text-sm font-semibold text-white">Developer Profile & Settings</span>
+            <span className="text-sm font-semibold" style={{ color: 'var(--ide-text)' }}>Developer Profile & Settings</span>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1 rounded hover:bg-white/10 transition-colors"
+            style={{ color: 'var(--ide-text-muted)' }}
           >
             <X className="w-4 h-4" />
           </button>
@@ -174,16 +175,19 @@ export function UserProfileModal({
 
         {/* Modal Tabs */}
         <div 
-          className="flex items-center px-4 border-b gap-2 bg-black/20"
-          style={{ borderColor: 'var(--ide-border)' }}
+          className="flex items-center px-4 border-b gap-2"
+          style={{ borderColor: 'var(--ide-border)', backgroundColor: 'var(--ide-dock-header)' }}
         >
           <button
             onClick={() => setActiveTab('profile')}
             className={`flex items-center gap-1.5 px-3 py-2.5 font-medium border-b-2 transition-colors ${
               activeTab === 'profile'
-                ? 'text-white border-sky-500 font-semibold'
-                : 'text-neutral-400 hover:text-white border-transparent'
+                ? 'border-sky-500 font-semibold'
+                : 'border-transparent hover:opacity-80'
             }`}
+            style={{
+              color: activeTab === 'profile' ? 'var(--ide-accent)' : 'var(--ide-text-muted)',
+            }}
           >
             <User className="w-3.5 h-3.5" />
             <span>Profile</span>
@@ -193,9 +197,12 @@ export function UserProfileModal({
             onClick={() => setActiveTab('preferences')}
             className={`flex items-center gap-1.5 px-3 py-2.5 font-medium border-b-2 transition-colors ${
               activeTab === 'preferences'
-                ? 'text-white border-sky-500 font-semibold'
-                : 'text-neutral-400 hover:text-white border-transparent'
+                ? 'border-sky-500 font-semibold'
+                : 'border-transparent hover:opacity-80'
             }`}
+            style={{
+              color: activeTab === 'preferences' ? 'var(--ide-accent)' : 'var(--ide-text-muted)',
+            }}
           >
             <Palette className="w-3.5 h-3.5" />
             <span>IDE Themes & Preferences</span>
@@ -205,9 +212,12 @@ export function UserProfileModal({
             onClick={() => setActiveTab('partners')}
             className={`flex items-center gap-1.5 px-3 py-2.5 font-medium border-b-2 transition-colors ${
               activeTab === 'partners'
-                ? 'text-white border-sky-500 font-semibold'
-                : 'text-neutral-400 hover:text-white border-transparent'
+                ? 'border-sky-500 font-semibold'
+                : 'border-transparent hover:opacity-80'
             }`}
+            style={{
+              color: activeTab === 'partners' ? 'var(--ide-accent)' : 'var(--ide-text-muted)',
+            }}
           >
             <Users className="w-3.5 h-3.5" />
             <span>Coding Partners ({partners.filter(p => p.status === 'accepted').length})</span>
@@ -217,9 +227,12 @@ export function UserProfileModal({
             onClick={() => setActiveTab('account')}
             className={`flex items-center gap-1.5 px-3 py-2.5 font-medium border-b-2 transition-colors ${
               activeTab === 'account'
-                ? 'text-white border-sky-500 font-semibold'
-                : 'text-neutral-400 hover:text-white border-transparent'
+                ? 'border-sky-500 font-semibold'
+                : 'border-transparent hover:opacity-80'
             }`}
+            style={{
+              color: activeTab === 'account' ? 'var(--ide-accent)' : 'var(--ide-text-muted)',
+            }}
           >
             <Shield className="w-3.5 h-3.5" />
             <span>Account</span>
@@ -240,59 +253,81 @@ export function UserProfileModal({
                   </div>
                 )}
                 <div className="flex-1">
-                  <label className="block text-neutral-400 text-[11px] mb-1">Avatar Image URL</label>
+                  <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>Avatar Image URL</label>
                   <input
                     type="url"
                     value={avatarUrl}
                     onChange={(e) => setAvatarUrl(e.target.value)}
                     placeholder="https://example.com/avatar.jpg"
-                    className="w-full bg-black/30 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500"
+                    className="w-full border rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                    style={{
+                      backgroundColor: 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: 'var(--ide-text)',
+                    }}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-neutral-400 text-[11px] mb-1">Display Name</label>
+                  <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>Display Name</label>
                   <input
                     type="text"
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="w-full bg-black/30 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500"
+                    className="w-full border rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                    style={{
+                      backgroundColor: 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: 'var(--ide-text)',
+                    }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-neutral-400 text-[11px] mb-1">Username Handle</label>
-                  <div className="flex items-center bg-black/30 border border-neutral-700 rounded overflow-hidden">
-                    <span className="px-2 text-neutral-500">@</span>
+                  <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>Username Handle</label>
+                  <div 
+                    className="flex items-center border rounded overflow-hidden"
+                    style={{
+                      backgroundColor: 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                    }}
+                  >
+                    <span className="px-2" style={{ color: 'var(--ide-text-muted)' }}>@</span>
                     <input
                       type="text"
                       required
                       value={username}
                       onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-                      className="w-full bg-transparent py-1.5 pr-2 text-xs text-white focus:outline-none"
+                      className="w-full bg-transparent py-1.5 pr-2 text-xs focus:outline-none"
+                      style={{ color: 'var(--ide-text)' }}
                     />
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-neutral-400 text-[11px] mb-1">Bio / Developer Headline</label>
+                <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>Bio / Developer Headline</label>
                 <textarea
                   rows={2}
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   placeholder="Full Stack Software Engineer building collaborative tools..."
-                  className="w-full bg-black/30 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500 resize-none"
+                  className="w-full border rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500 resize-none"
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    borderColor: 'var(--ide-border)',
+                    color: 'var(--ide-text)',
+                  }}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 {/* Programming Languages */}
                 <div>
-                  <label className="block text-neutral-400 text-[11px] mb-1">Primary Programming Languages</label>
+                  <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>Primary Programming Languages</label>
                   <div className="flex gap-1 mb-2">
                     <input
                       type="text"
@@ -300,21 +335,31 @@ export function UserProfileModal({
                       onChange={(e) => setLangInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddLang(); } }}
                       placeholder="e.g. Python, Rust..."
-                      className="flex-1 bg-black/30 border border-neutral-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-sky-500"
+                      className="flex-1 border rounded px-2 py-1 text-xs focus:outline-none focus:border-sky-500"
+                      style={{
+                        backgroundColor: 'var(--ide-input-bg)',
+                        borderColor: 'var(--ide-border)',
+                        color: 'var(--ide-text)',
+                      }}
                     />
                     <button
                       type="button"
                       onClick={handleAddLang}
-                      className="px-2 py-1 bg-neutral-700 hover:bg-neutral-600 rounded text-neutral-200"
+                      className="px-2 py-1 border rounded"
+                      style={{
+                        backgroundColor: 'var(--ide-card-bg)',
+                        borderColor: 'var(--ide-border)',
+                        color: 'var(--ide-text)',
+                      }}
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {languages.map(lang => (
-                      <span key={lang} className="flex items-center gap-1 bg-sky-500/15 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded text-[11px]">
+                      <span key={lang} className="flex items-center gap-1 bg-sky-500/15 text-sky-400 border border-sky-500/30 px-2 py-0.5 rounded text-[11px]">
                         <span>{lang}</span>
-                        <button type="button" onClick={() => setLanguages(languages.filter(l => l !== lang))} className="hover:text-white">
+                        <button type="button" onClick={() => setLanguages(languages.filter(l => l !== lang))} className="hover:opacity-80">
                           <X className="w-2.5 h-2.5" />
                         </button>
                       </span>
@@ -324,7 +369,7 @@ export function UserProfileModal({
 
                 {/* Skills & Frameworks */}
                 <div>
-                  <label className="block text-neutral-400 text-[11px] mb-1">Skills & Frameworks</label>
+                  <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>Skills & Frameworks</label>
                   <div className="flex gap-1 mb-2">
                     <input
                       type="text"
@@ -332,21 +377,31 @@ export function UserProfileModal({
                       onChange={(e) => setSkillInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddSkill(); } }}
                       placeholder="e.g. React, Next.js, Docker..."
-                      className="flex-1 bg-black/30 border border-neutral-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-sky-500"
+                      className="flex-1 border rounded px-2 py-1 text-xs focus:outline-none focus:border-sky-500"
+                      style={{
+                        backgroundColor: 'var(--ide-input-bg)',
+                        borderColor: 'var(--ide-border)',
+                        color: 'var(--ide-text)',
+                      }}
                     />
                     <button
                       type="button"
                       onClick={handleAddSkill}
-                      className="px-2 py-1 bg-neutral-700 hover:bg-neutral-600 rounded text-neutral-200"
+                      className="px-2 py-1 border rounded"
+                      style={{
+                        backgroundColor: 'var(--ide-card-bg)',
+                        borderColor: 'var(--ide-border)',
+                        color: 'var(--ide-text)',
+                      }}
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {skills.map(skill => (
-                      <span key={skill} className="flex items-center gap-1 bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded text-[11px]">
+                      <span key={skill} className="flex items-center gap-1 bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-[11px]">
                         <span>{skill}</span>
-                        <button type="button" onClick={() => setSkills(skills.filter(s => s !== skill))} className="hover:text-white">
+                        <button type="button" onClick={() => setSkills(skills.filter(s => s !== skill))} className="hover:opacity-80">
                           <X className="w-2.5 h-2.5" />
                         </button>
                       </span>
@@ -356,9 +411,15 @@ export function UserProfileModal({
               </div>
 
               <div>
-                <label className="block text-neutral-400 text-[11px] mb-1">GitHub Username</label>
-                <div className="flex items-center bg-black/30 border border-neutral-700 rounded overflow-hidden">
-                  <span className="px-2 text-neutral-500 flex items-center gap-1">
+                <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>GitHub Username</label>
+                <div 
+                  className="flex items-center border rounded overflow-hidden"
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    borderColor: 'var(--ide-border)',
+                  }}
+                >
+                  <span className="px-2 flex items-center gap-1" style={{ color: 'var(--ide-text-muted)' }}>
                     <Github className="w-3 h-3" /> github.com/
                   </span>
                   <input
@@ -366,7 +427,8 @@ export function UserProfileModal({
                     value={githubUser}
                     onChange={(e) => setGithubUser(e.target.value)}
                     placeholder="your-github-handle"
-                    className="w-full bg-transparent py-1.5 pr-2 text-xs text-white focus:outline-none"
+                    className="w-full bg-transparent py-1.5 pr-2 text-xs focus:outline-none"
+                    style={{ color: 'var(--ide-text)' }}
                   />
                 </div>
               </div>
@@ -394,7 +456,7 @@ export function UserProfileModal({
           {activeTab === 'preferences' && (
             <div className="space-y-5">
               <div>
-                <label className="block text-white font-semibold text-xs mb-2">IDE Color Theme</label>
+                <label className="block font-semibold text-xs mb-2" style={{ color: 'var(--ide-text)' }}>IDE Color Theme</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {(Object.keys(THEMES) as ThemeId[]).map((tId) => {
                     const t = THEMES[tId];
@@ -406,15 +468,19 @@ export function UserProfileModal({
                         className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
                           isSelected
                             ? 'ring-2 ring-sky-500 border-sky-500 bg-sky-500/10'
-                            : 'border-neutral-700 hover:border-neutral-500 bg-black/20'
+                            : 'hover:border-sky-400'
                         }`}
+                        style={{
+                          backgroundColor: isSelected ? undefined : 'var(--ide-card-bg)',
+                          borderColor: isSelected ? undefined : 'var(--ide-border)',
+                        }}
                       >
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="font-semibold text-white truncate text-[11.5px]">{t.name}</span>
+                          <span className="font-semibold truncate text-[11.5px]" style={{ color: 'var(--ide-text)' }}>{t.name}</span>
                           {isSelected && <Check className="w-3 h-3 text-sky-400 flex-shrink-0" />}
                         </div>
                         {/* Swatch preview */}
-                        <div className="flex items-center gap-1 h-3 rounded overflow-hidden border border-white/10">
+                        <div className="flex items-center gap-1 h-3 rounded overflow-hidden border" style={{ borderColor: 'var(--ide-border)' }}>
                           <span className="w-1/3 h-full" style={{ backgroundColor: t.colors.bg }} />
                           <span className="w-1/3 h-full" style={{ backgroundColor: t.colors.sidebar }} />
                           <span className="w-1/3 h-full" style={{ backgroundColor: t.colors.accent }} />
@@ -425,25 +491,35 @@ export function UserProfileModal({
                 </div>
               </div>
 
-              <div className="border-t border-white/10 pt-4 grid grid-cols-2 gap-4">
+              <div className="border-t pt-4 grid grid-cols-2 gap-4" style={{ borderColor: 'var(--ide-border)' }}>
                 <div>
-                  <label className="block text-neutral-300 text-[11px] mb-1">Editor Font Size</label>
+                  <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>Editor Font Size</label>
                   <input
                     type="number"
                     min={10}
                     max={32}
                     value={settings.fontSize}
                     onChange={(e) => onUpdateSettings({ fontSize: Number(e.target.value) })}
-                    className="w-full bg-black/30 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-white"
+                    className="w-full border rounded px-2.5 py-1.5 text-xs"
+                    style={{
+                      backgroundColor: 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: 'var(--ide-text)',
+                    }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-neutral-300 text-[11px] mb-1">Tab Indent Size</label>
+                  <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>Tab Indent Size</label>
                   <select
                     value={settings.tabSize}
                     onChange={(e) => onUpdateSettings({ tabSize: Number(e.target.value) })}
-                    className="w-full bg-black/30 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-white"
+                    className="w-full border rounded px-2.5 py-1.5 text-xs"
+                    style={{
+                      backgroundColor: 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: 'var(--ide-text)',
+                    }}
                   >
                     <option value={2}>2 Spaces</option>
                     <option value={4}>4 Spaces</option>
@@ -451,11 +527,16 @@ export function UserProfileModal({
                 </div>
 
                 <div>
-                  <label className="block text-neutral-300 text-[11px] mb-1">Word Wrap</label>
+                  <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>Word Wrap</label>
                   <select
                     value={settings.wordWrap}
                     onChange={(e) => onUpdateSettings({ wordWrap: e.target.value as 'on' | 'off' })}
-                    className="w-full bg-black/30 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-white"
+                    className="w-full border rounded px-2.5 py-1.5 text-xs"
+                    style={{
+                      backgroundColor: 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: 'var(--ide-text)',
+                    }}
                   >
                     <option value="off">Off (Horizontal Scroll)</option>
                     <option value="on">On (Wrap Lines)</option>
@@ -464,8 +545,8 @@ export function UserProfileModal({
 
                 <div className="flex items-center justify-between pt-4">
                   <div>
-                    <span className="text-neutral-200 font-medium">Code Minimap</span>
-                    <p className="text-[10px] text-neutral-500">Show overview on editor right</p>
+                    <span className="font-medium" style={{ color: 'var(--ide-text)' }}>Code Minimap</span>
+                    <p className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Show overview on editor right</p>
                   </div>
                   <input
                     type="checkbox"
@@ -481,9 +562,15 @@ export function UserProfileModal({
           {/* 3. Coding Partners Tab */}
           {activeTab === 'partners' && (
             <div className="space-y-4">
-              <div className="p-3 bg-white/5 rounded border border-white/5">
-                <p className="text-white font-medium mb-1">Collaborative Coding Partners</p>
-                <p className="text-neutral-400 text-[11px] leading-relaxed">
+              <div 
+                className="p-3 rounded border"
+                style={{
+                  backgroundColor: 'var(--ide-dock-header)',
+                  borderColor: 'var(--ide-border)',
+                }}
+              >
+                <p className="font-medium mb-1" style={{ color: 'var(--ide-text)' }}>Collaborative Coding Partners</p>
+                <p className="text-[11px] leading-relaxed" style={{ color: 'var(--ide-text-muted)' }}>
                   Add developers as coding partners to quickly invite them to projects, see their availability, and jump into real-time collaboration.
                 </p>
 
@@ -494,7 +581,12 @@ export function UserProfileModal({
                     value={newPartnerInput}
                     onChange={(e) => setNewPartnerInput(e.target.value)}
                     placeholder="Enter developer email or @username..."
-                    className="flex-1 bg-black/30 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500"
+                    className="flex-1 border rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                    style={{
+                      backgroundColor: 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: 'var(--ide-text)',
+                    }}
                   />
                   <button
                     type="submit"
@@ -514,11 +606,11 @@ export function UserProfileModal({
 
               {/* Partners List */}
               <div className="space-y-2">
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Your Coding Partners</h4>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--ide-text-muted)' }}>Your Coding Partners</h4>
                 {loadingPartners ? (
-                  <div className="py-4 text-center text-neutral-500">Loading partners...</div>
+                  <div className="py-4 text-center" style={{ color: 'var(--ide-text-muted)' }}>Loading partners...</div>
                 ) : partners.length === 0 ? (
-                  <div className="py-6 text-center text-neutral-500 text-xs italic">
+                  <div className="py-6 text-center text-xs italic" style={{ color: 'var(--ide-text-muted)' }}>
                     No coding partners yet. Send an invitation above to collaborate!
                   </div>
                 ) : (
@@ -529,7 +621,11 @@ export function UserProfileModal({
                     return (
                       <div
                         key={p.id}
-                        className="flex items-center justify-between p-2.5 rounded bg-black/20 border border-white/5"
+                        className="flex items-center justify-between p-2.5 rounded border"
+                        style={{
+                          backgroundColor: 'var(--ide-card-bg)',
+                          borderColor: 'var(--ide-border)',
+                        }}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           {p.profile?.avatar_url ? (
@@ -541,8 +637,8 @@ export function UserProfileModal({
                           )}
 
                           <div className="min-w-0">
-                            <p className="font-semibold text-white truncate">{p.profile?.full_name || 'Partner'}</p>
-                            <p className="text-[10px] text-neutral-500 truncate">@{p.profile?.username || p.profile?.email}</p>
+                            <p className="font-semibold truncate" style={{ color: 'var(--ide-text)' }}>{p.profile?.full_name || 'Partner'}</p>
+                            <p className="text-[10px] truncate" style={{ color: 'var(--ide-text-muted)' }}>@{p.profile?.username || p.profile?.email}</p>
                           </div>
                         </div>
 
@@ -557,7 +653,12 @@ export function UserProfileModal({
                               </button>
                               <button
                                 onClick={() => handleDeclinePartner(p.id)}
-                                className="px-2 py-1 bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded text-[11px]"
+                                className="px-2 py-1 border rounded text-[11px]"
+                                style={{
+                                  backgroundColor: 'var(--ide-input-bg)',
+                                  borderColor: 'var(--ide-border)',
+                                  color: 'var(--ide-text)',
+                                }}
                               >
                                 Decline
                               </button>
@@ -577,7 +678,8 @@ export function UserProfileModal({
                               </span>
                               <button
                                 onClick={() => handleRemovePartner(p.id)}
-                                className="p-1 text-neutral-500 hover:text-red-400 transition-colors"
+                                className="p-1 hover:text-red-400 transition-colors"
+                                style={{ color: 'var(--ide-text-muted)' }}
                                 title="Remove partner"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -596,21 +698,27 @@ export function UserProfileModal({
           {/* 4. Account Tab */}
           {activeTab === 'account' && (
             <div className="space-y-4">
-              <div className="p-3 bg-white/5 rounded border border-white/5 space-y-2">
-                <div className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-neutral-400">Registered Email</span>
-                  <span className="text-white font-mono">{currentUser.email}</span>
+              <div 
+                className="p-3 rounded border space-y-2"
+                style={{
+                  backgroundColor: 'var(--ide-dock-header)',
+                  borderColor: 'var(--ide-border)',
+                }}
+              >
+                <div className="flex justify-between py-1 border-b" style={{ borderColor: 'var(--ide-border)' }}>
+                  <span style={{ color: 'var(--ide-text-muted)' }}>Registered Email</span>
+                  <span className="font-mono" style={{ color: 'var(--ide-text)' }}>{currentUser.email}</span>
                 </div>
-                <div className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-neutral-400">Account ID</span>
-                  <span className="text-neutral-400 font-mono text-[10px]">{currentUser.id}</span>
+                <div className="flex justify-between py-1 border-b" style={{ borderColor: 'var(--ide-border)' }}>
+                  <span style={{ color: 'var(--ide-text-muted)' }}>Account ID</span>
+                  <span className="font-mono text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>{currentUser.id}</span>
                 </div>
-                <div className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-neutral-400">Authentication Mode</span>
+                <div className="flex justify-between py-1 border-b" style={{ borderColor: 'var(--ide-border)' }}>
+                  <span style={{ color: 'var(--ide-text-muted)' }}>Authentication Mode</span>
                   <span className="text-emerald-400 font-semibold">Supabase Cloud Auth</span>
                 </div>
                 <div className="flex justify-between py-1">
-                  <span className="text-neutral-400">Real-Time Collaboration</span>
+                  <span style={{ color: 'var(--ide-text-muted)' }}>Real-Time Collaboration</span>
                   <span className="text-sky-400 font-semibold">Yjs CRDT + WebSocket</span>
                 </div>
               </div>

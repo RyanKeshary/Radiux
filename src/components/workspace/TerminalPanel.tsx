@@ -11,9 +11,69 @@ interface TerminalPanelProps {
   projectId: string;
   onPortDetected?: (port: number) => void;
   activeFileName?: string | null;
+  theme?: string;
 }
 
-export function TerminalPanel({ projectId, onPortDetected, activeFileName }: TerminalPanelProps) {
+const TERMINAL_THEMES: Record<string, any> = {
+  dark: {
+    background: '#181818',
+    foreground: '#d4d4d4',
+    cursor: '#007acc',
+    cursorAccent: '#ffffff',
+    selectionBackground: 'rgba(9, 71, 113, 0.6)',
+  },
+  light: {
+    background: '#f9fafb',
+    foreground: '#1f2937',
+    cursor: '#0284c7',
+    cursorAccent: '#ffffff',
+    selectionBackground: 'rgba(2, 132, 199, 0.25)',
+  },
+  midnight: {
+    background: '#07090e',
+    foreground: '#e2e8f0',
+    cursor: '#38bdf8',
+    cursorAccent: '#000000',
+    selectionBackground: 'rgba(56, 189, 248, 0.3)',
+  },
+  dracula: {
+    background: '#1e1f29',
+    foreground: '#f8f8f2',
+    cursor: '#bd93f9',
+    cursorAccent: '#282a36',
+    selectionBackground: 'rgba(189, 147, 249, 0.3)',
+  },
+  monokai: {
+    background: '#1b1c18',
+    foreground: '#f8f8f2',
+    cursor: '#e6db74',
+    cursorAccent: '#272822',
+    selectionBackground: 'rgba(230, 219, 116, 0.3)',
+  },
+  nord: {
+    background: '#232731',
+    foreground: '#eceff4',
+    cursor: '#88c0d0',
+    cursorAccent: '#2e3440',
+    selectionBackground: 'rgba(136, 192, 208, 0.3)',
+  },
+  solarized: {
+    background: '#001c24',
+    foreground: '#93a1a1',
+    cursor: '#2aa198',
+    cursorAccent: '#002b36',
+    selectionBackground: 'rgba(42, 161, 152, 0.3)',
+  },
+  'high-contrast': {
+    background: '#000000',
+    foreground: '#ffffff',
+    cursor: '#f38518',
+    cursorAccent: '#000000',
+    selectionBackground: 'rgba(243, 133, 24, 0.4)',
+  },
+};
+
+export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme = 'dark' }: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -22,17 +82,26 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName }: Ter
   const [processPid, setProcessPid] = useState<number | null>(null);
   const [detectedPorts, setDetectedPorts] = useState<number[]>([]);
 
+  // Update theme dynamically
+  useEffect(() => {
+    if (xtermRef.current) {
+      const termTheme = TERMINAL_THEMES[theme] || TERMINAL_THEMES.dark;
+      xtermRef.current.options.theme = {
+        ...xtermRef.current.options.theme,
+        ...termTheme,
+      };
+    }
+  }, [theme]);
+
   useEffect(() => {
     if (!containerRef.current) return;
+
+    const termTheme = TERMINAL_THEMES[theme] || TERMINAL_THEMES.dark;
 
     // 1. Initialize xterm.js with full ANSI colors and cursor settings
     const term = new XTerm({
       theme: {
-        background: '#181818',
-        foreground: '#d4d4d4',
-        cursor: '#007acc',
-        cursorAccent: '#ffffff',
-        selectionBackground: 'rgba(9, 71, 113, 0.6)',
+        ...termTheme,
         black: '#1e1e1e',
         red: '#f87171',
         green: '#4ade80',
@@ -211,12 +280,25 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName }: Ter
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#181818] overflow-hidden select-none">
+    <div 
+      className="flex flex-col h-full w-full overflow-hidden select-none"
+      style={{
+        backgroundColor: 'var(--ide-dock)',
+        color: 'var(--ide-text)',
+      }}
+    >
       {/* Terminal Toolbar */}
-      <div className="h-7 bg-[#252526] border-b border-[#333333] px-3 flex items-center justify-between text-xs text-neutral-400">
+      <div 
+        className="h-7 border-b px-3 flex items-center justify-between text-xs"
+        style={{
+          backgroundColor: 'var(--ide-dock-header)',
+          borderColor: 'var(--ide-border)',
+          color: 'var(--ide-text)',
+        }}
+      >
         <div className="flex items-center gap-2">
           <TerminalIcon className="w-3.5 h-3.5 text-sky-400" />
-          <span className="font-semibold text-white">Terminal (node + python)</span>
+          <span className="font-semibold" style={{ color: 'var(--ide-text)' }}>Terminal (node + python)</span>
           {isRunning ? (
             <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />

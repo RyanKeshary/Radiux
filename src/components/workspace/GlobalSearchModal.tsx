@@ -70,10 +70,21 @@ export function GlobalSearchModal({
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-xl bg-[#252526] border border-[#3c3c3c] rounded-xl shadow-2xl overflow-hidden text-[#cccccc]"
+        style={{
+          backgroundColor: 'var(--ide-bg)',
+          borderColor: 'var(--ide-border)',
+          color: 'var(--ide-text)',
+        }}
+        className="w-full max-w-xl border rounded-xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-[#3c3c3c] bg-[#1e1e1e]">
+        <div
+          style={{
+            backgroundColor: 'var(--ide-dock-header)',
+            borderColor: 'var(--ide-border)',
+          }}
+          className="flex items-center gap-2 px-3.5 py-2.5 border-b"
+        >
           <Search className="w-4 h-4 text-sky-400 flex-shrink-0" />
           <input
             ref={inputRef}
@@ -82,25 +93,33 @@ export function GlobalSearchModal({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && onClose()}
-            className="w-full bg-transparent text-sm text-white focus:outline-none placeholder:text-neutral-500"
+            style={{ color: 'var(--ide-text)' }}
+            className="w-full bg-transparent text-sm focus:outline-none placeholder:opacity-50"
           />
-          <kbd className="text-[10px] bg-[#333333] text-neutral-400 px-1.5 py-0.5 rounded border border-[#444444]">
+          <kbd
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text-muted)',
+            }}
+            className="text-[10px] px-1.5 py-0.5 rounded border"
+          >
             ESC
           </kbd>
         </div>
 
         <div className="max-h-80 overflow-y-auto p-2">
           {!query.trim() ? (
-            <div className="p-4 text-center text-xs text-neutral-500">
+            <div className="p-4 text-center text-xs" style={{ color: 'var(--ide-text-muted)' }}>
               Type keywords to search across all project file contents.
             </div>
           ) : matches.length === 0 ? (
-            <div className="p-4 text-center text-xs text-neutral-500">
+            <div className="p-4 text-center text-xs" style={{ color: 'var(--ide-text-muted)' }}>
               No occurrences found for "{query}".
             </div>
           ) : (
             <div className="space-y-1">
-              <div className="text-[11px] font-semibold text-neutral-400 px-2 py-1">
+              <div className="text-[11px] font-semibold px-2 py-1" style={{ color: 'var(--ide-text-muted)' }}>
                 Found {matches.length} matches:
               </div>
               {matches.map((m, idx) => (
@@ -110,21 +129,28 @@ export function GlobalSearchModal({
                     onSelectFile(m.file);
                     onClose();
                   }}
-                  className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-[#2e2e2e] cursor-pointer text-xs transition-colors"
+                  className="flex items-start gap-2.5 p-2 rounded-lg hover:opacity-80 cursor-pointer text-xs transition-colors"
                 >
                   <FileIcon name={m.file.name} isFolder={false} className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-white font-medium">
+                    <div className="flex items-center gap-2 font-medium" style={{ color: 'var(--ide-text)' }}>
                       <span>{m.file.name}</span>
                       <span className="text-[10px] text-sky-400 font-mono">
                         Line {m.lineNumber}
                       </span>
                     </div>
-                    <div className="text-[11px] text-neutral-400 font-mono truncate mt-0.5 bg-[#1e1e1e] px-2 py-0.5 rounded border border-[#333333]">
+                    <div
+                      style={{
+                        backgroundColor: 'var(--ide-card-bg)',
+                        borderColor: 'var(--ide-border)',
+                        color: 'var(--ide-text-muted)',
+                      }}
+                      className="text-[11px] font-mono truncate mt-0.5 px-2 py-0.5 rounded border"
+                    >
                       {m.lineText}
                     </div>
                   </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-neutral-500 self-center" />
+                  <ChevronRight className="w-3.5 h-3.5 self-center" style={{ color: 'var(--ide-text-muted)' }} />
                 </div>
               ))}
             </div>

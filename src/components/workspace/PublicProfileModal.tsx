@@ -112,14 +112,22 @@ export function PublicProfileModal({
                     <img
                       src={profile.avatar_url}
                       alt=""
-                      className="w-16 h-16 rounded-full ring-4 ring-[#1e1e1e] object-cover bg-black"
+                      style={{
+                        borderColor: 'var(--ide-border)',
+                      }}
+                      className="w-16 h-16 rounded-full border-2 object-cover bg-black"
                     />
                   ) : (
-                    <div className="w-16 h-16 rounded-full ring-4 ring-[#1e1e1e] bg-sky-600 flex items-center justify-center text-xl font-bold text-white uppercase">
+                    <div
+                      style={{
+                        borderColor: 'var(--ide-border)',
+                      }}
+                      className="w-16 h-16 rounded-full border-2 bg-sky-600 flex items-center justify-center text-xl font-bold text-white uppercase"
+                    >
                       {profile.full_name?.charAt(0) || 'U'}
                     </div>
                   )}
-                  <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-[#1e1e1e]" />
+                  <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-black/40" />
                 </div>
 
                 {/* Primary Action Button */}
@@ -154,13 +162,20 @@ export function PublicProfileModal({
 
               {/* Names */}
               <div>
-                <h3 className="text-base font-bold text-white">{profile.full_name || 'Developer'}</h3>
-                <p className="text-neutral-400 font-mono text-[11px]">@{profile.username || profile.email.split('@')[0]}</p>
+                <h3 className="text-base font-bold" style={{ color: 'var(--ide-text)' }}>{profile.full_name || 'Developer'}</h3>
+                <p className="font-mono text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>@{profile.username || profile.email.split('@')[0]}</p>
               </div>
 
               {/* Bio */}
               {profile.bio && (
-                <p className="text-neutral-300 leading-relaxed text-[11.5px] bg-white/[0.03] p-2.5 rounded-md border border-white/5">
+                <p
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    borderColor: 'var(--ide-border)',
+                    color: 'var(--ide-text)',
+                  }}
+                  className="leading-relaxed text-[11.5px] p-2.5 rounded-md border"
+                >
                   {profile.bio}
                 </p>
               )}
@@ -168,7 +183,7 @@ export function PublicProfileModal({
               {/* Programming Languages */}
               {profile.languages && profile.languages.length > 0 && (
                 <div>
-                  <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1.5">
+                  <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--ide-text-muted)' }}>
                     <Code2 className="w-3 h-3 text-sky-400" />
                     <span>Languages</span>
                   </div>
@@ -176,7 +191,7 @@ export function PublicProfileModal({
                     {profile.languages.map((lang) => (
                       <span
                         key={lang}
-                        className="px-2 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20 font-mono text-[10.5px]"
+                        className="px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-mono text-[10.5px]"
                       >
                         {lang}
                       </span>
@@ -188,7 +203,7 @@ export function PublicProfileModal({
               {/* Skills */}
               {profile.skills && profile.skills.length > 0 && (
                 <div>
-                  <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1.5">
+                  <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--ide-text-muted)' }}>
                     <Sparkles className="w-3 h-3 text-indigo-400" />
                     <span>Skills & Frameworks</span>
                   </div>
@@ -196,7 +211,7 @@ export function PublicProfileModal({
                     {profile.skills.map((skill) => (
                       <span
                         key={skill}
-                        className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-[10.5px]"
+                        className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10.5px]"
                       >
                         {skill}
                       </span>
@@ -206,13 +221,14 @@ export function PublicProfileModal({
               )}
 
               {/* External Links & Secondary Actions */}
-              <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+              <div className="pt-2 border-t flex items-center justify-between" style={{ borderColor: 'var(--ide-border)' }}>
                 {profile.github_username ? (
                   <a
                     href={`https://github.com/${profile.github_username}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-1 text-neutral-400 hover:text-white transition-colors"
+                    style={{ color: 'var(--ide-text-muted)' }}
+                    className="flex items-center gap-1 hover:opacity-80 transition-colors"
                   >
                     <Github className="w-3.5 h-3.5" />
                     <span>github.com/{profile.github_username}</span>
