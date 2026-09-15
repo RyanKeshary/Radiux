@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { execFile, spawn } from 'child_process';
-import { WorkspaceManager } from './workspace-manager.mjs';
+import { WorkspaceManager, getSanitizedEnv } from './workspace-manager.mjs';
 
 /**
  * Execute a git command in the context of a project's workspace directory.
@@ -12,15 +12,7 @@ function runGit(projectId, args, extraEnv = {}) {
     const cwd = WorkspaceManager.getWorkspaceDir(projectId);
 
     // Sanitize environment so credentials/tokens are never exposed to shell or child processes
-    const safeEnv = { ...process.env };
-    delete safeEnv.DATABASE_URL;
-    delete safeEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    delete safeEnv.SUPABASE_SERVICE_ROLE_KEY;
-    delete safeEnv.SUPABASE_PASSWORD;
-    delete safeEnv.AWS_ACCESS_KEY_ID;
-    delete safeEnv.AWS_SECRET_ACCESS_KEY;
-    // Inject any safe transient variables (e.g. GIT_AUTHOR_NAME or credentials helper)
-    Object.assign(safeEnv, extraEnv);
+    const safeEnv = { ...getSanitizedEnv(), ...extraEnv };
 
     execFile('git', args, { cwd, env: safeEnv, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {

@@ -1,92 +1,204 @@
-# CodeCollab — Production Deployment Guide (Level 6)
+# CodeCollab — Production Deployment Guide
 
-This document provides step-by-step instructions for deploying CodeCollab to production.
-
----
-
-## Architecture Overview
-
-CodeCollab consists of three decoupled production components:
-1. **Frontend**: Next.js 14 App Router application (deployable to Vercel, Netlify, Cloudflare Pages, or Docker).
-2. **Collaboration & Runtime Backend**: Node.js WebSocket + Express REST server (`server/websocket.mjs`) handling Yjs CRDT synchronization, terminal PTY sessions, WebRTC voice signaling, and Git execution (deployable to Railway, Render, Fly.io, or VPS).
-3. **Database, Auth & Storage**: Supabase PostgreSQL + Auth + Realtime + Storage.
+This document describes the production deployment architecture and step-by-step setup for CodeCollab.
 
 ---
 
-## Step 1: Supabase Setup
+## 1. Production Architecture Overview
 
-### 1. Run Database Migrations
-1. Open your Supabase Project Dashboard -> **SQL Editor**.
-2. Run `supabase/schema.sql` (if starting fresh).
-3. Run `supabase/schema_v6.sql` (to apply additive production indexes, media columns, and RLS policies).
+```text
+                         INTERNET
+                            │
+                            ▼
+                  ┌────────────────────┐
+                  │      Vercel        │
+                  │   Next.js Frontend │
+                  └─────────┬──────────┘
+                            │
+                     HTTPS / WSS
+                            │
+                            ▼
+                  ┌────────────────────┐
+                  │       Render       │
+                  │   Node Backend     │
+                  │                    │
+                  │ WebSockets         │
+                  │ Terminal / PTY     │
+                  │ Git                │
+                  │ Workspace          │
+                  │ Dev Server Proxy   │
+                  │ REST API           │
+                  └─────────┬──────────┘
+                            │
+                            ▼
+                  ┌────────────────────┐
+                  │     Supabase       │
+                  │                    │
+                  │ Auth               │
+                  │ PostgreSQL         │
+                  │ Storage            │
+                  │ Realtime           │
+                  └────────────────────┘
+```
 
-### 2. Configure Storage Bucket for Media
-1. In Supabase Dashboard -> **Storage**.
-2. If not created automatically by `schema_v6.sql`, create a public bucket named:
-   - **Name**: `chat-media`
-   - **Public**: `true`
-   - **Max file size**: `50MB`
-   - **Allowed MIME types**: `image/*`, `video/*`, `audio/*`, `application/pdf`, `text/*`, `application/zip`
+### Hosting Roles & Responsibilities
 
-### 3. Configure Authentication & OAuth
-In Supabase Dashboard -> **Authentication** -> **URL Configuration**:
-- **Site URL**:
-  - Development: `http://localhost:3000`
-  - Production: `https://your-app-domain.com`
-- **Redirect URLs**:
-  - Development: `http://localhost:3000/**`
-  - Production: `https://your-app-domain.com/**`
+1. **Vercel**
+   - Hosts the Next.js 14 App Router frontend.
+   - Serves static assets, client bundles, Monaco editor, and client-side application logic.
 
-#### Enabling Google & GitHub OAuth
-In Supabase Dashboard -> **Authentication** -> **Providers**:
-- **Google**: Enable and paste Client ID & Client Secret from Google Cloud Console.
-- **GitHub**: Enable and paste Client ID & Client Secret from GitHub Developer Settings.
-  - Set GitHub Authorization callback URL to:
-    `https://<your-supabase-project-id>.supabase.co/auth/v1/callback`
+2. **Render (Web Service)**
+   - Runs `node server/websocket.mjs` as a persistent, long-running Node.js process.
+   - Handles Yjs document CRDT synchronization via WebSockets.
+   - Spawns interactive Linux pseudo-terminals (`node-pty`) inside isolated project workspaces.
+   - Executes server-side Git commands (`git status`, `git commit`, `git push`, etc.).
+   - Serves static web previews (`/preview/:projectId/*`).
+   - Reverse-proxies dynamic dev servers running on Render (`/proxy/:port/*`).
+   - Relays WebRTC voice signaling messages and real-time chat/activity broadcasts.
+   - Exposes `/health` check endpoint for uptime monitoring.
+
+3. **Supabase**
+   - Cloud PostgreSQL database storing profiles, projects, members, files, messages, and activities.
+   - Handles email/password, Google OAuth, and GitHub OAuth user authentication.
+   - Enforces database Row Level Security (RLS) policies.
+   - Houses public storage bucket (`chat-media`) for file attachments.
 
 ---
 
-## Step 2: Deploy Collaboration & Runtime Backend (`server/websocket.mjs`)
+## 2. Environment Variables Specification
 
-Because the collaboration server requires persistent WebSockets and runtime access for PTY terminals and Git, host it on a platform that supports WebSockets and long-lived server processes (e.g. **Railway**, **Render**, or **Fly.io**).
+### Vercel (Frontend)
 
-### Example Deployment on Railway:
-1. Connect your repository to Railway.
-2. Set the root directory or start command:
-   ```bash
-   node server/websocket.mjs
+Set these environment variables in your Vercel Project Settings (**Settings** -> **Environment Variables**):
+
+| Variable | Description | Example Production Value |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL | `https://rdhwzezrmgkgsbpwznrz.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public Supabase client anon key | `sb_publishable_...` |
+| `NEXT_PUBLIC_APP_URL` | Public production frontend URL | `https://your-codecollab.vercel.app` |
+| `NEXT_PUBLIC_WS_URL` | Public WSS URL of Render backend | `wss://codecollab-backend.onrender.com` |
+| `NEXT_PUBLIC_API_URL` | Public HTTPS URL of Render backend | `https://codecollab-backend.onrender.com` |
+
+> [!CAUTION]
+> **Never** expose `SUPABASE_SERVICE_ROLE_KEY` to Vercel or any `NEXT_PUBLIC_*` variable. It must remain strictly server-side on Render.
+
+### Render (Backend)
+
+Set these environment variables in your Render Web Service dashboard (**Environment**):
+
+| Variable | Description | Value / Example |
+|---|---|---|
+| `PORT` | Dynamically assigned port (or defaults to 10000) | `10000` |
+| `NODE_ENV` | Node production environment flag | `production` |
+| `ALLOWED_ORIGIN` | Allowed CORS origins (comma-separated if multiple) | `https://your-codecollab.vercel.app` |
+| `SUPABASE_URL` | Your Supabase project URL | `https://rdhwzezrmgkgsbpwznrz.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Service Role Secret | `<your-supabase-service-role-secret>` |
+
+---
+
+## 3. Step-by-Step Deployment Instructions
+
+### Step 1: Render Web Service Setup (Backend)
+
+1. Sign in to [Render Dashboard](https://dashboard.render.com).
+2. Click **New +** -> **Web Service** (or use Blueprint with `render.yaml`).
+3. Connect your GitHub repository (`https://github.com/RyanKeshary/web-ide.git`).
+4. Configure service settings:
+   - **Name**: `codecollab-backend`
+   - **Region**: Oregon (or your preferred region)
+   - **Branch**: `main`
+   - **Runtime**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `node server/websocket.mjs`
+   - **Health Check Path**: `/health`
+5. Add the Environment Variables listed in Section 2 under **Environment**.
+6. Click **Create Web Service**.
+7. Once deployment succeeds, note your Render URL:
+   - HTTPS: `https://codecollab-backend.onrender.com`
+   - WSS: `wss://codecollab-backend.onrender.com`
+
+### Step 2: Vercel Setup (Frontend)
+
+1. Sign in to [Vercel Dashboard](https://vercel.com).
+2. Click **Add New...** -> **Project**.
+3. Import your GitHub repository (`https://github.com/RyanKeshary/web-ide.git`).
+4. In the **Configure Project** screen:
+   - **Framework Preset**: Next.js
+   - **Root Directory**: `./`
+   - **Build Command**: `next build` (default)
+   - **Output Directory**: `.next` (default)
+5. Expand **Environment Variables** and add:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_APP_URL`: `https://<your-project>.vercel.app`
+   - `NEXT_PUBLIC_WS_URL`: `wss://<your-render-backend-url>`
+   - `NEXT_PUBLIC_API_URL`: `https://<your-render-backend-url>`
+6. Click **Deploy**.
+7. Copy your assigned Vercel URL (e.g. `https://codecollab.vercel.app`).
+
+### Step 3: Update CORS on Render
+
+Once your Vercel URL is generated:
+1. Return to the Render Web Service -> **Environment**.
+2. Set `ALLOWED_ORIGIN` to your exact Vercel URL:
+   ```text
+   ALLOWED_ORIGIN=https://codecollab.vercel.app
    ```
-3. Set the Environment Variables in Railway:
-   - `PORT`: `1234` (or provided by host)
-   - `NODE_ENV`: `production`
-   - `ALLOWED_ORIGIN`: `https://your-frontend-domain.com`
-   - `SUPABASE_URL`: `https://your-project.supabase.co`
-   - `SUPABASE_SERVICE_ROLE_KEY`: `<your-supabase-service-role-key>`
-4. Note your public Railway service URL (e.g. `https://codecollab-server.up.railway.app`).
-   - WebSocket URL: `wss://codecollab-server.up.railway.app`
-   - API URL: `https://codecollab-server.up.railway.app`
+3. Save changes; Render will redeploy automatically.
+
+### Step 4: Supabase Authentication Configuration
+
+1. In the [Supabase Dashboard](https://supabase.com/dashboard) -> Select your project -> **Authentication** -> **URL Configuration**:
+   - **Site URL**: `https://<your-vercel-domain>.vercel.app`
+   - **Redirect URLs**:
+     ```text
+     https://<your-vercel-domain>.vercel.app/**
+     https://<your-vercel-domain>.vercel.app/auth/callback
+     http://localhost:3000/**
+     ```
+2. **Google OAuth** (if enabled):
+   - In Google Cloud Console -> APIs & Services -> Credentials -> Authorized redirect URIs:
+     Add: `https://<your-supabase-project-id>.supabase.co/auth/v1/callback`
+3. **GitHub OAuth** (if enabled):
+   - In GitHub Settings -> Developer settings -> OAuth Apps:
+     - Homepage URL: `https://<your-vercel-domain>.vercel.app`
+     - Authorization callback URL: `https://<your-supabase-project-id>.supabase.co/auth/v1/callback`
 
 ---
 
-## Step 3: Deploy Frontend (Vercel or Node Host)
+## 4. Key Production Features & Security Architecture
 
-### Example Deployment on Vercel:
-1. Import your Git repository into Vercel.
-2. In Project Settings -> **Environment Variables**, configure:
-   - `NEXT_PUBLIC_SUPABASE_URL`: `https://your-project.supabase.co`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: `<your-anon-key>`
-   - `NEXT_PUBLIC_APP_URL`: `https://your-frontend-domain.com`
-   - `NEXT_PUBLIC_WS_URL`: `wss://codecollab-server.up.railway.app`
-   - `NEXT_PUBLIC_API_URL`: `https://codecollab-server.up.railway.app`
-3. Deploy!
+### Health Check Endpoint
+Render automatically verifies server readiness using:
+```http
+GET /health
+```
+Response:
+```json
+{
+  "status": "ok",
+  "service": "codecollab-backend"
+}
+```
 
----
+### Dynamic Dev Server Reverse Proxy
+Because Render containers do not expose internal ports (e.g., `3000`, `5000`, `8080`) directly to client browsers over the internet, CodeCollab includes a streaming reverse proxy on the backend:
+```http
+GET /proxy/:port/:path*
+```
+When a developer launches a server in the interactive terminal, the IDE's Web Preview accesses it through:
+```text
+https://<render-backend>/proxy/<port>/
+```
+This enables full dynamic server previews over HTTPS from any device without requiring `localhost`.
 
-## Step 4: Verification Checklist
+### Terminal & Environment Security
+- User terminal sessions inherit **sanitized** environment variables.
+- All secrets, database keys, service-role keys, and tokens (`SUPABASE_*`, `*KEY*`, `*SECRET*`, etc.) are automatically stripped before pseudo-terminals spawn.
+- Workspace file paths are validated against directory traversal attacks; projects cannot escape `.workspaces/<projectId>`.
 
-- [ ] Sign up with email/password, Google OAuth, and GitHub OAuth.
-- [ ] Create a new project and verify real-time Yjs editing between two browser sessions.
-- [ ] Send chat messages with image, video, audio, and documents; verify they upload to Supabase Storage and open in the in-project viewer.
-- [ ] Click "Open in Editor Tab" on chat media; verify it renders in the central editor via `MediaViewer`.
-- [ ] Open the terminal in split/bottom dock, maximize to fullscreen, and verify it fills the container without truncation.
-- [ ] Test Git staging, commit, and branch switching in the Git panel.
+### Filesystem Durability Note
+Render Web Services have ephemeral local disk storage on restart. CodeCollab uses the Supabase database as the primary durable source of truth for all project files, while using `.workspaces/` on disk for active runtime execution, Git operations, and terminal tasks.
+
+### Graceful Shutdown
+The backend listens for `SIGTERM` and `SIGINT` signals from Render, cleanly terminating child PTY processes and active client WebSocket connections before exiting.

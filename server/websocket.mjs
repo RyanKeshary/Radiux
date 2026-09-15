@@ -61,10 +61,15 @@ async function verifyToken(token) {
  * In production, restrict to ALLOWED_ORIGIN env var.
  */
 function isOriginAllowed(requestOrigin) {
-  if (!ALLOWED_ORIGIN) return true; // dev mode — allow all
+  if (!ALLOWED_ORIGIN || ALLOWED_ORIGIN === '*') return true; // dev mode — allow all
   if (!requestOrigin) return false;
-  // Allow exact match or subdomain match
-  return requestOrigin === ALLOWED_ORIGIN || requestOrigin.endsWith('.' + ALLOWED_ORIGIN.replace(/^https?:\/\//, ''));
+  const origins = ALLOWED_ORIGIN.split(',').map(o => o.trim()).filter(Boolean);
+  return origins.some(o => {
+    if (o === '*' || requestOrigin === o) return true;
+    const cleanO = o.replace(/^https?:\/\//, '');
+    const cleanReq = requestOrigin.replace(/^https?:\/\//, '');
+    return cleanReq === cleanO || cleanReq.endsWith('.' + cleanO);
+  });
 }
 
 const MIME_TYPES = {
@@ -116,6 +121,85 @@ const server = http.createServer((request, response) => {
   }
 
   const parsedUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+
+  // Health check endpoint for Render service verification
+  if (parsedUrl.pathname === '/health') {
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({
+      status: 'ok',
+      service: 'codecollab-backend',
+    }));
+    return;
+  }
+
+  // Dev Server Reverse Proxy for running dynamic ports on Render (e.g. /proxy/5000/*)
+  if (parsedUrl.pathname.startsWith('/proxy/')) {
+    const parts = parsedUrl.pathname.replace(/^\/proxy\//, '').split('/');
+    const targetPort = parseInt(parts[0], 10);
+    const targetPath = '/' + parts.slice(1).join('/') + (parsedUrl.search || '');
+
+    if (!targetPort || isNaN(targetPort) || targetPort < 1000 || targetPort > 65535) {
+      response.writeHead(400, { 'Content-Type': 'text/plain' });
+      response.end('Invalid proxy port');
+      return;
+    }
+
+    const proxyReq = http.request({
+      hostname: '127.0.0.1',
+      port: targetPort,
+      path: targetPath,
+      method: request.method,
+      headers: {
+        ...request.headers,
+        host: `127.0.0.1:${targetPort}`,
+      },
+    }, (proxyRes) => {
+      const headers = { ...proxyRes.headers };
+      delete headers['x-frame-options'];
+      headers['content-security-policy'] = "frame-ancestors 'self' *;";
+      const origin = request.headers.origin || '';
+      if (ALLOWED_ORIGIN) {
+        if (isOriginAllowed(origin)) {
+          headers['access-control-allow-origin'] = origin;
+        } else {
+          headers['access-control-allow-origin'] = ALLOWED_ORIGIN;
+        }
+      } else {
+        headers['access-control-allow-origin'] = '*';
+      }
+      response.writeHead(proxyRes.statusCode, headers);
+      proxyRes.pipe(response);
+    });
+
+    proxyReq.on('error', () => {
+      response.writeHead(502, { 'Content-Type': 'text/html; charset=utf-8' });
+      response.end(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1e1e1e; color: #d4d4d4; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+              .box { background: #252526; border: 1px solid #3c3c3c; border-radius: 8px; padding: 24px 32px; max-width: 450px; text-align: center; }
+              h2 { color: #f59e0b; font-size: 16px; margin-top: 0; }
+              p { font-size: 13px; color: #a3a3a3; }
+              code { background: #181818; padding: 2px 6px; border-radius: 4px; color: #38bdf8; font-family: monospace; }
+            </style>
+          </head>
+          <body>
+            <div class="box">
+              <h2>Server Not Responding on Port ${targetPort}</h2>
+              <p>Could not connect to service on port <code>${targetPort}</code>.</p>
+              <p>Ensure your application is started and listening in the terminal.</p>
+            </div>
+          </body>
+        </html>
+      `);
+    });
+
+    request.pipe(proxyReq);
+    return;
+  }
 
   // 1. Static Project File Web Preview: /preview/:projectId/*
   if (parsedUrl.pathname.startsWith('/preview/')) {
@@ -740,3 +824,21 @@ server.listen(port, host, () => {
   console.log(`[CodeCollab] CORS origin: ${ALLOWED_ORIGIN || 'all (dev mode)'}`);
   console.log(`[CodeCollab] WS auth: ${supabaseAdmin ? 'enabled' : 'disabled (dev mode)'}`);
 });
+
+function gracefulShutdown(signal) {
+  console.log(`[CodeCollab] Received ${signal}, closing server gracefully...`);
+  server.close(() => {
+    console.log('[CodeCollab] HTTP & WebSocket server closed.');
+    WorkspaceManager.cleanupAllWorkspaces();
+    process.exit(0);
+  });
+  // Force exit after 8s if sockets take too long
+  setTimeout(() => {
+    console.error('[CodeCollab] Forcing shutdown after timeout.');
+    WorkspaceManager.cleanupAllWorkspaces();
+    process.exit(1);
+  }, 8000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

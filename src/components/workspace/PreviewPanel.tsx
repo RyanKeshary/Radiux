@@ -73,8 +73,8 @@ export function PreviewPanel({
   // Static preview URL points to CodeCollab backend file server
   const staticUrl = buildApiUrl(`/preview/${projectId}/${path.replace(/^\//, '') || 'index.html'}`);
   
-  // Port preview URL points to the local listening service (e.g. Express, Flask, Vite)
-  const portUrl = `http://localhost:${port}${path.startsWith('/') ? path : '/' + path}`;
+  // Port preview URL points through the backend reverse proxy so remote clients can access dev servers running on Render
+  const portUrl = buildApiUrl(`/proxy/${port}${path.startsWith('/') ? path : '/' + path}`);
 
   const currentUrl = mode === 'static' ? staticUrl : portUrl;
 
