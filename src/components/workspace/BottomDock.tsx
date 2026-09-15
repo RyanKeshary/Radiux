@@ -225,10 +225,10 @@ export function BottomDock({
     containerClasses += 'border-t w-full';
     containerStyle = { ...containerStyle, height: `${height}px`, borderColor: 'var(--ide-border)' };
   } else if (orientation === 'right') {
-    containerClasses += 'border-l h-full';
+    containerClasses += 'border-l h-full flex-shrink-0';
     containerStyle = { ...containerStyle, width: `${width}px`, borderColor: 'var(--ide-border)' };
   } else if (orientation === 'left') {
-    containerClasses += 'border-r h-full';
+    containerClasses += 'border-r h-full flex-shrink-0';
     containerStyle = { ...containerStyle, width: `${width}px`, borderColor: 'var(--ide-border)' };
   } else if (orientation === 'fullscreen') {
     containerClasses += 'fixed inset-0 w-full h-full z-50';

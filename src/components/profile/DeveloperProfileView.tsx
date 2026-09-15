@@ -10,6 +10,7 @@ import { ProfileReadme } from './ProfileReadme';
 import { PinnedProjectsSection } from './PinnedProjectsSection';
 import { DirectMessageModal } from './DirectMessageModal';
 import { ProfileEditorModal } from './ProfileEditorModal';
+import { applyThemeVariables, ThemeId } from '@/lib/themes';
 import { 
   MapPin, 
   GraduationCap, 
@@ -48,7 +49,7 @@ export function DeveloperProfileView({
   allProjects = [],
   contributions,
 }: DeveloperProfileViewProps) {
-  const { user } = useAuth();
+  const { user, updateCurrentUserProfile } = useAuth();
   const [profile, setProfile] = useState<UserProfile>(initialProfile);
   const [pinnedProjects, setPinnedProjects] = useState<Project[]>(initialPinnedProjects);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -58,6 +59,24 @@ export function DeveloperProfileView({
   const [copiedUrl, setCopiedUrl] = useState(false);
 
   const isOwner = !!(user && user.id === profile.id);
+
+  // Apply theme on mount (for direct URL access without going through the IDE)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const settingsStr = localStorage.getItem('codecollab_editor_settings');
+        if (settingsStr) {
+          const parsed = JSON.parse(settingsStr);
+          if (parsed?.theme) {
+            applyThemeVariables(parsed.theme as ThemeId);
+            return;
+          }
+        }
+        const savedTheme = localStorage.getItem('codecollab_theme');
+        if (savedTheme) applyThemeVariables(savedTheme as ThemeId);
+      } catch (e) {}
+    }
+  }, []);
 
   // Check coding partner status if viewing another developer
   useEffect(() => {
@@ -99,6 +118,10 @@ export function DeveloperProfileView({
     try {
       const updated = await DataService.updateProfile(profile.id, { readme_markdown: markdown });
       setProfile(updated);
+      // Sync to auth context if owner is editing their own readme
+      if (isOwner) {
+        try { await updateCurrentUserProfile({ readme_markdown: markdown }); } catch (e) {}
+      }
     } catch (e) {
       console.error(e);
     }
@@ -115,7 +138,7 @@ export function DeveloperProfileView({
   const privacy = profile.privacy || {};
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--ide-bg)', color: 'var(--ide-text)' }}>
+    <div className="min-h-screen flex flex-col overflow-y-auto" style={{ backgroundColor: 'var(--ide-bg)', color: 'var(--ide-text)' }}>
       {/* Top Navbar */}
       <header 
         className="h-12 px-4 md:px-8 border-b flex items-center justify-between select-none sticky top-0 z-30 backdrop-blur-md"

@@ -1497,6 +1497,48 @@ export function Workspace({ projectId }: WorkspaceProps) {
         <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
           {/* Main Editor Center Container with Split Layout support */}
           <main className="flex-1 flex min-w-0 overflow-hidden relative">
+            {/* Dock on Left (if orientation === 'left') */}
+            {isDockOpen && dockOrientation === 'left' && (
+              <BottomDock
+                projectId={projectId}
+                projectName={project.name}
+                isOpen={isDockOpen}
+                onClose={() => setIsDockOpen(false)}
+                activeFileName={activeFile?.name}
+                userId={user?.id || 'guest'}
+                userName={user?.full_name || 'Anonymous Peer'}
+                userEmail={user?.email}
+                userAvatar={user?.avatar_url}
+                userColor={userColor}
+                unreadCount={unreadCount}
+                onClearUnread={() => setUnreadCount(0)}
+                onNewMessageReceived={() => {
+                  if (!isDockOpen || activeDockTab !== 'chat') {
+                    setUnreadCount((c) => c + 1);
+                  }
+                }}
+                onActivityEvent={(details) => logAndBroadcastActivity('media_uploaded', details)}
+                isInVoice={isInVoice}
+                isMuted={isMuted}
+                voicePeers={voicePeers}
+                voiceConnectionState={voiceConnectionState}
+                onJoinVoice={joinVoice}
+                onLeaveVoice={leaveVoice}
+                onToggleMute={toggleMute}
+                orientation={dockOrientation}
+                onChangeOrientation={handleOrientationChange}
+                onOpenMediaInEditor={handleOpenMediaInEditor}
+                problems={problems}
+                onNavigateToProblem={handleNavigateToLocation}
+                outputLogs={outputLogs}
+                onClearOutputLogs={() => setOutputLogs([])}
+                activeTab={activeDockTab}
+                onTabChange={setActiveDockTab}
+                onNavigateToFile={handleNavigateToLocation}
+                theme={settings.theme}
+              />
+            )}
+
             <div 
               className={`flex-1 flex w-full h-full min-w-0 ${
                 splitLayout === 'vertical'

@@ -1086,6 +1086,7 @@ export const DataService = {
 
   // Level 7 & 8: Profiles & Developer Identity
   async getProfile(userId: string): Promise<UserProfile | null> {
+    const mockProfile = StorageMock.getProfile(userId);
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase
         .from('profiles')
@@ -1093,94 +1094,147 @@ export const DataService = {
         .eq('id', userId)
         .single();
       if (!error && data) {
-        return {
+        // Merge: Supabase has full data if schema is migrated.
+        // StorageMock fills in any fields not yet in the DB (fallback).
+        const merged: UserProfile = {
           id: data.id,
           email: data.email,
-          full_name: data.full_name,
-          avatar_url: data.avatar_url,
-          username: data.username || data.email.split('@')[0],
-          bio: data.bio || '',
-          role: data.role || '',
-          location: data.location || '',
-          education: data.education || '',
-          skills: data.skills || [],
-          languages: data.languages || [],
-          technologies: data.technologies || [],
-          website: data.website || '',
-          github_username: data.github_username || '',
-          linkedin_url: data.linkedin_url || '',
-          other_links: data.other_links || [],
-          collaboration_interests: data.collaboration_interests || [],
-          readme_markdown: data.readme_markdown || '',
-          pinned_project_ids: data.pinned_project_ids || [],
-          privacy: data.privacy || {},
-          preferences: data.preferences || {},
+          full_name: data.full_name || mockProfile?.full_name || '',
+          avatar_url: data.avatar_url || mockProfile?.avatar_url || '',
+          username: data.username || mockProfile?.username || data.email?.split('@')[0],
+          bio: data.bio || mockProfile?.bio || '',
+          role: data.role || mockProfile?.role || '',
+          location: data.location || mockProfile?.location || '',
+          education: data.education || mockProfile?.education || '',
+          skills: (data.skills && data.skills.length > 0) ? data.skills : (mockProfile?.skills || []),
+          languages: (data.languages && data.languages.length > 0) ? data.languages : (mockProfile?.languages || []),
+          technologies: (data.technologies && data.technologies.length > 0) ? data.technologies : (mockProfile?.technologies || []),
+          website: data.website || mockProfile?.website || '',
+          github_username: data.github_username || mockProfile?.github_username || '',
+          linkedin_url: data.linkedin_url || mockProfile?.linkedin_url || '',
+          other_links: (data.other_links && data.other_links.length > 0) ? data.other_links : (mockProfile?.other_links || []),
+          collaboration_interests: (data.collaboration_interests && data.collaboration_interests.length > 0) ? data.collaboration_interests : (mockProfile?.collaboration_interests || []),
+          readme_markdown: data.readme_markdown || mockProfile?.readme_markdown || '',
+          pinned_project_ids: (data.pinned_project_ids && data.pinned_project_ids.length > 0) ? data.pinned_project_ids : (mockProfile?.pinned_project_ids || []),
+          privacy: (data.privacy && Object.keys(data.privacy).length > 0) ? data.privacy : (mockProfile?.privacy || {}),
+          preferences: (data.preferences && Object.keys(data.preferences).length > 0) ? data.preferences : (mockProfile?.preferences || {}),
         };
+        // Sync the merged result back to StorageMock for local consistency
+        StorageMock.updateProfile(userId, merged);
+        return merged;
       }
     }
-    return StorageMock.getProfile(userId);
+    return mockProfile;
   },
 
+
   async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile> {
+    // 1. Always update StorageMock for immediate local consistency
+    const localUpdated = StorageMock.updateProfile(userId, updates);
+
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .update({
-            full_name: updates.full_name,
-            avatar_url: updates.avatar_url,
-            ...(updates.username ? { username: updates.username } : {}),
-            ...(updates.bio !== undefined ? { bio: updates.bio } : {}),
-            ...(updates.role !== undefined ? { role: updates.role } : {}),
-            ...(updates.location !== undefined ? { location: updates.location } : {}),
-            ...(updates.education !== undefined ? { education: updates.education } : {}),
-            ...(updates.skills ? { skills: updates.skills } : {}),
-            ...(updates.languages ? { languages: updates.languages } : {}),
-            ...(updates.technologies ? { technologies: updates.technologies } : {}),
-            ...(updates.website !== undefined ? { website: updates.website } : {}),
-            ...(updates.github_username !== undefined ? { github_username: updates.github_username } : {}),
-            ...(updates.linkedin_url !== undefined ? { linkedin_url: updates.linkedin_url } : {}),
-            ...(updates.other_links ? { other_links: updates.other_links } : {}),
-            ...(updates.collaboration_interests ? { collaboration_interests: updates.collaboration_interests } : {}),
-            ...(updates.readme_markdown !== undefined ? { readme_markdown: updates.readme_markdown } : {}),
-            ...(updates.pinned_project_ids ? { pinned_project_ids: updates.pinned_project_ids.slice(0, 4) } : {}),
-            ...(updates.privacy ? { privacy: updates.privacy } : {}),
-            ...(updates.preferences ? { preferences: updates.preferences } : {}),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId)
-          .select()
-          .single();
-        if (!error && data) {
-          return {
-            ...data,
-            username: data.username || data.email?.split('@')[0],
-          };
+        // 2. Try updating ALL fields in Supabase profiles table
+        //    (works if schema has been migrated with extended columns)
+        const profileUpdate: Record<string, any> = {
+          updated_at: new Date().toISOString(),
+        };
+        const allProfileFields = [
+          'full_name', 'avatar_url', 'username', 'bio', 'role', 'location',
+          'education', 'website', 'github_username', 'linkedin_url',
+          'skills', 'languages', 'technologies', 'other_links',
+          'collaboration_interests', 'readme_markdown', 'pinned_project_ids',
+          'privacy', 'preferences',
+        ];
+        allProfileFields.forEach((key) => {
+          if ((updates as any)[key] !== undefined) {
+            profileUpdate[key] = (updates as any)[key];
+          }
+        });
+        if (updates.pinned_project_ids) {
+          profileUpdate.pinned_project_ids = updates.pinned_project_ids.slice(0, 4);
         }
-      } catch (err) {}
+        await supabase.from('profiles').update(profileUpdate).eq('id', userId);
+
+        // 3. ALSO persist to Supabase auth user_metadata as a durable backup
+        //    (survives even if profiles table columns are dropped/missing)
+        const metaFields = [
+          'username', 'bio', 'role', 'location', 'education',
+          'skills', 'languages', 'technologies', 'website',
+          'github_username', 'linkedin_url', 'other_links',
+          'collaboration_interests', 'readme_markdown',
+          'pinned_project_ids', 'privacy', 'preferences', 'avatar_url', 'full_name',
+        ];
+        const metaUpdates: Record<string, any> = {};
+        metaFields.forEach((key) => {
+          if ((updates as any)[key] !== undefined) {
+            metaUpdates[key] = (updates as any)[key];
+          }
+        });
+        if (Object.keys(metaUpdates).length > 0) {
+          // Only update auth metadata for the currently logged-in user
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData?.session?.user?.id === userId) {
+            await supabase.auth.updateUser({ data: metaUpdates });
+          }
+        }
+      } catch (err) {
+        console.warn('updateProfile: partial Supabase failure:', err);
+      }
     }
-    return StorageMock.updateProfile(userId, updates);
+
+    return localUpdated;
   },
+
 
   // Level 8: Direct Profile Lookup by Handle
   async getProfileByUsername(username: string): Promise<UserProfile | null> {
     const clean = username.replace(/^@/, '').toLowerCase().trim();
+    // First check StorageMock which holds extended profile data
+    const mockProfile = StorageMock.getProfileByUsername(clean);
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .or(`username.ilike.${clean},id.eq.${clean}`)
+          .or(`email.ilike.%${clean}%,id.eq.${clean}`)
           .single();
         if (!error && data) {
+          // Merge Supabase base with StorageMock extended data
+          const matchedMock = StorageMock.getProfile(data.id);
           return {
-            ...data,
-            username: data.username || data.email?.split('@')[0],
+            id: data.id,
+            email: data.email,
+            full_name: data.full_name || matchedMock?.full_name || '',
+            avatar_url: data.avatar_url || matchedMock?.avatar_url || '',
+            username: matchedMock?.username || data.email?.split('@')[0],
+            bio: matchedMock?.bio || '',
+            role: matchedMock?.role || '',
+            location: matchedMock?.location || '',
+            education: matchedMock?.education || '',
+            skills: matchedMock?.skills || [],
+            languages: matchedMock?.languages || [],
+            technologies: matchedMock?.technologies || [],
+            website: matchedMock?.website || '',
+            github_username: matchedMock?.github_username || '',
+            linkedin_url: matchedMock?.linkedin_url || '',
+            other_links: matchedMock?.other_links || [],
+            collaboration_interests: matchedMock?.collaboration_interests || [],
+            readme_markdown: matchedMock?.readme_markdown || '',
+            pinned_project_ids: matchedMock?.pinned_project_ids || [],
+            privacy: matchedMock?.privacy || {},
+            preferences: matchedMock?.preferences || {},
           };
         }
       } catch (e) {}
     }
-    return StorageMock.getProfileByUsername(clean);
+    // Fallback: find by username match in StorageMock
+    if (mockProfile) return mockProfile;
+    // Try matching email prefix
+    const all = StorageMock.getAllProfiles();
+    return all.find(p => 
+      (p.username || p.email?.split('@')[0])?.toLowerCase() === clean
+    ) || null;
   },
 
   // Level 8: Public Profile with Server/Client Privacy Filters

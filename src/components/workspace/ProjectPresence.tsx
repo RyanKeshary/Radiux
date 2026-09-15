@@ -131,7 +131,7 @@ export function ProjectPresence({
   }, [activeFileId, activeFileName, user?.full_name, user?.email, isInVoice]);
 
   return (
-    <div className="relative">
+    <div ref={drawerRef} className="relative">
       <button
         onClick={() => setShowDrawer(!showDrawer)}
         style={{

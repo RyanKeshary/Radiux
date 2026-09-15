@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { UserProfile, CustomDeveloperLink } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
+import { useAuth } from '@/context/AuthContext';
 import { 
   X, 
   User, 
@@ -33,6 +34,7 @@ export function ProfileEditorModal({
   currentUser,
   onProfileUpdated,
 }: ProfileEditorModalProps) {
+  const { updateCurrentUserProfile } = useAuth();
   const [activeTab, setActiveTab] = useState<'profile' | 'links' | 'privacy'>('profile');
 
   // Fields
@@ -100,6 +102,8 @@ export function ProfileEditorModal({
       };
 
       const updated = await DataService.updateProfile(currentUser.id, updates);
+      // Also sync to AuthContext so header/avatar updates immediately
+      try { await updateCurrentUserProfile(updates); } catch (e) {}
       if (onProfileUpdated) onProfileUpdated(updated);
       setStatusMsg({ text: 'Profile updated successfully!', type: 'success' });
       setTimeout(() => {

@@ -8,20 +8,97 @@ create table if not exists public.profiles (
   email text not null,
   full_name text,
   avatar_url text,
+  username text unique,
+  bio text default '',
+  role text default '',
+  location text default '',
+  education text default '',
+  website text default '',
+  github_username text default '',
+  linkedin_url text default '',
+  skills text[] default '{}',
+  languages text[] default '{}',
+  technologies text[] default '{}',
+  other_links jsonb default '[]',
+  collaboration_interests text[] default '{}',
+  readme_markdown text default '',
+  pinned_project_ids text[] default '{}',
+  privacy jsonb default '{"show_location": true, "show_education": true, "show_links": true, "show_skills": true, "show_activity": true, "show_readme": true, "show_partners": true, "show_email": false}',
+  preferences jsonb default '{}',
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Migration: add missing columns to existing profiles table (safe ALTER TABLE)
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='username' and table_schema='public') then
+    alter table public.profiles add column username text unique;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='bio' and table_schema='public') then
+    alter table public.profiles add column bio text default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='role' and table_schema='public') then
+    alter table public.profiles add column role text default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='location' and table_schema='public') then
+    alter table public.profiles add column location text default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='education' and table_schema='public') then
+    alter table public.profiles add column education text default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='website' and table_schema='public') then
+    alter table public.profiles add column website text default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='github_username' and table_schema='public') then
+    alter table public.profiles add column github_username text default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='linkedin_url' and table_schema='public') then
+    alter table public.profiles add column linkedin_url text default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='skills' and table_schema='public') then
+    alter table public.profiles add column skills text[] default '{}';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='languages' and table_schema='public') then
+    alter table public.profiles add column languages text[] default '{}';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='technologies' and table_schema='public') then
+    alter table public.profiles add column technologies text[] default '{}';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='other_links' and table_schema='public') then
+    alter table public.profiles add column other_links jsonb default '[]';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='collaboration_interests' and table_schema='public') then
+    alter table public.profiles add column collaboration_interests text[] default '{}';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='readme_markdown' and table_schema='public') then
+    alter table public.profiles add column readme_markdown text default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='pinned_project_ids' and table_schema='public') then
+    alter table public.profiles add column pinned_project_ids text[] default '{}';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='privacy' and table_schema='public') then
+    alter table public.profiles add column privacy jsonb default '{"show_location": true, "show_education": true, "show_links": true, "show_skills": true, "show_activity": true, "show_readme": true, "show_partners": true, "show_email": false}';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='preferences' and table_schema='public') then
+    alter table public.profiles add column preferences jsonb default '{}';
+  end if;
+end $$;
 
 -- Trigger to create profile when auth.users is created
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, email, full_name, avatar_url)
+  insert into public.profiles (id, email, full_name, avatar_url, username)
   values (
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    coalesce(new.raw_user_meta_data->>'avatar_url', '')
-  );
+    coalesce(new.raw_user_meta_data->>'avatar_url', ''),
+    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1))
+  )
+  on conflict (id) do update set
+    full_name = excluded.full_name,
+    avatar_url = excluded.avatar_url,
+    updated_at = now();
   return new;
 end;
 $$ language plpgsql security definer;

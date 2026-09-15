@@ -57,17 +57,28 @@ export function OpenTabs({
 
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Dismiss context menu on outside click
+  // Dismiss context menu on outside click or Escape
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    if (!contextMenu) return;
+
+    const handlePointerDown = (e: MouseEvent | TouchEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setContextMenu(null);
       }
     };
-    if (contextMenu) {
-      window.addEventListener('click', handleClickOutside);
-      return () => window.removeEventListener('click', handleClickOutside);
-    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
   }, [contextMenu]);
 
   if (openFiles.length === 0) return null;

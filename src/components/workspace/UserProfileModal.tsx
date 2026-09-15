@@ -5,6 +5,7 @@ import { UserProfile, CodingPartner } from '@/lib/types';
 import { THEMES, ThemeId } from '@/lib/themes';
 import { EditorSettings } from './EditorSettingsModal';
 import { DataService } from '@/lib/data-service';
+import { useAuth } from '@/context/AuthContext';
 import { 
   X, 
   User, 
@@ -38,6 +39,7 @@ export function UserProfileModal({
   onUpdateSettings,
   onProfileUpdated,
 }: UserProfileModalProps) {
+  const { updateCurrentUserProfile } = useAuth();
   const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'partners' | 'account'>('profile');
 
   // Profile fields
@@ -84,7 +86,7 @@ export function UserProfileModal({
     e.preventDefault();
     setSaving(true);
     try {
-      const updated = await DataService.updateProfile(currentUser.id, {
+      const updates = {
         full_name: fullName,
         username,
         bio,
@@ -92,7 +94,10 @@ export function UserProfileModal({
         github_username: githubUser,
         skills,
         languages,
-      });
+      };
+      const updated = await DataService.updateProfile(currentUser.id, updates);
+      // Also sync to AuthContext so header/avatar update immediately
+      try { await updateCurrentUserProfile(updates); } catch (e) {}
       if (onProfileUpdated) onProfileUpdated(updated);
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2000);
