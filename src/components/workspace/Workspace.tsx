@@ -350,6 +350,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
       ]);
 
       setProject(projData);
+      if (typeof window !== 'undefined' && projData) {
+        localStorage.setItem('codecollab_last_project_id', projData.id);
+        localStorage.setItem('codecollab_last_project_name', projData.name);
+      }
       setFiles(filesData);
       setMembers(membersData);
       setNotifications(notifsData.map(n => ({
