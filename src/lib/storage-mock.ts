@@ -227,6 +227,16 @@ export const StorageMock = {
     return newProj;
   },
 
+  deleteProject(projectId: string): boolean {
+    const projects = getStored<Project[]>(STORAGE_KEY_PROJECTS, []);
+    setStored(STORAGE_KEY_PROJECTS, projects.filter(p => p.id !== projectId));
+    const members = getStored<ProjectMember[]>(STORAGE_KEY_MEMBERS, []);
+    setStored(STORAGE_KEY_MEMBERS, members.filter(m => m.project_id !== projectId));
+    const files = getStored<FileItem[]>(STORAGE_KEY_FILES, []);
+    setStored(STORAGE_KEY_FILES, files.filter(f => f.project_id !== projectId));
+    return true;
+  },
+
   getMembers(projectId: string): ProjectMember[] {
     const members = getStored<ProjectMember[]>(STORAGE_KEY_MEMBERS, []);
     return members.filter(m => m.project_id === projectId);

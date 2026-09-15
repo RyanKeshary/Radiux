@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { AuthModal } from './AuthModal';
 import { LogOut, User, LogIn, ChevronDown } from 'lucide-react';
+import { useClickOutside } from '@/hooks/useClickOutside';
 
 interface UserMenuProps {
   onOpenProfileModal?: () => void;
@@ -14,6 +15,9 @@ export function UserMenu({ onOpenProfileModal }: UserMenuProps = {}) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useClickOutside(menuRef, () => setIsDropdownOpen(false), isDropdownOpen);
 
   if (loading) {
     return <div className="w-20 h-7 bg-[#252526] animate-pulse rounded" />;
@@ -50,7 +54,7 @@ export function UserMenu({ onOpenProfileModal }: UserMenuProps = {}) {
   }
 
   return (
-    <div className="relative">
+    <div ref={menuRef} className="relative">
       <button
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
         className="flex items-center gap-2 px-2.5 py-1 rounded bg-[#252526] hover:bg-[#2d2d2d] border border-[#3c3c3c] text-xs text-white transition-all shadow-sm"

@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getUserColor, PresenceUser, ProjectMember } from '@/lib/types';
 import { config } from '@/lib/config';
 import { Users, FileCode, ChevronDown } from 'lucide-react';
+import { useClickOutside } from '@/hooks/useClickOutside';
 
 interface ExtendedPresenceUser extends PresenceUser {
   fileName?: string;
@@ -37,6 +38,14 @@ export function ProjectPresence({
   const [onlineUsers, setOnlineUsers] = useState<ExtendedPresenceUser[]>([]);
   const [showDrawer, setShowDrawer] = useState(false);
   const providerRef = useRef<WebsocketProvider | null>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  useClickOutside(drawerRef, () => setShowDrawer(false), showDrawer);
+
+  const onPresenceChangeRef = useRef(onPresenceChange);
+  useEffect(() => {
+    onPresenceChangeRef.current = onPresenceChange;
+  }, [onPresenceChange]);
 
   // 1. Maintain single persistent WebsocketProvider for workspace presence
   useEffect(() => {
@@ -61,6 +70,9 @@ export function ProjectPresence({
     // Set local state immediately so user sees at least 1 online (themselves) right away
     awareness.setLocalStateField('user', initialUser);
     setOnlineUsers([initialUser]);
+    if (onPresenceChangeRef.current) {
+      onPresenceChangeRef.current([initialUser]);
+    }
 
     const handleAwarenessChange = () => {
       const states = awareness.getStates();
@@ -79,10 +91,10 @@ export function ProjectPresence({
         }
       });
       // Always ensure at least the local user is present
-      if (users.length === 0) {
-        setOnlineUsers([initialUser]);
-      } else {
-        setOnlineUsers(users);
+      const finalUsers = users.length === 0 ? [initialUser] : users;
+      setOnlineUsers(finalUsers);
+      if (onPresenceChangeRef.current) {
+        onPresenceChangeRef.current(finalUsers);
       }
     };
 

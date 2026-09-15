@@ -157,6 +157,22 @@ export const DataService = {
     return StorageMock.createProject(name, description, user);
   },
 
+  async deleteProject(projectId: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('files').delete().eq('project_id', projectId);
+        await supabase.from('project_members').delete().eq('project_id', projectId);
+        await supabase.from('messages').delete().eq('project_id', projectId);
+        await supabase.from('activities').delete().eq('project_id', projectId);
+        const { error } = await supabase.from('projects').delete().eq('id', projectId);
+        if (!error) return true;
+      } catch (e) {
+        console.warn('Supabase deleteProject failed:', e);
+      }
+    }
+    return StorageMock.deleteProject(projectId);
+  },
+
   // Members
   async getMembers(projectId: string): Promise<ProjectMember[]> {
     if (isSupabaseConfigured && supabase) {

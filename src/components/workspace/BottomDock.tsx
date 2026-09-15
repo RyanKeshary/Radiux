@@ -121,8 +121,28 @@ export function BottomDock({
     if (onTabChange) onTabChange(tab);
   };
 
-  const [height, setHeight] = useState<number>(340);
-  const [width, setWidth] = useState<number>(480);
+  const [height, setHeight] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`codecollab_dock_height_${userId || 'guest'}`);
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val >= 150 && val <= 1200) return val;
+      }
+    }
+    return 340;
+  });
+
+  const [width, setWidth] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`codecollab_dock_width_${userId || 'guest'}`);
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val >= 250 && val <= 1400) return val;
+      }
+    }
+    return 520;
+  });
+
   const [detectedPort, setDetectedPort] = useState<number>(5000);
   const [availablePorts, setAvailablePorts] = useState<number[]>([]);
 
@@ -139,8 +159,64 @@ export function BottomDock({
     }
   };
 
+  const handleTopResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = height;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const delta = startY - ev.clientY;
+      const maxHeight = typeof window !== 'undefined' ? window.innerHeight - 100 : 800;
+      const newHeight = Math.max(160, Math.min(maxHeight, startHeight + delta));
+      setHeight(newHeight);
+    };
+
+    const handleMouseUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      const delta = startY - ev.clientY;
+      const maxHeight = typeof window !== 'undefined' ? window.innerHeight - 100 : 800;
+      const finalHeight = Math.max(160, Math.min(maxHeight, startHeight + delta));
+      setHeight(finalHeight);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`codecollab_dock_height_${userId || 'guest'}`, String(finalHeight));
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleSideResizeStart = (e: React.MouseEvent, isRightDock: boolean) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const delta = isRightDock ? (startX - ev.clientX) : (ev.clientX - startX);
+      const maxWidth = typeof window !== 'undefined' ? window.innerWidth - 200 : 1000;
+      const newWidth = Math.max(280, Math.min(maxWidth, startWidth + delta));
+      setWidth(newWidth);
+    };
+
+    const handleMouseUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      const delta = isRightDock ? (startX - ev.clientX) : (ev.clientX - startX);
+      const maxWidth = typeof window !== 'undefined' ? window.innerWidth - 200 : 1000;
+      const finalWidth = Math.max(280, Math.min(maxWidth, startWidth + delta));
+      setWidth(finalWidth);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`codecollab_dock_width_${userId || 'guest'}`, String(finalWidth));
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
   // Determine container styling based on orientation
-  let containerClasses = 'flex flex-col z-30 transition-all duration-150 shadow-2xl overflow-hidden ';
+  let containerClasses = 'flex flex-col z-30 transition-all duration-75 shadow-2xl overflow-hidden relative ';
   let containerStyle: React.CSSProperties = {
     backgroundColor: 'var(--ide-dock)',
   };
@@ -160,6 +236,32 @@ export function BottomDock({
 
   return (
     <div className={containerClasses} style={containerStyle}>
+      {/* Top resize handle for bottom orientation */}
+      {orientation === 'bottom' && (
+        <div
+          onMouseDown={handleTopResizeStart}
+          className="h-1.5 w-full cursor-row-resize hover:bg-sky-500/50 active:bg-sky-500 transition-colors z-40 select-none flex-shrink-0"
+          title="Drag to resize dock height"
+        />
+      )}
+
+      {/* Left resize handle for right orientation */}
+      {orientation === 'right' && (
+        <div
+          onMouseDown={(e) => handleSideResizeStart(e, true)}
+          className="w-1.5 h-full cursor-col-resize hover:bg-sky-500/50 active:bg-sky-500 transition-colors absolute left-0 top-0 z-40 select-none"
+          title="Drag to resize dock width"
+        />
+      )}
+
+      {/* Right resize handle for left orientation */}
+      {orientation === 'left' && (
+        <div
+          onMouseDown={(e) => handleSideResizeStart(e, false)}
+          className="w-1.5 h-full cursor-col-resize hover:bg-sky-500/50 active:bg-sky-500 transition-colors absolute right-0 top-0 z-40 select-none"
+          title="Drag to resize dock width"
+        />
+      )}
       {/* Dock Header */}
       <div 
         className="h-9 px-3 border-b flex items-center justify-between select-none flex-shrink-0"

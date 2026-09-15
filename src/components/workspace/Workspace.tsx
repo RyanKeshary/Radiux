@@ -238,6 +238,58 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [currentGitBranch, setCurrentGitBranch] = useState('main');
 
+  // User-specific custom resizable sidebar width
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`codecollab_sidebar_width_${user?.id || 'guest'}`);
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val >= 200 && val <= 900) return val;
+      }
+    }
+    return 300;
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user?.id) {
+      const saved = localStorage.getItem(`codecollab_sidebar_width_${user.id}`);
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val >= 200 && val <= 900) {
+          setSidebarWidth(val);
+        }
+      }
+    }
+  }, [user?.id]);
+
+  const handleSidebarResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      const maxWidth = typeof window !== 'undefined' ? Math.min(850, window.innerWidth - 300) : 800;
+      const newWidth = Math.max(220, Math.min(maxWidth, startWidth + delta));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      const delta = ev.clientX - startX;
+      const maxWidth = typeof window !== 'undefined' ? Math.min(850, window.innerWidth - 300) : 800;
+      const finalWidth = Math.max(220, Math.min(maxWidth, startWidth + delta));
+      setSidebarWidth(finalWidth);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`codecollab_sidebar_width_${user?.id || 'guest'}`, String(finalWidth));
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
   const [settings, setSettings] = useState<EditorSettings>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -1177,12 +1229,20 @@ export function Workspace({ projectId }: WorkspaceProps) {
         {/* Collapsible Sidebar */}
         {isSidebarOpen && activeActivityView && (
           <div 
-            className="w-64 h-full flex flex-col border-r flex-shrink-0 z-20 transition-all duration-100"
+            className="h-full flex flex-col border-r flex-shrink-0 z-20 relative select-none"
             style={{
+              width: `${sidebarWidth}px`,
               backgroundColor: 'var(--ide-sidebar)',
               borderColor: 'var(--ide-border)',
             }}
           >
+            {/* Drag resize handle on right border */}
+            <div
+              onMouseDown={handleSidebarResizeStart}
+              className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-sky-500/50 active:bg-sky-500 transition-colors z-30 select-none"
+              title="Drag to resize sidebar width"
+            />
+
             {activeActivityView === 'explorer' && (
               <FileTree
                 files={files}
@@ -1218,7 +1278,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
             )}
 
             {activeActivityView === 'git' && (
-              <div className="flex flex-col h-full">
+              <div className="flex flex-col h-full overflow-hidden">
                 <GitPanel
                   projectId={projectId}
                   projectName={project.name}

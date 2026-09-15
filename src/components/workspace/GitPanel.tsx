@@ -628,12 +628,111 @@ export function GitPanel({
       <div className="flex-1 overflow-hidden flex flex-col">
         {/* Subtab 1: Changes & Commit */}
         {activeSubTab === 'changes' && (
-          <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-            {/* Left: Changed Files Lists */}
+          <div className="flex-1 flex flex-col overflow-y-auto">
+            {/* Top: Commit Box */}
             <div 
-              className="flex-1 overflow-y-auto p-4 space-y-4 border-r"
-              style={{ borderColor: 'var(--ide-border)' }}
+              className="p-3 border-b flex-shrink-0"
+              style={{
+                backgroundColor: 'var(--ide-card-bg)',
+                borderColor: 'var(--ide-border)',
+              }}
             >
+              <form onSubmit={handleCommit} className="space-y-2.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-semibold" style={{ color: 'var(--ide-text)' }}>
+                      Commit Message
+                    </label>
+                    <span className="text-[10px] font-mono text-sky-400">
+                      {currentBranch}
+                    </span>
+                  </div>
+                  <textarea
+                    value={commitMessage}
+                    onChange={(e) => setCommitMessage(e.target.value)}
+                    placeholder="Enter commit message (e.g. Add collaborative editor sync)..."
+                    rows={2}
+                    className="w-full p-2 text-xs border rounded-lg focus:outline-none focus:border-sky-500 font-sans resize-none"
+                    style={{
+                      backgroundColor: 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: 'var(--ide-text)',
+                    }}
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        handleCommit();
+                      }
+                    }}
+                  />
+                  <div className="flex items-center justify-between text-[10px] mt-0.5" style={{ color: 'var(--ide-text-muted)' }}>
+                    <span>Press Ctrl+Enter to commit</span>
+                    {status && status.ahead > 0 && (
+                      <span className="text-emerald-400 font-medium">({status.ahead} ahead)</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <button
+                    type="submit"
+                    disabled={actionLoading || !commitMessage.trim() || stagedCount === 0}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs shadow-sm transition-all disabled:opacity-50"
+                  >
+                    {actionLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <GitCommitIcon className="w-3.5 h-3.5" />
+                    )}
+                    <span>Commit ({stagedCount} staged)</span>
+                  </button>
+
+                  {stagedCount === 0 && changesCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await handleStageAll();
+                        if (commitMessage.trim()) {
+                          await handleCommit();
+                        }
+                      }}
+                      className="w-full text-center text-[11px] text-neutral-400 hover:text-white hover:underline py-0.5"
+                    >
+                      Stage all changes & commit
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleDirectPush}
+                    disabled={syncing !== null}
+                    style={{
+                      backgroundColor: status && status.ahead > 0 ? undefined : 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: status && status.ahead > 0 ? '#ffffff' : 'var(--ide-text)',
+                    }}
+                    className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
+                      status && status.ahead > 0
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                        : 'hover:opacity-90 border'
+                    }`}
+                  >
+                    {syncing === 'push' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    <span>
+                      {status && status.ahead > 0
+                        ? `Push ${status.ahead} commit${status.ahead > 1 ? 's' : ''} to Remote`
+                        : 'Push to Remote'}
+                    </span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Middle: Changed Files Lists */}
+            <div className="flex-1 p-3 space-y-4">
               {/* Staged Changes Section */}
               <div className="space-y-1.5">
                 <div 
@@ -821,131 +920,34 @@ export function GitPanel({
               </div>
             </div>
 
-            {/* Right: Commit Box */}
-            <div 
-              className="w-full md:w-80 p-4 border-l flex flex-col justify-between space-y-4"
+            {/* Bottom: Working Tree Summary */}
+            <div
+              className="p-3 border-t text-[11px] space-y-1 flex-shrink-0"
               style={{
                 backgroundColor: 'var(--ide-card-bg)',
                 borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text-muted)',
               }}
             >
-              <form onSubmit={handleCommit} className="space-y-3 flex-1 flex flex-col">
-                <div>
-                  <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--ide-text)' }}>
-                    Commit Message
-                  </label>
-                  <textarea
-                    value={commitMessage}
-                    onChange={(e) => setCommitMessage(e.target.value)}
-                    placeholder="Enter commit message (e.g. Add collaborative editor sync)..."
-                    rows={4}
-                    className="w-full p-2.5 text-xs border rounded-lg focus:outline-none focus:border-sky-500 font-sans resize-none"
-                    style={{
-                      backgroundColor: 'var(--ide-input-bg)',
-                      borderColor: 'var(--ide-border)',
-                      color: 'var(--ide-text)',
-                    }}
-                    onKeyDown={(e) => {
-                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                        handleCommit();
-                      }
-                    }}
-                  />
+              <div className="flex justify-between">
+                <span>Author:</span>
+                <span className="font-medium" style={{ color: 'var(--ide-text)' }}>{userName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Current Branch:</span>
+                <span className="text-sky-400 font-mono font-medium">{currentBranch}</span>
+              </div>
+              {status?.lastCommit && (
+                <div className="border-t pt-1 mt-1" style={{ borderColor: 'var(--ide-border)' }}>
+                  <span className="block" style={{ color: 'var(--ide-text-muted)' }}>Last Commit:</span>
+                  <span className="truncate block font-medium" style={{ color: 'var(--ide-text)' }}>
+                    {status.lastCommit.message}
+                  </span>
                   <span className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>
-                    Press <kbd className="px-1 py-0.5 rounded border" style={{ backgroundColor: 'var(--ide-input-bg)', borderColor: 'var(--ide-border)', color: 'var(--ide-text)' }}>Ctrl+Enter</kbd> to commit
+                    {status.lastCommit.author} • {status.lastCommit.relativeDate}
                   </span>
                 </div>
-
-                <div className="space-y-2 pt-1">
-                  <button
-                    type="submit"
-                    disabled={actionLoading || !commitMessage.trim() || stagedCount === 0}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs shadow-lg shadow-sky-600/20 transition-all disabled:opacity-50"
-                  >
-                    {actionLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <GitCommitIcon className="w-4 h-4" />
-                    )}
-                    <span>Commit ({stagedCount} staged)</span>
-                  </button>
-
-                  {stagedCount === 0 && changesCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await handleStageAll();
-                        if (commitMessage.trim()) {
-                          await handleCommit();
-                        }
-                      }}
-                      className="w-full text-center text-xs text-neutral-400 hover:text-white hover:underline py-1"
-                    >
-                      Stage all changes & commit
-                    </button>
-                  )}
-
-                  {/* Push Changes to Remote Button */}
-                  <div className="pt-2 border-t" style={{ borderColor: 'var(--ide-border)' }}>
-                    <button
-                      type="button"
-                      onClick={handleDirectPush}
-                      disabled={syncing !== null}
-                      style={{
-                        backgroundColor: status && status.ahead > 0 ? undefined : 'var(--ide-input-bg)',
-                        borderColor: 'var(--ide-border)',
-                        color: status && status.ahead > 0 ? '#ffffff' : 'var(--ide-text)',
-                      }}
-                      className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all shadow-sm ${
-                        status && status.ahead > 0
-                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
-                          : 'hover:opacity-90 border'
-                      }`}
-                    >
-                      {syncing === 'push' ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
-                      )}
-                      <span>
-                        {status && status.ahead > 0
-                          ? `Push ${status.ahead} commit${status.ahead > 1 ? 's' : ''} to Remote`
-                          : 'Push to Remote'}
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              </form>
-
-              {/* Working Tree Summary Indicator */}
-              <div
-                className="p-3 rounded-lg border space-y-1.5 text-[11px]"
-                style={{
-                  backgroundColor: 'var(--ide-card-bg)',
-                  borderColor: 'var(--ide-border)',
-                  color: 'var(--ide-text-muted)',
-                }}
-              >
-                <div className="flex justify-between">
-                  <span>Author:</span>
-                  <span className="font-medium" style={{ color: 'var(--ide-text)' }}>{userName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Current Branch:</span>
-                  <span className="text-sky-400 font-mono font-medium">{currentBranch}</span>
-                </div>
-                {status?.lastCommit && (
-                  <div className="border-t pt-1.5 mt-1.5" style={{ borderColor: 'var(--ide-border)' }}>
-                    <span className="block" style={{ color: 'var(--ide-text-muted)' }}>Last Commit:</span>
-                    <span className="truncate block font-medium" style={{ color: 'var(--ide-text)' }}>
-                      {status.lastCommit.message}
-                    </span>
-                    <span className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>
-                      {status.lastCommit.author} • {status.lastCommit.relativeDate}
-                    </span>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           </div>
         )}

@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
+import { useClickOutside } from '@/hooks/useClickOutside';
 import { 
   Bell, 
   Check, 
@@ -47,12 +48,16 @@ export function NotificationsPopover({
   onOpenProject,
   onDismissNotification,
 }: NotificationsPopoverProps) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+  useClickOutside(popoverRef, onClose, isOpen);
+
   if (!isOpen) return null;
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <div 
+      ref={popoverRef}
       className="absolute top-12 left-12 z-50 w-80 max-h-[460px] rounded-lg shadow-2xl border flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100"
       style={{
         backgroundColor: 'var(--ide-card-bg)',
