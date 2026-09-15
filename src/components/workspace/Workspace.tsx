@@ -522,46 +522,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
     }, 500);
   };
 
-  // Keyboard-first shortcuts
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
-
-      if (cmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
-      } else if (cmdOrCtrl && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        setIsQuickOpen((prev) => !prev);
-      } else if (cmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        setIsGlobalSearchOpen((prev) => !prev);
-      } else if (cmdOrCtrl && e.key.toLowerCase() === 'b') {
-        e.preventDefault();
-        setIsSidebarOpen((prev) => !prev);
-      } else if (cmdOrCtrl && (e.key === '`' || e.key.toLowerCase() === 'j')) {
-        e.preventDefault();
-        setIsDockOpen((prev) => !prev);
-      } else if (cmdOrCtrl && e.key === '\\') {
-        e.preventDefault();
-        handleSplitRight();
-      } else if (cmdOrCtrl && e.key.toLowerCase() === 'w') {
-        e.preventDefault();
-        const currentGroup = editorGroups.find(g => g.id === activeGroupId) || editorGroups[0];
-        if (currentGroup && currentGroup.activeFileId) {
-          handleCloseTabInGroup(currentGroup.id, currentGroup.activeFileId);
-        }
-      } else if (cmdOrCtrl && e.altKey && e.key.toLowerCase() === 'o') {
-        e.preventDefault();
-        setIsProjectSwitcherOpen(true);
-      }
-    };
-
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  });
-
   // Editor Group management
   const getActiveGroup = (): EditorGroupState => {
     return editorGroups.find(g => g.id === activeGroupId) || editorGroups[0];
@@ -586,7 +546,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
     setActiveGroupId(destGroupId);
   };
 
-  const handleCloseTabInGroup = (groupId: string, fileId: string) => {
+  const handleCloseTabInGroup = useCallback((groupId: string, fileId: string) => {
     setEditorGroups((prev) => {
       const updated = prev.map((group) => {
         if (group.id !== groupId) return group;
@@ -614,7 +574,55 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
       return updated;
     });
-  };
+  }, [splitLayout]);
+
+  // Dedicated handler to close active tab in currently active editor group
+  const handleCloseActiveTab = useCallback(() => {
+    setEditorGroups((prev) => {
+      const currentGroup = prev.find(g => g.id === activeGroupId) || prev[0];
+      if (!currentGroup || !currentGroup.activeFileId) return prev;
+      const fileId = currentGroup.activeFileId;
+      const remaining = currentGroup.openFiles.filter((f) => f.id !== fileId);
+      let nextActive = remaining.length > 0 ? remaining[remaining.length - 1].id : null;
+      
+      const updated = prev.map((group) => {
+        if (group.id !== currentGroup.id) return group;
+        return {
+          ...group,
+          openFiles: remaining,
+          activeFileId: nextActive,
+        };
+      });
+
+      if (splitLayout !== 'single') {
+        const g2 = updated.find(g => g.id === 'group-2');
+        if (g2 && g2.openFiles.length === 0) {
+          setSplitLayout('single');
+          setActiveGroupId('group-1');
+          return updated.filter(g => g.id !== 'group-2');
+        }
+      }
+
+      return updated;
+    });
+  }, [activeGroupId, splitLayout]);
+
+  const handleCycleTab = useCallback((direction: 'next' | 'prev') => {
+    setEditorGroups((prev) =>
+      prev.map((group) => {
+        if (group.id !== activeGroupId || group.openFiles.length <= 1) return group;
+        const currentIndex = group.openFiles.findIndex((f) => f.id === group.activeFileId);
+        if (currentIndex === -1) return group;
+        const nextIndex = direction === 'next'
+          ? (currentIndex + 1) % group.openFiles.length
+          : (currentIndex - 1 + group.openFiles.length) % group.openFiles.length;
+        return {
+          ...group,
+          activeFileId: group.openFiles[nextIndex].id,
+        };
+      })
+    );
+  }, [activeGroupId]);
 
   const handleCloseOthersInGroup = (groupId: string, fileId: string) => {
     setEditorGroups((prev) =>
@@ -658,7 +666,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
     );
   };
 
-  const handleSplitRight = () => {
+  const handleSplitRight = useCallback(() => {
     if (splitLayout !== 'single') return;
     const currentGroup = getActiveGroup();
     const activeFile = currentGroup.openFiles.find(f => f.id === currentGroup.activeFileId);
@@ -673,9 +681,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
     setEditorGroups([currentGroup, newGroup]);
     setActiveGroupId('group-2');
     appendOutputLog('system', 'Editor split vertically.');
-  };
+  }, [splitLayout, editorGroups, activeGroupId, appendOutputLog]);
 
-  const handleSplitDown = () => {
+  const handleSplitDown = useCallback(() => {
     if (splitLayout !== 'single') return;
     const currentGroup = getActiveGroup();
     const activeFile = currentGroup.openFiles.find(f => f.id === currentGroup.activeFileId);
@@ -690,13 +698,139 @@ export function Workspace({ projectId }: WorkspaceProps) {
     setEditorGroups([currentGroup, newGroup]);
     setActiveGroupId('group-2');
     appendOutputLog('system', 'Editor split horizontally.');
-  };
+  }, [splitLayout, editorGroups, activeGroupId, appendOutputLog]);
 
   const handleCloseGroup = (groupId: string) => {
     setSplitLayout('single');
     setEditorGroups((prev) => prev.filter(g => g.id !== groupId));
     setActiveGroupId('group-1');
   };
+
+  // Request Chromium Keyboard Lock API to prevent browser from hijacking IDE shortcuts (like Ctrl+W, Ctrl+N, Ctrl+P)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'keyboard' in navigator && 'lock' in (navigator as any).keyboard) {
+      try {
+        (navigator as any).keyboard.lock([
+          'KeyW',
+          'KeyP',
+          'KeyS',
+          'KeyB',
+          'KeyJ',
+          'KeyT',
+          'KeyN',
+        ]).catch(() => {
+          // Non-fatal if browser rejects without full-screen or user gesture
+        });
+      } catch (e) {}
+    }
+    return () => {
+      if (typeof window !== 'undefined' && 'keyboard' in navigator && 'unlock' in (navigator as any).keyboard) {
+        try {
+          (navigator as any).keyboard.unlock();
+        } catch (e) {}
+      }
+    };
+  }, []);
+
+  // Global Capture-Phase Keyboard listener: catches Ctrl+W, Ctrl+S, Ctrl+P etc. BEFORE browser tab closes or print dialog triggers
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      // 1. Close Active Editor Tab: Ctrl+W / Cmd+W (CRITICAL: intercept so browser tab doesn't close)
+      if (cmdOrCtrl && !e.altKey && !e.shiftKey && (e.key === 'w' || e.key === 'W' || e.code === 'KeyW')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        handleCloseActiveTab();
+        return;
+      }
+
+      // 2. Command Palette: Ctrl+Shift+P / Cmd+Shift+P
+      if (cmdOrCtrl && e.shiftKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        setIsCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      // 3. Quick Open File: Ctrl+P / Cmd+P
+      if (cmdOrCtrl && !e.shiftKey && !e.altKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        setIsQuickOpen((prev) => !prev);
+        return;
+      }
+
+      // 4. Save: Ctrl+S / Cmd+S (Prevent browser 'Save webpage as HTML' dialog)
+      if (cmdOrCtrl && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S' || e.code === 'KeyS')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        return;
+      }
+
+      // 5. Global Search: Ctrl+Shift+F / Cmd+Shift+F
+      if (cmdOrCtrl && e.shiftKey && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        setIsGlobalSearchOpen((prev) => !prev);
+        return;
+      }
+
+      // 6. Toggle Sidebar: Ctrl+B / Cmd+B
+      if (cmdOrCtrl && !e.shiftKey && !e.altKey && (e.key === 'b' || e.key === 'B' || e.code === 'KeyB')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        setIsSidebarOpen((prev) => !prev);
+        return;
+      }
+
+      // 7. Toggle Terminal / Dock: Ctrl+` or Ctrl+J / Cmd+` or Cmd+J
+      if (cmdOrCtrl && !e.shiftKey && !e.altKey && (e.key === '`' || e.key === '~' || e.code === 'Backquote' || e.key === 'j' || e.key === 'J' || e.code === 'KeyJ')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        setIsDockOpen((prev) => !prev);
+        return;
+      }
+
+      // 8. Split Editor: Ctrl+\ / Cmd+\
+      if (cmdOrCtrl && !e.shiftKey && !e.altKey && (e.key === '\\' || e.code === 'Backslash')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        handleSplitRight();
+        return;
+      }
+
+      // 9. Cycle Tabs: Ctrl+Tab / Ctrl+Shift+Tab
+      if (e.ctrlKey && !e.altKey && (e.key === 'Tab' || e.code === 'Tab')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        handleCycleTab(e.shiftKey ? 'prev' : 'next');
+        return;
+      }
+
+      // 10. Project Switcher: Ctrl+Alt+O / Cmd+Alt+O
+      if (cmdOrCtrl && e.altKey && (e.key === 'o' || e.key === 'O' || e.code === 'KeyO')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        setIsProjectSwitcherOpen(true);
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
+  }, [handleCloseActiveTab, handleSplitRight, handleCycleTab]);
 
   // Navigate to problem or line from Problems panel or Chat
   const handleNavigateToLocation = (fileIdOrPath: string, line?: number, col?: number) => {
@@ -1372,6 +1506,12 @@ export function Workspace({ projectId }: WorkspaceProps) {
                             file={groupActiveFile}
                             settings={settings}
                             targetLocation={isGroupActive ? targetJumpLocation : null}
+                            onCloseActiveTab={handleCloseActiveTab}
+                            onQuickOpen={() => setIsQuickOpen(true)}
+                            onCommandPalette={() => setIsCommandPaletteOpen(true)}
+                            onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+                            onToggleDock={() => setIsDockOpen((prev) => !prev)}
+                            onSave={() => {}}
                             onContentSaved={(latestText) => {
                               setFiles((prev) =>
                                 prev.map((f) => (f.id === groupActiveFile.id ? { ...f, content: latestText } : f))

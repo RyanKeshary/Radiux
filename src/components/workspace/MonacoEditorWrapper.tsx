@@ -22,6 +22,12 @@ interface MonacoEditorWrapperProps {
   onCursorChange?: (line: number, col: number) => void;
   onProblemsChange?: (problems: ProblemItem[]) => void;
   targetLocation?: { line: number; col?: number } | null;
+  onCloseActiveTab?: () => void;
+  onQuickOpen?: () => void;
+  onCommandPalette?: () => void;
+  onToggleSidebar?: () => void;
+  onToggleDock?: () => void;
+  onSave?: () => void;
 }
 
 export function MonacoEditorWrapper({
@@ -32,6 +38,12 @@ export function MonacoEditorWrapper({
   onCursorChange,
   onProblemsChange,
   targetLocation,
+  onCloseActiveTab,
+  onQuickOpen,
+  onCommandPalette,
+  onToggleSidebar,
+  onToggleDock,
+  onSave,
 }: MonacoEditorWrapperProps) {
   const { user } = useAuth();
   const [synced, setSynced] = useState(false);
@@ -278,6 +290,48 @@ export function MonacoEditorWrapper({
         column: targetLocation.col || 1,
       });
     }
+
+    // Intercept browser-colliding shortcuts inside Monaco
+    if (onCloseActiveTab) {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyW, () => {
+        onCloseActiveTab();
+      });
+    }
+    if (onQuickOpen) {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => {
+        onQuickOpen();
+      });
+    }
+    if (onCommandPalette) {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP, () => {
+        onCommandPalette();
+      });
+    }
+    if (onToggleSidebar) {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB, () => {
+        onToggleSidebar();
+      });
+    }
+    if (onToggleDock) {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ, () => {
+        onToggleDock();
+      });
+    }
+    if (onSave) {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        onSave();
+      });
+    }
+
+    // Direct keydown intercept for KeyW inside Monaco
+    editor.onKeyDown((e: any) => {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      if (isCtrlOrCmd && e.keyCode === monaco.KeyCode.KeyW) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onCloseActiveTab) onCloseActiveTab();
+      }
+    });
   };
 
   const currentThemeConfig = THEMES[settings.theme as ThemeId];
