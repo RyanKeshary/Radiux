@@ -1343,7 +1343,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
           </button>
 
           {/* User Account Menu */}
-          <UserMenu onOpenProfileModal={() => setIsProfileModalOpen(true)} />
+          <UserMenu 
+            onOpenProfileModal={() => setIsProfileModalOpen(true)}
+            onOpenSettingsModal={() => setIsSettingsOpen(true)}
+            onOpenShortcutsModal={() => setIsShortcutsOpen(true)}
+            onViewPublicProfile={() => {
+              if (user?.id) setSelectedPublicUserId(user.id);
+            }}
+          />
         </div>
       </header>
 

@@ -240,7 +240,7 @@ export default function DashboardPage() {
               title="Select IDE Theme"
             >
               {Object.values(THEMES).map(t => (
-                <option key={t.id} value={t.id} style={{ backgroundColor: '#1e1e1e', color: '#cccccc' }}>
+                <option key={t.id} value={t.id} style={{ backgroundColor: 'var(--ide-card-bg)', color: 'var(--ide-text)' }}>
                   {t.name}
                 </option>
               ))}
