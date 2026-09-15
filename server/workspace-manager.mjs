@@ -195,6 +195,7 @@ export const WorkspaceManager = {
           // Send Ctrl+C sequence first, then kill if stubborn
           if (workspace.ptyProcess) {
             workspace.ptyProcess.write('\x03');
+          }
         } else if (payload.type === 'restart') {
           if (workspace.ptyProcess) {
             this.killPtyProcess(workspace.ptyProcess);
