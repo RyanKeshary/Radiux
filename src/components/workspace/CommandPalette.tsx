@@ -17,6 +17,7 @@ import {
 export interface CommandItem {
   id: string;
   title: string;
+  subtitle?: string;
   category: string;
   icon: React.ReactNode;
   shortcut?: string;

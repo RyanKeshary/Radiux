@@ -15,7 +15,9 @@ import {
   GitCommit,
   GitBranch,
   GitHubRemote,
-  WorkspaceExportManifest
+  WorkspaceExportManifest,
+  CodingPartner,
+  NotificationItem
 } from './types';
 
 export const DataService = {
@@ -1062,7 +1064,242 @@ export const DataService = {
     }
 
     return { importedCount };
-  }
+  },
+
+  // Level 7: Profiles & Account
+  async getProfile(userId: string): Promise<UserProfile | null> {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      if (!error && data) {
+        return {
+          id: data.id,
+          email: data.email,
+          full_name: data.full_name,
+          avatar_url: data.avatar_url,
+          username: data.username || data.email.split('@')[0],
+          bio: data.bio || '',
+          skills: data.skills || [],
+          languages: data.languages || [],
+          github_username: data.github_username || '',
+          preferences: data.preferences || {},
+        };
+      }
+    }
+    return StorageMock.getProfile(userId);
+  },
+
+  async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: updates.full_name,
+            avatar_url: updates.avatar_url,
+            ...(updates.username ? { username: updates.username } : {}),
+            ...(updates.bio !== undefined ? { bio: updates.bio } : {}),
+            ...(updates.skills ? { skills: updates.skills } : {}),
+            ...(updates.languages ? { languages: updates.languages } : {}),
+            ...(updates.github_username !== undefined ? { github_username: updates.github_username } : {}),
+            ...(updates.preferences ? { preferences: updates.preferences } : {}),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId)
+          .select()
+          .single();
+        if (!error && data) {
+          return {
+            ...data,
+            username: data.username || data.email?.split('@')[0],
+          };
+        }
+      } catch (err) {}
+    }
+    return StorageMock.updateProfile(userId, updates);
+  },
+
+  // Level 7: Coding Partners
+  async getCodingPartners(userId: string): Promise<CodingPartner[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('coding_partners')
+          .select('*, requester:requester_id(*), receiver:receiver_id(*)')
+          .or(`requester_id.eq.${userId},receiver_id.eq.${userId}`);
+        if (!error && data) {
+          return data.map((d: any) => ({
+            id: d.id,
+            requester_id: d.requester_id,
+            receiver_id: d.receiver_id,
+            status: d.status,
+            created_at: d.created_at,
+            updated_at: d.updated_at,
+            profile: d.requester_id === userId ? d.receiver : d.requester,
+          }));
+        }
+      } catch (e) {}
+    }
+    const mockList = StorageMock.getCodingPartners(userId);
+    return mockList.map((m: any) => ({
+      ...m,
+      profile: m.requester_id === userId ? StorageMock.getProfile(m.receiver_id) : StorageMock.getProfile(m.requester_id),
+    }));
+  },
+
+  async sendPartnerRequest(
+    requester: UserProfile,
+    targetIdentifier: string
+  ): Promise<{ success: boolean; message: string; partner?: CodingPartner }> {
+    const targetUser = await this.findUserByEmail(targetIdentifier);
+    if (!targetUser) {
+      // Check mock users
+      const mockTarget = StorageMock.getProfile(targetIdentifier) || 
+        StorageMock.getProfile('user-bob-2222');
+      if (mockTarget) {
+        const newPartner: CodingPartner = {
+          id: `partner-${Date.now()}`,
+          requester_id: requester.id,
+          receiver_id: mockTarget.id,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          profile: mockTarget,
+        };
+        StorageMock.saveCodingPartner(newPartner);
+        // Create notification for target
+        StorageMock.saveNotification({
+          id: `notif-${Date.now()}`,
+          user_id: mockTarget.id,
+          type: 'partner_request',
+          title: 'New Coding Partner Request',
+          message: `${requester.full_name || 'A developer'} sent you a coding partner request.`,
+          partnerRequestId: newPartner.id,
+          read: false,
+          created_at: new Date().toISOString(),
+        });
+        return { success: true, message: 'Request sent successfully!', partner: newPartner };
+      }
+      return { success: false, message: `No user found matching "${targetIdentifier}".` };
+    }
+
+    if (targetUser.id === requester.id) {
+      return { success: false, message: 'You cannot add yourself as a coding partner.' };
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('coding_partners')
+          .insert({
+            requester_id: requester.id,
+            receiver_id: targetUser.id,
+            status: 'pending',
+          })
+          .select()
+          .single();
+        if (!error && data) {
+          return { success: true, message: 'Request sent successfully!', partner: { ...data, profile: targetUser } };
+        }
+      } catch (err) {}
+    }
+
+    // StorageMock fallback
+    const newPartner: CodingPartner = {
+      id: `partner-${Date.now()}`,
+      requester_id: requester.id,
+      receiver_id: targetUser.id,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      profile: targetUser,
+    };
+    StorageMock.saveCodingPartner(newPartner);
+    return { success: true, message: 'Request sent successfully!', partner: newPartner };
+  },
+
+  async respondToPartnerRequest(requestId: string, accept: boolean): Promise<void> {
+    const status = accept ? 'accepted' : 'declined';
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('coding_partners')
+          .update({ status, updated_at: new Date().toISOString() })
+          .eq('id', requestId);
+        return;
+      } catch (err) {}
+    }
+    StorageMock.updateCodingPartner(requestId, status);
+  },
+
+  async removePartner(partnerId: string): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('coding_partners').delete().eq('id', partnerId);
+        return;
+      } catch (err) {}
+    }
+    StorageMock.removeCodingPartner(partnerId);
+  },
+
+  // Level 7: Notifications
+  async getNotifications(userId: string): Promise<NotificationItem[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+        if (!error && data) return data;
+      } catch (err) {}
+    }
+    return StorageMock.getNotifications(userId);
+  },
+
+  async markNotificationRead(notificationId: string): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('notifications').update({ read: true }).eq('id', notificationId);
+        return;
+      } catch (err) {}
+    }
+    StorageMock.markNotificationRead(notificationId);
+  },
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
+        return;
+      } catch (err) {}
+    }
+    StorageMock.markAllNotificationsRead(userId);
+  },
+
+  async createNotification(
+    userId: string,
+    notification: Omit<NotificationItem, 'id' | 'created_at' | 'read' | 'user_id'>
+  ): Promise<NotificationItem> {
+    const item: NotificationItem = {
+      ...notification,
+      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      user_id: userId,
+      read: false,
+      created_at: new Date().toISOString(),
+    };
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('notifications').insert(item);
+      } catch (err) {}
+    }
+    StorageMock.saveNotification(item);
+    return item;
+  },
 };
+
 
 

@@ -7,6 +7,8 @@ import { ChatPanel } from './ChatPanel';
 import { VoicePanel } from './VoicePanel';
 import { ActivityFeed } from './ActivityFeed';
 import { GitPanel } from './GitPanel';
+import { ProblemsPanel, ProblemItem } from './ProblemsPanel';
+import { OutputPanel, OutputLogEntry } from './OutputPanel';
 import { 
   Terminal, 
   MonitorPlay, 
@@ -15,17 +17,29 @@ import {
   Mic, 
   Activity, 
   FolderGit2,
+  AlertCircle,
+  FileText,
   X, 
   Maximize2, 
   Minimize2,
   PanelBottom,
   PanelRight,
   PanelLeft,
-  Layout
 } from 'lucide-react';
 import { VoicePeer } from '@/lib/types';
 
 export type DockOrientation = 'bottom' | 'right' | 'left' | 'fullscreen';
+
+export type DockTab = 
+  | 'terminal' 
+  | 'problems'
+  | 'output'
+  | 'preview' 
+  | 'git' 
+  | 'chat' 
+  | 'voice' 
+  | 'activity' 
+  | 'split';
 
 interface BottomDockProps {
   projectId: string;
@@ -54,9 +68,15 @@ interface BottomDockProps {
   orientation: DockOrientation;
   onChangeOrientation: (orientation: DockOrientation) => void;
   onOpenMediaInEditor?: (media: { name: string; url: string; type: 'image' | 'video' | 'audio' | 'file' }) => void;
+  // Level 7: Problems & Output
+  problems?: ProblemItem[];
+  onNavigateToProblem?: (fileId: string, line: number, col: number) => void;
+  outputLogs?: OutputLogEntry[];
+  onClearOutputLogs?: () => void;
+  activeTab?: DockTab;
+  onTabChange?: (tab: DockTab) => void;
+  onNavigateToFile?: (filePath: string, line?: number) => void;
 }
-
-export type DockTab = 'terminal' | 'preview' | 'git' | 'chat' | 'voice' | 'activity' | 'split';
 
 export function BottomDock({
   projectId,
@@ -83,8 +103,22 @@ export function BottomDock({
   orientation,
   onChangeOrientation,
   onOpenMediaInEditor,
+  problems = [],
+  onNavigateToProblem,
+  outputLogs = [],
+  onClearOutputLogs,
+  activeTab: externalActiveTab,
+  onTabChange,
+  onNavigateToFile,
 }: BottomDockProps) {
-  const [activeTab, setActiveTab] = useState<DockTab>('terminal');
+  const [internalActiveTab, setInternalActiveTab] = useState<DockTab>('terminal');
+  const activeTab = externalActiveTab || internalActiveTab;
+
+  const setActiveTab = (tab: DockTab) => {
+    setInternalActiveTab(tab);
+    if (onTabChange) onTabChange(tab);
+  };
+
   const [height, setHeight] = useState<number>(340);
   const [width, setWidth] = useState<number>(480);
   const [detectedPort, setDetectedPort] = useState<number>(5000);
@@ -92,37 +126,46 @@ export function BottomDock({
 
   if (!isOpen) return null;
 
+  const errorCount = problems.filter(p => p.severity === 'error').length;
+  const warningCount = problems.filter(p => p.severity === 'warning').length;
+
   const handlePortDetected = (port: number) => {
     setDetectedPort(port);
     setAvailablePorts((prev) => Array.from(new Set([...prev, port])));
-    // Automatically switch or show preview when web server launches
     if (activeTab === 'terminal') {
       setActiveTab('split');
     }
   };
 
-  // Determine container styling based on Chrome DevTools-like orientation
-  let containerClasses = 'bg-[#181818] flex flex-col z-30 transition-all duration-150 shadow-2xl overflow-hidden ';
-  let containerStyle: React.CSSProperties = {};
+  // Determine container styling based on orientation
+  let containerClasses = 'flex flex-col z-30 transition-all duration-150 shadow-2xl overflow-hidden ';
+  let containerStyle: React.CSSProperties = {
+    backgroundColor: 'var(--ide-dock)',
+  };
 
   if (orientation === 'bottom') {
-    containerClasses += 'border-t border-[#3c3c3c] w-full';
-    containerStyle = { height: `${height}px` };
+    containerClasses += 'border-t w-full';
+    containerStyle = { ...containerStyle, height: `${height}px`, borderColor: 'var(--ide-border)' };
   } else if (orientation === 'right') {
-    containerClasses += 'border-l border-[#3c3c3c] h-full';
-    containerStyle = { width: `${width}px` };
+    containerClasses += 'border-l h-full';
+    containerStyle = { ...containerStyle, width: `${width}px`, borderColor: 'var(--ide-border)' };
   } else if (orientation === 'left') {
-    containerClasses += 'border-r border-[#3c3c3c] h-full';
-    containerStyle = { width: `${width}px` };
+    containerClasses += 'border-r h-full';
+    containerStyle = { ...containerStyle, width: `${width}px`, borderColor: 'var(--ide-border)' };
   } else if (orientation === 'fullscreen') {
     containerClasses += 'fixed inset-0 w-full h-full z-50';
-    containerStyle = {};
   }
 
   return (
     <div className={containerClasses} style={containerStyle}>
       {/* Dock Header */}
-      <div className="h-9 px-3 bg-[#252526] border-b border-[#3c3c3c] flex items-center justify-between select-none flex-shrink-0">
+      <div 
+        className="h-9 px-3 border-b flex items-center justify-between select-none flex-shrink-0"
+        style={{
+          backgroundColor: 'var(--ide-dock-header)',
+          borderColor: 'var(--ide-border)',
+        }}
+      >
         {/* Tab Buttons */}
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
           {/* Terminal Tab */}
@@ -130,12 +173,57 @@ export function BottomDock({
             onClick={() => setActiveTab('terminal')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
               activeTab === 'terminal'
-                ? 'bg-[#181818] text-white border-t-2 border-t-sky-500'
-                : 'text-neutral-400 hover:text-neutral-200'
+                ? 'text-white border-t-2 border-t-sky-500 font-semibold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
             }`}
+            style={{
+              backgroundColor: activeTab === 'terminal' ? 'var(--ide-dock)' : undefined,
+            }}
           >
             <Terminal className="w-3.5 h-3.5 text-emerald-400" />
             <span>Terminal</span>
+          </button>
+
+          {/* Problems Tab (Level 7) */}
+          <button
+            onClick={() => setActiveTab('problems')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'problems'
+                ? 'text-white border-t-2 border-t-amber-500 font-semibold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            }`}
+            style={{
+              backgroundColor: activeTab === 'problems' ? 'var(--ide-dock)' : undefined,
+            }}
+          >
+            <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+            <span>Problems</span>
+            {(errorCount > 0 || warningCount > 0) && (
+              <span className="flex items-center gap-1 text-[10px] font-bold">
+                {errorCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-red-500/20 text-red-400">{errorCount}</span>
+                )}
+                {warningCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400">{warningCount}</span>
+                )}
+              </span>
+            )}
+          </button>
+
+          {/* Output Tab (Level 7) */}
+          <button
+            onClick={() => setActiveTab('output')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'output'
+                ? 'text-white border-t-2 border-t-sky-500 font-semibold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+            }`}
+            style={{
+              backgroundColor: activeTab === 'output' ? 'var(--ide-dock)' : undefined,
+            }}
+          >
+            <FileText className="w-3.5 h-3.5 text-sky-400" />
+            <span>Output</span>
           </button>
 
           {/* Web Preview Tab */}
@@ -143,9 +231,12 @@ export function BottomDock({
             onClick={() => setActiveTab('preview')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
               activeTab === 'preview'
-                ? 'bg-[#181818] text-white border-t-2 border-t-sky-500'
-                : 'text-neutral-400 hover:text-neutral-200'
+                ? 'text-white border-t-2 border-t-sky-500 font-semibold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
             }`}
+            style={{
+              backgroundColor: activeTab === 'preview' ? 'var(--ide-dock)' : undefined,
+            }}
           >
             <MonitorPlay className="w-3.5 h-3.5 text-sky-400" />
             <span>Preview</span>
@@ -154,14 +245,17 @@ export function BottomDock({
             )}
           </button>
 
-          {/* Level 5: Source Control / Git Tab */}
+          {/* Source Control / Git Tab */}
           <button
             onClick={() => setActiveTab('git')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
               activeTab === 'git'
-                ? 'bg-[#181818] text-white border-t-2 border-t-indigo-500'
-                : 'text-neutral-400 hover:text-neutral-200'
+                ? 'text-white border-t-2 border-t-indigo-500 font-semibold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
             }`}
+            style={{
+              backgroundColor: activeTab === 'git' ? 'var(--ide-dock)' : undefined,
+            }}
             title="Git Version Control & Source Control"
           >
             <FolderGit2 className="w-3.5 h-3.5 text-indigo-400" />
@@ -173,9 +267,12 @@ export function BottomDock({
             onClick={() => setActiveTab('split')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
               activeTab === 'split'
-                ? 'bg-[#181818] text-white border-t-2 border-t-sky-500'
-                : 'text-neutral-400 hover:text-neutral-200'
+                ? 'text-white border-t-2 border-t-sky-500 font-semibold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
             }`}
+            style={{
+              backgroundColor: activeTab === 'split' ? 'var(--ide-dock)' : undefined,
+            }}
             title="Split view: Terminal and Live Preview side-by-side"
           >
             <Columns className="w-3.5 h-3.5 text-indigo-400" />
@@ -184,7 +281,7 @@ export function BottomDock({
 
           <div className="h-3.5 w-px bg-neutral-700 mx-0.5 flex-shrink-0" />
 
-          {/* Level 4: Project Chat Tab */}
+          {/* Project Chat Tab */}
           <button
             onClick={() => {
               setActiveTab('chat');
@@ -192,9 +289,12 @@ export function BottomDock({
             }}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors relative whitespace-nowrap ${
               activeTab === 'chat'
-                ? 'bg-[#181818] text-white border-t-2 border-t-sky-400'
-                : 'text-neutral-400 hover:text-neutral-200'
+                ? 'text-white border-t-2 border-t-sky-400 font-semibold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
             }`}
+            style={{
+              backgroundColor: activeTab === 'chat' ? 'var(--ide-dock)' : undefined,
+            }}
           >
             <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
             <span>Chat</span>
@@ -205,14 +305,17 @@ export function BottomDock({
             )}
           </button>
 
-          {/* Level 4: WebRTC Voice Tab */}
+          {/* WebRTC Voice Tab */}
           <button
             onClick={() => setActiveTab('voice')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors relative whitespace-nowrap ${
               activeTab === 'voice'
-                ? 'bg-[#181818] text-white border-t-2 border-t-emerald-500'
-                : 'text-neutral-400 hover:text-neutral-200'
+                ? 'text-white border-t-2 border-t-emerald-500 font-semibold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
             }`}
+            style={{
+              backgroundColor: activeTab === 'voice' ? 'var(--ide-dock)' : undefined,
+            }}
           >
             <Mic className={`w-3.5 h-3.5 ${isInVoice ? 'text-emerald-400' : 'text-neutral-400'}`} />
             <span>Voice</span>
@@ -226,14 +329,17 @@ export function BottomDock({
             )}
           </button>
 
-          {/* Level 4: Project Activity Feed Tab */}
+          {/* Project Activity Feed Tab */}
           <button
             onClick={() => setActiveTab('activity')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
               activeTab === 'activity'
-                ? 'bg-[#181818] text-white border-t-2 border-t-amber-400'
-                : 'text-neutral-400 hover:text-neutral-200'
+                ? 'text-white border-t-2 border-t-amber-400 font-semibold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
             }`}
+            style={{
+              backgroundColor: activeTab === 'activity' ? 'var(--ide-dock)' : undefined,
+            }}
           >
             <Activity className="w-3.5 h-3.5 text-amber-400" />
             <span>Activity</span>
@@ -242,14 +348,14 @@ export function BottomDock({
 
         {/* DevTools-Style Dock Orientation Switchers & Controls */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <div className="flex items-center bg-[#1e1e1e] p-0.5 rounded border border-[#333333] mr-1">
+          <div className="flex items-center bg-black/20 p-0.5 rounded border border-white/10 mr-1">
             <button
               onClick={() => onChangeOrientation('bottom')}
               title="Dock to bottom"
               className={`p-1 rounded transition-colors ${
                 orientation === 'bottom'
                   ? 'bg-sky-600 text-white'
-                  : 'text-neutral-400 hover:text-white hover:bg-[#2a2d2e]'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
               }`}
             >
               <PanelBottom className="w-3.5 h-3.5" />
@@ -261,7 +367,7 @@ export function BottomDock({
               className={`p-1 rounded transition-colors ${
                 orientation === 'right'
                   ? 'bg-sky-600 text-white'
-                  : 'text-neutral-400 hover:text-white hover:bg-[#2a2d2e]'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
               }`}
             >
               <PanelRight className="w-3.5 h-3.5" />
@@ -273,7 +379,7 @@ export function BottomDock({
               className={`p-1 rounded transition-colors ${
                 orientation === 'left'
                   ? 'bg-sky-600 text-white'
-                  : 'text-neutral-400 hover:text-white hover:bg-[#2a2d2e]'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
               }`}
             >
               <PanelLeft className="w-3.5 h-3.5" />
@@ -285,7 +391,7 @@ export function BottomDock({
               className={`p-1 rounded transition-colors ${
                 orientation === 'fullscreen'
                   ? 'bg-sky-600 text-white'
-                  : 'text-neutral-400 hover:text-white hover:bg-[#2a2d2e]'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
               }`}
             >
               {orientation === 'fullscreen' ? (
@@ -299,7 +405,7 @@ export function BottomDock({
           <button
             onClick={onClose}
             title="Close Dock"
-            className="p-1 rounded text-neutral-400 hover:text-white hover:bg-[#333333] transition-colors"
+            className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -313,6 +419,20 @@ export function BottomDock({
             projectId={projectId} 
             onPortDetected={handlePortDetected} 
             activeFileName={activeFileName}
+          />
+        )}
+
+        {activeTab === 'problems' && (
+          <ProblemsPanel
+            problems={problems}
+            onNavigateToProblem={onNavigateToProblem || (() => {})}
+          />
+        )}
+
+        {activeTab === 'output' && (
+          <OutputPanel
+            logs={outputLogs}
+            onClearLogs={onClearOutputLogs}
           />
         )}
 
@@ -343,6 +463,7 @@ export function BottomDock({
             userAvatar={userAvatar}
             onNewMessageReceived={onNewMessageReceived}
             onOpenMediaInEditor={onOpenMediaInEditor}
+            onNavigateToFile={onNavigateToFile}
           />
         )}
 
@@ -365,7 +486,7 @@ export function BottomDock({
         )}
 
         {activeTab === 'split' && (
-          <div className="flex w-full h-full min-h-0 divide-x divide-[#333333]">
+          <div className="flex w-full h-full min-h-0 divide-x" style={{ borderColor: 'var(--ide-border)' }}>
             <div className="w-1/2 h-full min-h-0">
               <TerminalPanel 
                 projectId={projectId} 

@@ -17,7 +17,9 @@ import {
   Music,
   Maximize2,
   Layers,
-  Eye
+  Eye,
+  Copy,
+  FileCode
 } from 'lucide-react';
 import { MediaPreviewModal, MediaPreviewItem } from './MediaPreviewModal';
 
@@ -28,6 +30,7 @@ interface ChatPanelProps {
   userAvatar?: string;
   onNewMessageReceived?: () => void;
   onOpenMediaInEditor?: (media: { name: string; url: string; type: 'image' | 'video' | 'audio' | 'file' }) => void;
+  onNavigateToFile?: (filePath: string, line?: number) => void;
 }
 
 interface PendingMedia {
@@ -39,6 +42,120 @@ interface PendingMedia {
   size: string;
 }
 
+function renderMentions(text: string) {
+  const mentionRegex = /(@[a-zA-Z0-9_-]+)/g;
+  const parts = text.split(mentionRegex);
+  return parts.map((part, i) => {
+    if (part.startsWith('@')) {
+      return (
+        <span key={i} className="text-sky-400 font-semibold px-1 py-0.2 rounded bg-sky-500/10">
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
+function renderInlineLinks(text: string, onNavigateToFile?: (path: string, line?: number) => void) {
+  const fileRegex = /(\[file:\s*([^\]]+)\])|(([a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]{1,4})(?::(\d+))?)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = fileRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(renderMentions(text.slice(lastIndex, match.index)));
+    }
+
+    let filePath = '';
+    let lineNum: number | undefined;
+
+    if (match[1]) {
+      const raw = match[2].trim();
+      const colIdx = raw.lastIndexOf(':');
+      if (colIdx !== -1 && !isNaN(Number(raw.slice(colIdx + 1)))) {
+        filePath = raw.slice(0, colIdx);
+        lineNum = parseInt(raw.slice(colIdx + 1), 10);
+      } else {
+        filePath = raw;
+      }
+    } else if (match[3]) {
+      filePath = match[4];
+      if (match[5]) {
+        lineNum = parseInt(match[5], 10);
+      }
+    }
+
+    parts.push(
+      <button
+        key={match.index}
+        type="button"
+        onClick={() => onNavigateToFile && onNavigateToFile(filePath, lineNum)}
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 my-0.5 rounded bg-sky-500/20 hover:bg-sky-500/35 text-sky-300 border border-sky-500/30 text-[11px] font-mono transition-colors align-middle"
+        title={`Open ${filePath}${lineNum ? ` at line ${lineNum}` : ''}`}
+      >
+        <FileCode className="w-3 h-3 text-sky-400 flex-shrink-0" />
+        <span>{filePath}{lineNum ? `:${lineNum}` : ''}</span>
+      </button>
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(renderMentions(text.slice(lastIndex)));
+  }
+
+  return parts;
+}
+
+function DeveloperMessageText({
+  content,
+  onNavigateToFile,
+}: {
+  content: string;
+  onNavigateToFile?: (filePath: string, line?: number) => void;
+}) {
+  if (content.includes('```')) {
+    const parts = content.split(/(```[\s\S]*?```)/g);
+    return (
+      <div className="space-y-1">
+        {parts.map((part, idx) => {
+          if (part.startsWith('```') && part.endsWith('```')) {
+            const lines = part.slice(3, -3).trim().split('\n');
+            let lang = '';
+            let code = part.slice(3, -3).trim();
+            if (lines.length > 1 && !lines[0].includes(' ') && lines[0].length < 15) {
+              lang = lines[0];
+              code = lines.slice(1).join('\n');
+            }
+            return (
+              <div key={idx} className="my-1 rounded bg-black/40 border border-white/10 p-2 font-mono text-[11px] relative group select-text">
+                <div className="flex items-center justify-between pb-1 mb-1 border-b border-white/5 text-[9px] text-neutral-500 uppercase">
+                  <span>{lang || 'code'}</span>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(code)}
+                    className="hover:text-white flex items-center gap-0.5 text-[10px]"
+                  >
+                    <Copy className="w-2.5 h-2.5" />
+                    <span>Copy</span>
+                  </button>
+                </div>
+                <pre className="overflow-x-auto whitespace-pre leading-relaxed text-neutral-200">{code}</pre>
+              </div>
+            );
+          }
+          return <span key={idx}>{renderInlineLinks(part, onNavigateToFile)}</span>;
+        })}
+      </div>
+    );
+  }
+
+  return <div>{renderInlineLinks(content, onNavigateToFile)}</div>;
+}
+
 export function ChatPanel({
   projectId,
   userId,
@@ -46,6 +163,7 @@ export function ChatPanel({
   userAvatar,
   onNewMessageReceived,
   onOpenMediaInEditor,
+  onNavigateToFile,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -436,7 +554,7 @@ export function ChatPanel({
 
                     {/* Text content */}
                     {(!msg.media_url || msg.content !== `Shared ${msg.media_type}: ${msg.media_name}`) && (
-                      <span>{msg.content}</span>
+                      <DeveloperMessageText content={msg.content} onNavigateToFile={onNavigateToFile} />
                     )}
                   </div>
                 </div>

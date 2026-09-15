@@ -363,6 +363,88 @@ export const StorageMock = {
     // Keep last 200 activities from the beginning
     setStored(STORAGE_KEY_ACTIVITIES, activities.slice(0, 200));
     return newActivity;
+  },
+
+  // Level 7: Profiles, Coding Partners & Notifications
+  getProfile(userId: string): UserProfile | null {
+    const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, DEMO_USERS);
+    return users.find(u => u.id === userId) || null;
+  },
+
+  updateProfile(userId: string, updates: Partial<UserProfile>): UserProfile {
+    const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, DEMO_USERS);
+    const idx = users.findIndex(u => u.id === userId);
+    if (idx !== -1) {
+      users[idx] = { ...users[idx], ...updates };
+      setStored(STORAGE_KEY_USERS, users);
+      return users[idx];
+    }
+    const newProfile: UserProfile = {
+      id: userId,
+      email: updates.email || 'user@codecollab.io',
+      full_name: updates.full_name || 'Developer',
+      ...updates,
+    };
+    users.push(newProfile);
+    setStored(STORAGE_KEY_USERS, users);
+    return newProfile;
+  },
+
+  getCodingPartners(userId: string): any[] {
+    const partners = getStored<any[]>('codecollab_coding_partners', []);
+    return partners.filter(p => p.requester_id === userId || p.receiver_id === userId);
+  },
+
+  saveCodingPartner(partner: any): any {
+    const partners = getStored<any[]>('codecollab_coding_partners', []);
+    partners.push(partner);
+    setStored('codecollab_coding_partners', partners);
+    return partner;
+  },
+
+  updateCodingPartner(id: string, status: string): void {
+    const partners = getStored<any[]>('codecollab_coding_partners', []);
+    const p = partners.find(item => item.id === id);
+    if (p) {
+      p.status = status;
+      p.updated_at = new Date().toISOString();
+      setStored('codecollab_coding_partners', partners);
+    }
+  },
+
+  removeCodingPartner(id: string): void {
+    const partners = getStored<any[]>('codecollab_coding_partners', []);
+    setStored('codecollab_coding_partners', partners.filter(p => p.id !== id));
+  },
+
+  getNotifications(userId: string): any[] {
+    const list = getStored<any[]>('codecollab_notifications', []);
+    return list.filter(n => n.user_id === userId).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  saveNotification(notification: any): any {
+    const list = getStored<any[]>('codecollab_notifications', []);
+    list.unshift(notification);
+    setStored('codecollab_notifications', list.slice(0, 50));
+    return notification;
+  },
+
+  markNotificationRead(id: string): void {
+    const list = getStored<any[]>('codecollab_notifications', []);
+    const target = list.find(n => n.id === id);
+    if (target) {
+      target.read = true;
+      setStored('codecollab_notifications', list);
+    }
+  },
+
+  markAllNotificationsRead(userId: string): void {
+    const list = getStored<any[]>('codecollab_notifications', []);
+    list.forEach(n => {
+      if (n.user_id === userId) n.read = true;
+    });
+    setStored('codecollab_notifications', list);
   }
 };
+
 

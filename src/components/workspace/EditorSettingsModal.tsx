@@ -2,9 +2,10 @@
 
 import React from 'react';
 import { X, Moon, Sun, Type, Sliders, Check } from 'lucide-react';
+import { ThemeId, THEMES } from '@/lib/themes';
 
 export interface EditorSettings {
-  theme: 'vs-dark' | 'vs' | 'hc-black';
+  theme: ThemeId | 'vs-dark' | 'vs' | 'hc-black';
   fontSize: number;
   tabSize: number;
   wordWrap: 'on' | 'off';
@@ -28,17 +29,17 @@ export function EditorSettingsModal({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn select-none"
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-md bg-[#252526] border border-[#3c3c3c] rounded-xl shadow-2xl p-6 text-[#cccccc]"
+        className="w-full max-w-lg bg-[#252526] border border-[#3c3c3c] rounded-xl shadow-2xl p-6 text-[#cccccc]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#3c3c3c]">
           <div className="flex items-center gap-2 text-white font-semibold text-base">
             <Sliders className="w-5 h-5 text-sky-400" />
-            <span>Editor Settings</span>
+            <span>IDE & Editor Settings</span>
           </div>
           <button
             onClick={onClose}
@@ -52,26 +53,31 @@ export function EditorSettingsModal({
           {/* Theme */}
           <div>
             <label className="block text-neutral-300 font-medium mb-1.5">
-              Editor Theme
+              Color Theme
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: 'vs-dark', label: 'Dark (VS Code)' },
-                { id: 'vs', label: 'Light' },
-                { id: 'hc-black', label: 'High Contrast' },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => onUpdateSettings({ theme: t.id as any })}
-                  className={`p-2 rounded-lg border text-center font-medium transition-all ${
-                    settings.theme === t.id
-                      ? 'bg-sky-600/30 border-sky-500 text-sky-300'
-                      : 'bg-[#1e1e1e] border-[#3c3c3c] text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <div className="grid grid-cols-4 gap-2">
+              {(Object.keys(THEMES) as ThemeId[]).map((tId) => {
+                const t = THEMES[tId];
+                const isSelected = settings.theme === tId || (tId === 'dark' && settings.theme === 'vs-dark');
+                return (
+                  <button
+                    key={tId}
+                    type="button"
+                    onClick={() => onUpdateSettings({ theme: tId })}
+                    className={`p-2 rounded-lg border text-left font-medium transition-all ${
+                      isSelected
+                        ? 'bg-sky-600/30 border-sky-500 text-sky-300'
+                        : 'bg-[#1e1e1e] border-[#3c3c3c] text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="truncate font-semibold text-[11px] mb-1">{t.name}</div>
+                    <div className="flex items-center gap-0.5 h-2 rounded overflow-hidden">
+                      <span className="w-1/2 h-full" style={{ backgroundColor: t.colors.bg }} />
+                      <span className="w-1/2 h-full" style={{ backgroundColor: t.colors.accent }} />
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -121,46 +127,33 @@ export function EditorSettingsModal({
             </div>
             <button
               onClick={() => onUpdateSettings({ wordWrap: settings.wordWrap === 'on' ? 'off' : 'on' })}
-              className={`w-11 h-6 rounded-full transition-colors relative ${
-                settings.wordWrap === 'on' ? 'bg-sky-600' : 'bg-[#3c3c3c]'
+              className={`px-3 py-1 rounded font-medium transition-all ${
+                settings.wordWrap === 'on'
+                  ? 'bg-sky-600 text-white'
+                  : 'bg-[#1e1e1e] border border-[#3c3c3c] text-neutral-400'
               }`}
             >
-              <div
-                className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
-                  settings.wordWrap === 'on' ? 'left-6' : 'left-1'
-                }`}
-              />
+              {settings.wordWrap.toUpperCase()}
             </button>
           </div>
 
           {/* Minimap */}
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center justify-between pt-1 border-t border-[#3c3c3c]">
             <div>
               <div className="text-neutral-300 font-medium">Editor Minimap</div>
-              <div className="text-[10px] text-neutral-500">Show miniature overview on the right</div>
+              <div className="text-[10px] text-neutral-500">Display code miniature overview on the right</div>
             </div>
             <button
               onClick={() => onUpdateSettings({ minimap: !settings.minimap })}
-              className={`w-11 h-6 rounded-full transition-colors relative ${
-                settings.minimap ? 'bg-sky-600' : 'bg-[#3c3c3c]'
+              className={`px-3 py-1 rounded font-medium transition-all ${
+                settings.minimap
+                  ? 'bg-sky-600 text-white'
+                  : 'bg-[#1e1e1e] border border-[#3c3c3c] text-neutral-400'
               }`}
             >
-              <div
-                className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
-                  settings.minimap ? 'left-6' : 'left-1'
-                }`}
-              />
+              {settings.minimap ? 'ON' : 'OFF'}
             </button>
           </div>
-        </div>
-
-        <div className="mt-6 pt-3 border-t border-[#3c3c3c] flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium transition-colors"
-          >
-            Done
-          </button>
         </div>
       </div>
     </div>

@@ -9,6 +9,8 @@ import { FileItem, getUserColor } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
 import { DataService } from '@/lib/data-service';
 import { EditorSettings } from './EditorSettingsModal';
+import { registerMonacoThemes, THEMES, ThemeId } from '@/lib/themes';
+import { ProblemItem } from './ProblemsPanel';
 import { config } from '@/lib/config';
 import { Loader2, Wifi, WifiOff, CheckCircle2 } from 'lucide-react';
 
@@ -18,6 +20,8 @@ interface MonacoEditorWrapperProps {
   settings: EditorSettings;
   onContentSaved?: (text: string) => void;
   onCursorChange?: (line: number, col: number) => void;
+  onProblemsChange?: (problems: ProblemItem[]) => void;
+  targetLocation?: { line: number; col?: number } | null;
 }
 
 export function MonacoEditorWrapper({
@@ -26,6 +30,8 @@ export function MonacoEditorWrapper({
   settings,
   onContentSaved,
   onCursorChange,
+  onProblemsChange,
+  targetLocation,
 }: MonacoEditorWrapperProps) {
   const { user } = useAuth();
   const [synced, setSynced] = useState(false);
@@ -41,6 +47,29 @@ export function MonacoEditorWrapper({
   const pendingTextRef = useRef<string | null>(null);
   const fileIdRef = useRef(file.id);
   fileIdRef.current = file.id;
+
+  // Jump to specific line/col when requested
+  useEffect(() => {
+    if (targetLocation && editorRef.current) {
+      try {
+        editorRef.current.revealLineInCenter(targetLocation.line);
+        editorRef.current.setPosition({
+          lineNumber: targetLocation.line,
+          column: targetLocation.col || 1,
+        });
+        editorRef.current.focus();
+      } catch (e) {}
+    }
+  }, [targetLocation]);
+
+  // Dynamically update Monaco theme when settings.theme changes
+  useEffect(() => {
+    if (editorReady && monacoRef.current) {
+      const themeConfig = THEMES[settings.theme as ThemeId];
+      const monacoTheme = themeConfig ? themeConfig.monacoTheme : settings.theme;
+      monacoRef.current.editor.setTheme(monacoTheme);
+    }
+  }, [settings.theme, editorReady]);
 
   // Flush pending changes to Supabase storage immediately
   const flushPersist = async (targetFileId: string, text: string) => {
@@ -185,6 +214,15 @@ export function MonacoEditorWrapper({
   const handleEditorDidMount = (editor: any, monaco: Monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+
+    // Register custom themes
+    registerMonacoThemes(monaco);
+
+    // Apply active theme
+    const themeConfig = THEMES[settings.theme as ThemeId];
+    const targetTheme = themeConfig ? themeConfig.monacoTheme : settings.theme;
+    monaco.editor.setTheme(targetTheme);
+
     setEditorReady(true);
 
     // Enable rich JS/TS and HTML intellisense
@@ -201,17 +239,63 @@ export function MonacoEditorWrapper({
       });
     } catch (e) {}
 
+    // Listen to editor marker changes for Problems Panel
+    const updateMarkers = () => {
+      try {
+        const markers = monaco.editor.getModelMarkers({});
+        if (onProblemsChange) {
+          const problems: ProblemItem[] = markers.map((m, idx) => ({
+            id: `${file.id}-${idx}-${m.startLineNumber}-${m.startColumn}`,
+            fileId: file.id,
+            fileName: file.name,
+            filePath: file.name,
+            message: m.message,
+            severity: m.severity === 8 ? 'error' : m.severity === 4 ? 'warning' : 'info',
+            startLineNumber: m.startLineNumber,
+            startColumn: m.startColumn,
+            source: m.source,
+          }));
+          onProblemsChange(problems);
+        }
+      } catch (e) {}
+    };
+
+    monaco.editor.onDidChangeMarkers(() => {
+      updateMarkers();
+    });
+
     editor.onDidChangeCursorPosition((e: any) => {
       if (onCursorChange) {
         onCursorChange(e.position.lineNumber, e.position.column);
       }
     });
+
+    // If initial target location is provided
+    if (targetLocation) {
+      editor.revealLineInCenter(targetLocation.line);
+      editor.setPosition({
+        lineNumber: targetLocation.line,
+        column: targetLocation.col || 1,
+      });
+    }
   };
 
+  const currentThemeConfig = THEMES[settings.theme as ThemeId];
+  const activeMonacoTheme = currentThemeConfig ? currentThemeConfig.monacoTheme : settings.theme;
+
   return (
-    <div className="relative w-full h-full flex flex-col bg-[#1e1e1e]">
+    <div 
+      className="relative w-full h-full flex flex-col"
+      style={{ backgroundColor: 'var(--ide-bg)' }}
+    >
       {/* Top Floating Status Indicator */}
-      <div className="absolute top-2 right-4 z-10 flex items-center gap-2 bg-[#252526]/85 backdrop-blur-md px-3 py-1 rounded-full border border-[#3c3c3c] text-[11px] pointer-events-none shadow-lg">
+      <div 
+        className="absolute top-2 right-4 z-10 flex items-center gap-2 px-3 py-1 rounded-full border text-[11px] pointer-events-none shadow-lg backdrop-blur-md"
+        style={{
+          backgroundColor: 'var(--ide-card-bg)',
+          borderColor: 'var(--ide-border)',
+        }}
+      >
         {saveStatus === 'saving' ? (
           <span className="flex items-center gap-1.5 text-amber-400 font-medium">
             <Loader2 className="w-3 h-3 animate-spin" /> Saving...
@@ -240,7 +324,7 @@ export function MonacoEditorWrapper({
           height="100%"
           path={file.name}
           language={file.language || 'plaintext'}
-          theme={settings.theme}
+          theme={activeMonacoTheme}
           defaultValue={file.content || ''}
           onMount={handleEditorDidMount}
           options={{
@@ -266,7 +350,10 @@ export function MonacoEditorWrapper({
             snippetSuggestions: 'top',
           }}
           loading={
-            <div className="flex items-center justify-center h-full bg-[#1e1e1e] text-neutral-400 gap-2">
+            <div 
+              className="flex items-center justify-center h-full gap-2"
+              style={{ backgroundColor: 'var(--ide-bg)', color: 'var(--ide-text-muted)' }}
+            >
               <Loader2 className="w-5 h-5 animate-spin text-sky-400" />
               <span>Loading Monaco Editor...</span>
             </div>

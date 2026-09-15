@@ -12,6 +12,39 @@ export interface UserProfile {
   email: string;
   full_name: string;
   avatar_url?: string;
+  username?: string;
+  bio?: string;
+  skills?: string[];
+  languages?: string[];
+  github_username?: string;
+  preferences?: Record<string, any>;
+}
+
+export interface EditorGroup {
+  id: string;
+  openFiles: FileItem[];
+  activeFileId: string | null;
+}
+
+export interface CodingPartner {
+  id: string;
+  requester_id: string;
+  receiver_id: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string;
+  updated_at: string;
+  profile?: UserProfile;
+}
+
+export interface NotificationItem {
+  id: string;
+  user_id: string;
+  type: 'partner_request' | 'partner_accepted' | 'project_invite' | 'mention' | 'member_joined';
+  title: string;
+  message: string;
+  data?: Record<string, any>;
+  read: boolean;
+  created_at: string;
 }
 
 export interface Project {

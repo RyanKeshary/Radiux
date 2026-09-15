@@ -4,24 +4,41 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
-import { Project, FileItem, ProjectMember, getUserColor, isMediaFile } from '@/lib/types';
+import { Project, FileItem, ProjectMember, getUserColor, isMediaFile, UserProfile } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
 import { config } from '@/lib/config';
 import { useAuth } from '@/context/AuthContext';
 import { useVoiceChat } from '@/hooks/useVoiceChat';
+import { applyThemeVariables, ThemeId, THEMES } from '@/lib/themes';
+
+// Workspace Components
+import { ActivityBar, ActivityView } from './ActivityBar';
 import { FileTree } from './FileTree';
 import { OpenTabs } from './OpenTabs';
+import { Breadcrumbs } from './Breadcrumbs';
 import { MonacoEditorWrapper } from './MonacoEditorWrapper';
 import { MediaViewer } from './MediaViewer';
 import { ProjectPresence } from './ProjectPresence';
+import { CollaboratorsPanel } from './CollaboratorsPanel';
+import { GitPanel } from './GitPanel';
+import { BottomDock, DockOrientation, DockTab } from './BottomDock';
+import { ProblemItem } from './ProblemsPanel';
+import { OutputLogEntry } from './OutputPanel';
+
+// Modals
 import { InviteMemberModal } from './InviteMemberModal';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { CommandPalette, CommandItem } from './CommandPalette';
 import { QuickOpenModal } from './QuickOpenModal';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { EditorSettingsModal, EditorSettings } from './EditorSettingsModal';
-import { BottomDock, DockOrientation } from './BottomDock';
 import { GitHubModal } from './GitHubModal';
+import { UserProfileModal } from './UserProfileModal';
+import { PublicProfileModal } from './PublicProfileModal';
+import { ProjectSwitcherModal } from './ProjectSwitcherModal';
+import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
+import { NotificationsPopover, AppNotification } from './NotificationsPopover';
+
 import { 
   ChevronLeft, 
   UserPlus, 
@@ -41,15 +58,33 @@ import {
   Download,
   FolderGit2,
   Github,
-  GitBranch
+  GitBranch,
+  AlertCircle,
+  AlertTriangle,
+  PanelLeftClose,
+  PanelLeftOpen,
+  SplitSquareVertical,
+  SplitSquareHorizontal,
+  FolderOpen,
+  FileCode,
+  X,
+  Bell,
+  CheckCircle2,
+  ExternalLink
 } from 'lucide-react';
 
 interface WorkspaceProps {
   projectId: string;
 }
 
+export interface EditorGroupState {
+  id: string;
+  openFiles: FileItem[];
+  activeFileId: string | null;
+}
+
 const DEFAULT_SETTINGS: EditorSettings = {
-  theme: 'vs-dark',
+  theme: 'dark',
   fontSize: 14,
   tabSize: 2,
   wordWrap: 'off',
@@ -62,17 +97,55 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [role, setRole] = useState<'owner' | 'member' | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
-  const [openFiles, setOpenFiles] = useState<FileItem[]>([]);
-  const [activeFileId, setActiveFileId] = useState<string | null>(null);
-  const activeFileIdRef = useRef<string | null>(null);
-  activeFileIdRef.current = activeFileId;
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
   const [loading, setLoading] = useState(true);
   const [unauthorized, setUnauthorized] = useState(false);
 
+  // Level 7: Multi-Editor Groups & Split State
+  const [editorGroups, setEditorGroups] = useState<EditorGroupState[]>([
+    { id: 'group-1', openFiles: [], activeFileId: null }
+  ]);
+  const [activeGroupId, setActiveGroupId] = useState<string>('group-1');
+  const [splitLayout, setSplitLayout] = useState<'single' | 'vertical' | 'horizontal'>('single');
+  const [targetJumpLocation, setTargetJumpLocation] = useState<{ line: number; col?: number } | null>(null);
+
+  // Level 7: Activity Bar & Sidebar Views
+  const [activeActivityView, setActiveActivityView] = useState<ActivityView | null>('explorer');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Level 7: Diagnostics & Output Panels
+  const [problems, setProblems] = useState<ProblemItem[]>([]);
+  const [outputLogs, setOutputLogs] = useState<OutputLogEntry[]>([
+    {
+      id: 'init-log-1',
+      channel: 'system',
+      message: 'CodeCollab Cloud IDE Environment initialized.',
+      timestamp: new Date().toLocaleTimeString(),
+    },
+    {
+      id: 'init-log-2',
+      channel: 'sync',
+      message: 'Connecting to real-time CRDT document and filesystem stream...',
+      timestamp: new Date().toLocaleTimeString(),
+    },
+  ]);
+
   // Level 4: Communication & Collaboration States
   const [unreadCount, setUnreadCount] = useState(0);
   const userColor = getUserColor(user?.id || 'guest');
+
+  // Peer presence active file tracking: fileId -> peer list
+  const [collaboratorsByFile, setCollaboratorsByFile] = useState<Record<string, { id: string; name: string; color: string }[]>>({});
+  const [onlinePeersList, setOnlinePeersList] = useState<{ id: string; name: string; color: string; currentFileId?: string; currentFileName?: string }[]>([]);
+
+  // Contextual Chat Toast Notification
+  const [chatToast, setChatToast] = useState<{
+    id: string;
+    senderName: string;
+    message: string;
+    filePath?: string;
+    line?: number;
+  } | null>(null);
 
   // Activity Broadcast helper
   const logAndBroadcastActivity = useCallback(async (actionType: any, details: string, targetObject?: string) => {
@@ -94,6 +167,19 @@ export function Workspace({ projectId }: WorkspaceProps) {
       };
     } catch (e) {}
   }, [projectId, user?.id, user?.full_name]);
+
+  // Append to Output Logs
+  const appendOutputLog = useCallback((channel: 'system' | 'sync' | 'git' | 'runtime', message: string) => {
+    setOutputLogs((prev) => [
+      ...prev.slice(-150),
+      {
+        id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        channel,
+        message,
+        timestamp: new Date().toLocaleTimeString(),
+      }
+    ]);
+  }, []);
 
   // WebRTC Voice hook
   const {
@@ -119,6 +205,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
   // Terminal, Preview, Chat & Voice Bottom Dock
   const [isDockOpen, setIsDockOpen] = useState(false);
+  const [activeDockTab, setActiveDockTab] = useState<DockTab>('terminal');
   const [dockOrientation, setDockOrientation] = useState<DockOrientation>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('codecollab_dock_orientation');
@@ -143,7 +230,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGitHubOpen, setIsGitHubOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [selectedPublicUserId, setSelectedPublicUserId] = useState<string | null>(null);
+  const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [currentGitBranch, setCurrentGitBranch] = useState('main');
+
   const [settings, setSettings] = useState<EditorSettings>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -155,6 +249,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
     }
     return DEFAULT_SETTINGS;
   });
+
+  // Apply Theme Variables
+  useEffect(() => {
+    applyThemeVariables(settings.theme as ThemeId);
+  }, [settings.theme]);
 
   const updateSettings = (newSettings: Partial<EditorSettings>) => {
     setSettings((prev) => {
@@ -191,15 +290,26 @@ export function Workspace({ projectId }: WorkspaceProps) {
       setRole(access.role || 'member');
 
       // 2. Fetch data in parallel
-      const [projData, filesData, membersData] = await Promise.all([
+      const [projData, filesData, membersData, notifsData] = await Promise.all([
         DataService.getProject(projectId),
         DataService.getFiles(projectId),
         DataService.getMembers(projectId),
+        DataService.getNotifications(user.id),
       ]);
 
       setProject(projData);
       setFiles(filesData);
       setMembers(membersData);
+      setNotifications(notifsData.map(n => ({
+        id: n.id,
+        type: n.type as any,
+        title: n.title,
+        message: n.message,
+        read: n.read,
+        createdAt: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        projectId: n.data?.project_id,
+        partnerRequestId: n.data?.partner_request_id,
+      })));
 
       // Seed remote workspace disk with existing files
       try {
@@ -210,12 +320,51 @@ export function Workspace({ projectId }: WorkspaceProps) {
         }).catch(() => {});
       } catch (e) {}
 
-      // Open first code file if none open
-      const firstCodeFile = filesData.find((f) => !f.is_folder);
-      if (firstCodeFile && openFiles.length === 0) {
-        setOpenFiles([firstCodeFile]);
-        setActiveFileId(firstCodeFile.id);
+      // Workspace State Restoration (Level 7)
+      const storageKey = `codecollab_workspace_${projectId}`;
+      let restored = false;
+      if (typeof window !== 'undefined') {
+        const savedRaw = localStorage.getItem(storageKey);
+        if (savedRaw) {
+          try {
+            const savedState = JSON.parse(savedRaw);
+            if (savedState.splitLayout) setSplitLayout(savedState.splitLayout);
+            if (savedState.activeActivityView) setActiveActivityView(savedState.activeActivityView);
+            if (savedState.isSidebarOpen !== undefined) setIsSidebarOpen(savedState.isSidebarOpen);
+            if (savedState.isDockOpen !== undefined) setIsDockOpen(savedState.isDockOpen);
+            if (savedState.activeDockTab) setActiveDockTab(savedState.activeDockTab);
+
+            if (savedState.editorGroups && Array.isArray(savedState.editorGroups)) {
+              const reconstructed: EditorGroupState[] = savedState.editorGroups.map((g: any) => {
+                const groupFiles = filesData.filter(f => g.openFileIds?.includes(f.id));
+                return {
+                  id: g.id,
+                  openFiles: groupFiles,
+                  activeFileId: groupFiles.some(f => f.id === g.activeFileId) ? g.activeFileId : (groupFiles[0]?.id || null)
+                };
+              });
+
+              if (reconstructed.length > 0) {
+                setEditorGroups(reconstructed);
+                setActiveGroupId(savedState.activeGroupId || reconstructed[0].id);
+                restored = true;
+              }
+            }
+          } catch (e) {}
+        }
       }
+
+      // Default to opening first code file if not restored
+      if (!restored) {
+        const firstCodeFile = filesData.find((f) => !f.is_folder);
+        if (firstCodeFile) {
+          setEditorGroups([
+            { id: 'group-1', openFiles: [firstCodeFile], activeFileId: firstCodeFile.id }
+          ]);
+        }
+      }
+
+      appendOutputLog('system', `Loaded workspace "${projData?.name || projectId}" with ${filesData.length} files.`);
 
       // Record workspace entry in project activity timeline
       const sessionKey = `workspace_entered_${projectId}_${user.id}`;
@@ -232,13 +381,40 @@ export function Workspace({ projectId }: WorkspaceProps) {
     } finally {
       setLoading(false);
     }
-  }, [projectId, user, logAndBroadcastActivity]);
+  }, [projectId, user, logAndBroadcastActivity, appendOutputLog]);
 
   useEffect(() => {
     if (user && !authLoading) {
       loadWorkspaceData();
     }
   }, [user, authLoading, loadWorkspaceData]);
+
+  // Persist Workspace State (Debounced)
+  useEffect(() => {
+    if (!project || loading) return;
+    const storageKey = `codecollab_workspace_${projectId}`;
+    const timeout = setTimeout(() => {
+      try {
+        const stateToSave = {
+          splitLayout,
+          activeGroupId,
+          isSidebarOpen,
+          activeActivityView,
+          isDockOpen,
+          activeDockTab,
+          dockOrientation,
+          editorGroups: editorGroups.map(g => ({
+            id: g.id,
+            openFileIds: g.openFiles.map(f => f.id),
+            activeFileId: g.activeFileId,
+          })),
+        };
+        localStorage.setItem(storageKey, JSON.stringify(stateToSave));
+      } catch (e) {}
+    }, 400);
+
+    return () => clearTimeout(timeout);
+  }, [project, loading, projectId, splitLayout, activeGroupId, isSidebarOpen, activeActivityView, isDockOpen, activeDockTab, dockOrientation, editorGroups]);
 
   // Real-Time File-Tree Synchronization across peers via Yjs workspace room
   useEffect(() => {
@@ -249,28 +425,24 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
     const ymap = ydoc.getMap('file-events');
 
-    ymap.observe((event) => {
+    ymap.observe(() => {
       DataService.getFiles(projectId).then((updatedFiles) => {
-        setFiles((prevFiles) => {
-          return updatedFiles.map((newF) => {
-            if (newF.id === activeFileIdRef.current) {
-              const currentActive = prevFiles.find((f) => f.id === newF.id);
-              return currentActive ? { ...newF, content: currentActive.content } : newF;
-            }
-            return newF;
-          });
-        });
-        setOpenFiles((prevOpen) => {
-          return prevOpen
-            .filter((tab) => updatedFiles.some((f) => f.id === tab.id))
-            .map((tab) => {
-              if (tab.id === activeFileIdRef.current) {
-                return tab;
-              }
-              const fresh = updatedFiles.find((f) => f.id === tab.id);
-              return fresh || tab;
-            });
-        });
+        setFiles(updatedFiles);
+        setEditorGroups((prevGroups) =>
+          prevGroups.map((group) => {
+            const freshOpen = group.openFiles
+              .filter((tab) => updatedFiles.some((f) => f.id === tab.id))
+              .map((tab) => updatedFiles.find((f) => f.id === tab.id) || tab);
+            const freshActive = freshOpen.some((f) => f.id === group.activeFileId)
+              ? group.activeFileId
+              : (freshOpen[freshOpen.length - 1]?.id || null);
+            return {
+              ...group,
+              openFiles: freshOpen,
+              activeFileId: freshActive,
+            };
+          })
+        );
       });
     });
 
@@ -294,13 +466,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
     }, 500);
   };
 
-  // Keyboard shortcuts (Ctrl+K, Ctrl+P, Ctrl+Shift+F, Ctrl+`)
+  // Keyboard-first shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
 
-      if (cmdOrCtrl && e.key.toLowerCase() === 'k') {
+      if (cmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
       } else if (cmdOrCtrl && e.key.toLowerCase() === 'p') {
@@ -309,40 +481,188 @@ export function Workspace({ projectId }: WorkspaceProps) {
       } else if (cmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         setIsGlobalSearchOpen((prev) => !prev);
-      } else if (cmdOrCtrl && e.key === '`') {
+      } else if (cmdOrCtrl && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsSidebarOpen((prev) => !prev);
+      } else if (cmdOrCtrl && (e.key === '`' || e.key.toLowerCase() === 'j')) {
         e.preventDefault();
         setIsDockOpen((prev) => !prev);
+      } else if (cmdOrCtrl && e.key === '\\') {
+        e.preventDefault();
+        handleSplitRight();
+      } else if (cmdOrCtrl && e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        const currentGroup = editorGroups.find(g => g.id === activeGroupId) || editorGroups[0];
+        if (currentGroup && currentGroup.activeFileId) {
+          handleCloseTabInGroup(currentGroup.id, currentGroup.activeFileId);
+        }
+      } else if (cmdOrCtrl && e.altKey && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        setIsProjectSwitcherOpen(true);
       }
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
+  });
+
+  // Editor Group management
+  const getActiveGroup = (): EditorGroupState => {
+    return editorGroups.find(g => g.id === activeGroupId) || editorGroups[0];
+  };
+
+  const handleSelectFile = (file: FileItem, targetGroupId?: string) => {
+    if (file.is_folder) return;
+    const destGroupId = targetGroupId || activeGroupId;
+
+    setEditorGroups((prev) =>
+      prev.map((group) => {
+        if (group.id !== destGroupId) return group;
+        const exists = group.openFiles.some((f) => f.id === file.id);
+        const updatedOpen = exists ? group.openFiles : [...group.openFiles, file];
+        return {
+          ...group,
+          openFiles: updatedOpen,
+          activeFileId: file.id,
+        };
+      })
+    );
+    setActiveGroupId(destGroupId);
+  };
+
+  const handleCloseTabInGroup = (groupId: string, fileId: string) => {
+    setEditorGroups((prev) => {
+      const updated = prev.map((group) => {
+        if (group.id !== groupId) return group;
+        const remaining = group.openFiles.filter((f) => f.id !== fileId);
+        let nextActive = group.activeFileId;
+        if (group.activeFileId === fileId) {
+          nextActive = remaining.length > 0 ? remaining[remaining.length - 1].id : null;
+        }
+        return {
+          ...group,
+          openFiles: remaining,
+          activeFileId: nextActive,
+        };
+      });
+
+      // If group-2 is empty, auto-close split
+      if (splitLayout !== 'single') {
+        const g2 = updated.find(g => g.id === 'group-2');
+        if (g2 && g2.openFiles.length === 0) {
+          setSplitLayout('single');
+          setActiveGroupId('group-1');
+          return updated.filter(g => g.id !== 'group-2');
+        }
+      }
+
+      return updated;
+    });
+  };
+
+  const handleCloseOthersInGroup = (groupId: string, fileId: string) => {
+    setEditorGroups((prev) =>
+      prev.map((group) => {
+        if (group.id !== groupId) return group;
+        return {
+          ...group,
+          openFiles: group.openFiles.filter((f) => f.id === fileId),
+          activeFileId: fileId,
+        };
+      })
+    );
+  };
+
+  const handleCloseToRightInGroup = (groupId: string, fileId: string) => {
+    setEditorGroups((prev) =>
+      prev.map((group) => {
+        if (group.id !== groupId) return group;
+        const idx = group.openFiles.findIndex((f) => f.id === fileId);
+        if (idx === -1) return group;
+        const remaining = group.openFiles.slice(0, idx + 1);
+        return {
+          ...group,
+          openFiles: remaining,
+          activeFileId: remaining.some(f => f.id === group.activeFileId) ? group.activeFileId : fileId,
+        };
+      })
+    );
+  };
+
+  const handleCloseAllInGroup = (groupId: string) => {
+    setEditorGroups((prev) =>
+      prev.map((group) => {
+        if (group.id !== groupId) return group;
+        return {
+          ...group,
+          openFiles: [],
+          activeFileId: null,
+        };
+      })
+    );
+  };
+
+  const handleSplitRight = () => {
+    if (splitLayout !== 'single') return;
+    const currentGroup = getActiveGroup();
+    const activeFile = currentGroup.openFiles.find(f => f.id === currentGroup.activeFileId);
+
+    const newGroup: EditorGroupState = {
+      id: 'group-2',
+      openFiles: activeFile ? [activeFile] : [],
+      activeFileId: activeFile ? activeFile.id : null,
+    };
+
+    setSplitLayout('vertical');
+    setEditorGroups([currentGroup, newGroup]);
+    setActiveGroupId('group-2');
+    appendOutputLog('system', 'Editor split vertically.');
+  };
+
+  const handleSplitDown = () => {
+    if (splitLayout !== 'single') return;
+    const currentGroup = getActiveGroup();
+    const activeFile = currentGroup.openFiles.find(f => f.id === currentGroup.activeFileId);
+
+    const newGroup: EditorGroupState = {
+      id: 'group-2',
+      openFiles: activeFile ? [activeFile] : [],
+      activeFileId: activeFile ? activeFile.id : null,
+    };
+
+    setSplitLayout('horizontal');
+    setEditorGroups([currentGroup, newGroup]);
+    setActiveGroupId('group-2');
+    appendOutputLog('system', 'Editor split horizontally.');
+  };
+
+  const handleCloseGroup = (groupId: string) => {
+    setSplitLayout('single');
+    setEditorGroups((prev) => prev.filter(g => g.id !== groupId));
+    setActiveGroupId('group-1');
+  };
+
+  // Navigate to problem or line from Problems panel or Chat
+  const handleNavigateToLocation = (fileIdOrPath: string, line?: number, col?: number) => {
+    let target = files.find(f => f.id === fileIdOrPath || f.name === fileIdOrPath);
+    if (!target) {
+      target = files.find(f => f.name.endsWith(fileIdOrPath) || fileIdOrPath.endsWith(f.name));
+    }
+    if (target) {
+      handleSelectFile(target);
+      if (line) {
+        setTargetJumpLocation({ line, col: col || 1 });
+      }
+    }
+  };
 
   // File tree handlers
-  const handleSelectFile = (file: FileItem) => {
-    if (file.is_folder) return;
-    if (!openFiles.some((f) => f.id === file.id)) {
-      setOpenFiles((prev) => [...prev, file]);
-    }
-    setActiveFileId(file.id);
-  };
-
-  const handleCloseTab = (fileId: string) => {
-    const remaining = openFiles.filter((f) => f.id !== fileId);
-    setOpenFiles(remaining);
-    if (activeFileId === fileId) {
-      setActiveFileId(remaining.length > 0 ? remaining[remaining.length - 1].id : null);
-    }
-  };
-
   const handleCreateFile = async (parentId: string | null, name: string, isFolder: boolean) => {
     try {
       const newFile = await DataService.createFile(projectId, parentId, name, isFolder);
       setFiles((prev) => [...prev, newFile]);
       if (!isFolder) {
-        setOpenFiles((prev) => [...prev, newFile]);
-        setActiveFileId(newFile.id);
+        handleSelectFile(newFile);
         syncFileToWorkspace(name, newFile.content || '');
       }
       broadcastFileChange();
@@ -351,46 +671,51 @@ export function Workspace({ projectId }: WorkspaceProps) {
         `Created ${isFolder ? 'folder' : 'file'} "${name}"`,
         name
       );
+      appendOutputLog('sync', `Created ${isFolder ? 'folder' : 'file'} "${name}"`);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to create file:', err);
     }
   };
 
   const handleRenameFile = async (fileId: string, newName: string) => {
     try {
-      const oldFile = files.find((f) => f.id === fileId);
       await DataService.renameFile(fileId, newName);
       setFiles((prev) =>
         prev.map((f) => (f.id === fileId ? { ...f, name: newName } : f))
       );
-      setOpenFiles((prev) =>
-        prev.map((f) => (f.id === fileId ? { ...f, name: newName } : f))
+      setEditorGroups((prev) =>
+        prev.map((group) => ({
+          ...group,
+          openFiles: group.openFiles.map((f) => (f.id === fileId ? { ...f, name: newName } : f)),
+        }))
       );
       broadcastFileChange();
-      logAndBroadcastActivity(
-        'file_renamed',
-        `Renamed "${oldFile?.name || 'file'}" → "${newName}"`,
-        newName
-      );
+      logAndBroadcastActivity('file_renamed', `Renamed to "${newName}"`, newName);
+      appendOutputLog('sync', `Renamed file to "${newName}"`);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to rename file:', err);
     }
   };
 
   const handleDeleteFile = async (fileId: string) => {
     try {
-      const oldFile = files.find((f) => f.id === fileId);
+      const fileToDelete = files.find((f) => f.id === fileId);
       await DataService.deleteFile(fileId);
-      setFiles((prev) => prev.filter((f) => f.id !== fileId && f.parent_id !== fileId));
-      handleCloseTab(fileId);
-      broadcastFileChange();
-      logAndBroadcastActivity(
-        oldFile?.is_folder ? 'folder_deleted' : 'file_deleted',
-        `Deleted "${oldFile?.name || 'file'}"`,
-        oldFile?.name
+      setFiles((prev) => prev.filter((f) => f.id !== fileId));
+      setEditorGroups((prev) =>
+        prev.map((group) => ({
+          ...group,
+          openFiles: group.openFiles.filter((f) => f.id !== fileId),
+          activeFileId: group.activeFileId === fileId ? null : group.activeFileId,
+        }))
       );
+      broadcastFileChange();
+      if (fileToDelete) {
+        logAndBroadcastActivity('file_deleted', `Deleted "${fileToDelete.name}"`, fileToDelete.name);
+        appendOutputLog('sync', `Deleted "${fileToDelete.name}"`);
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to delete file:', err);
     }
   };
 
@@ -398,7 +723,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
     try {
       const fileArray = Array.from(uploadedFiles);
       for (const f of fileArray) {
-        // Read file as base64 Data URL to save in database & disk
         const base64DataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
@@ -415,10 +739,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
         );
 
         setFiles((prev) => [...prev.filter((item) => item.id !== newFile.id), newFile]);
-        setOpenFiles((prev) => [...prev.filter((item) => item.id !== newFile.id), newFile]);
-        setActiveFileId(newFile.id);
-
-        // Sync to remote workspace disk
+        handleSelectFile(newFile);
         syncFileToWorkspace(newFile.name, base64DataUrl);
 
         logAndBroadcastActivity(
@@ -436,7 +757,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const handleUploadFolder = async (parentId: string | null, uploadedFiles: FileList) => {
     try {
       const fileArray = Array.from(uploadedFiles);
-      const createdFolders = new Map<string, string>(); // relPath -> folderId
+      const createdFolders = new Map<string, string>();
 
       const ensureFolder = async (folderPath: string): Promise<string | null> => {
         const normalized = folderPath.replace(/\/$/, '').trim();
@@ -475,7 +796,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
         if (!fileName) continue;
 
         const targetFolderId = dirPath ? await ensureFolder(dirPath) : parentId;
-
         const ext = fileName.split('.').pop()?.toLowerCase();
         const isBinary = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'mp4', 'webm', 'ogg', 'mp3', 'wav'].includes(ext || '');
 
@@ -506,7 +826,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
     }
   };
 
-  // Export individual project as ZIP
   const handleExportProject = async () => {
     if (!project) return;
     try {
@@ -518,127 +837,166 @@ export function Workspace({ projectId }: WorkspaceProps) {
   };
 
   const handleOpenMediaInEditor = (media: { name: string; url: string; type: 'image' | 'video' | 'audio' | 'file' }) => {
-    const existingFile = files.find((f) => f.name === media.name || f.content === media.url);
-    if (existingFile) {
-      if (!openFiles.some((f) => f.id === existingFile.id)) {
-        setOpenFiles((prev) => [...prev, existingFile]);
-      }
-      setActiveFileId(existingFile.id);
+    const existingMediaFile = files.find(f => f.content === media.url || f.name === media.name);
+    if (existingMediaFile) {
+      handleSelectFile(existingMediaFile);
     } else {
-      let defaultExt = 'png';
-      if (media.type === 'video') defaultExt = 'mp4';
-      else if (media.type === 'audio') defaultExt = 'mp3';
-      else if (media.type === 'file') defaultExt = 'txt';
-
-      const safeName = media.name && media.name.includes('.')
-        ? media.name
-        : (media.name ? `${media.name}.${defaultExt}` : `media_${Date.now()}.${defaultExt}`);
-
-      const newMediaFile: FileItem = {
-        id: `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        name: safeName,
-        content: media.url,
-        language: 'plaintext',
-        media_type: media.type,
-        is_folder: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+      const virtualMediaFile: FileItem = {
+        id: `media-tab-${Date.now()}`,
         project_id: projectId,
         parent_id: null,
+        name: media.name,
+        is_folder: false,
+        content: media.url,
+        media_type: media.type,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
-      setFiles((prev) => [...prev, newMediaFile]);
-      setOpenFiles((prev) => [...prev, newMediaFile]);
-      setActiveFileId(newMediaFile.id);
+      handleSelectFile(virtualMediaFile);
     }
   };
 
-  const activeFile = files.find((f) => f.id === activeFileId);
-
-  // Command Palette Items
+  // Command palette actions
   const commands: CommandItem[] = [
     {
-      id: 'toggle-terminal',
-      title: 'Toggle Terminal / Preview Dock',
-      category: 'View',
-      shortcut: 'Ctrl+`',
-      icon: <Terminal className="w-4 h-4 text-sky-400" />,
-      action: () => setIsDockOpen((prev) => !prev),
-    },
-    {
       id: 'quick-open',
-      title: 'Quick Open File...',
-      category: 'Files',
+      title: 'Quick Open...',
+      subtitle: 'Navigate to any file by name',
       shortcut: 'Ctrl+P',
-      icon: <FileSearch className="w-4 h-4" />,
+      category: 'File',
+      icon: <FileSearch className="w-4 h-4 text-sky-400" />,
       action: () => setIsQuickOpen(true),
     },
     {
       id: 'global-search',
-      title: 'Search Across Project...',
-      category: 'Search',
+      title: 'Global Search',
+      subtitle: 'Find occurrences across all workspace files',
       shortcut: 'Ctrl+Shift+F',
-      icon: <Search className="w-4 h-4" />,
+      category: 'Search',
+      icon: <Search className="w-4 h-4 text-emerald-400" />,
       action: () => setIsGlobalSearchOpen(true),
     },
     {
       id: 'new-file',
-      title: 'Create New File in Root',
-      category: 'Explorer',
-      icon: <FilePlus className="w-4 h-4" />,
+      title: 'New File',
+      subtitle: 'Create a new file in project root',
+      category: 'File',
+      icon: <FilePlus className="w-4 h-4 text-neutral-400" />,
+      action: () => handleCreateFile(null, 'untitled.js', false),
+    },
+    {
+      id: 'split-editor-right',
+      title: 'Split Editor Right',
+      subtitle: 'View two files side-by-side',
+      shortcut: 'Ctrl+\\',
+      category: 'View',
+      icon: <SplitSquareVertical className="w-4 h-4 text-sky-400" />,
+      action: handleSplitRight,
+    },
+    {
+      id: 'split-editor-down',
+      title: 'Split Editor Down',
+      subtitle: 'View two files top-and-bottom',
+      category: 'View',
+      icon: <SplitSquareHorizontal className="w-4 h-4 text-sky-400" />,
+      action: handleSplitDown,
+    },
+    {
+      id: 'toggle-sidebar',
+      title: 'Toggle Sidebar',
+      subtitle: 'Show or hide the primary sidebar',
+      shortcut: 'Ctrl+B',
+      category: 'View',
+      icon: <PanelLeftClose className="w-4 h-4 text-neutral-400" />,
+      action: () => setIsSidebarOpen(prev => !prev),
+    },
+    {
+      id: 'toggle-terminal',
+      title: 'Toggle Integrated Terminal',
+      subtitle: 'Open or collapse the bottom dock',
+      shortcut: 'Ctrl+`',
+      category: 'Terminal',
+      icon: <Terminal className="w-4 h-4 text-emerald-400" />,
       action: () => {
-        const name = prompt('Enter new file name:');
-        if (name?.trim()) handleCreateFile(null, name.trim(), false);
+        setIsDockOpen((prev) => !prev);
+        setActiveDockTab('terminal');
       },
     },
     {
-      id: 'new-folder',
-      title: 'Create New Folder in Root',
-      category: 'Explorer',
-      icon: <FolderPlus className="w-4 h-4" />,
+      id: 'toggle-problems',
+      title: 'View Problems & Diagnostics',
+      subtitle: 'Check syntax errors and warnings',
+      category: 'Diagnostics',
+      icon: <AlertCircle className="w-4 h-4 text-amber-400" />,
       action: () => {
-        const name = prompt('Enter new folder name:');
-        if (name?.trim()) handleCreateFile(null, name.trim(), true);
+        setIsDockOpen(true);
+        setActiveDockTab('problems');
       },
+    },
+    {
+      id: 'switch-project',
+      title: 'Switch Project / Workspace',
+      subtitle: 'Quickly switch to another project',
+      shortcut: 'Ctrl+Alt+O',
+      category: 'Workspace',
+      icon: <FolderOpen className="w-4 h-4 text-sky-400" />,
+      action: () => setIsProjectSwitcherOpen(true),
+    },
+    {
+      id: 'keyboard-shortcuts',
+      title: 'Keyboard Shortcuts Reference',
+      subtitle: 'View full cheat sheet of IDE shortcuts',
+      category: 'Help',
+      icon: <Settings className="w-4 h-4 text-neutral-400" />,
+      action: () => setIsShortcutsOpen(true),
     },
     {
       id: 'settings',
-      title: 'Open Editor Settings',
+      title: 'IDE Preferences & Themes',
+      subtitle: 'Customize themes, font size, minimap and more',
+      shortcut: 'Ctrl+,',
       category: 'Preferences',
-      icon: <Settings className="w-4 h-4" />,
-      action: () => setIsSettingsOpen(true),
-    },
-    {
-      id: 'invite',
-      title: 'Invite Collaborators / Manage Members',
-      category: 'Collaboration',
-      icon: <UserPlus className="w-4 h-4" />,
-      action: () => setIsInviteOpen(true),
+      icon: <Settings className="w-4 h-4 text-neutral-400" />,
+      action: () => setIsProfileModalOpen(true),
     },
   ];
 
-  if (loading || authLoading) {
+  // Activity Bar View change handler
+  const handleSelectActivityView = (view: ActivityView) => {
+    if (activeActivityView === view) {
+      setIsSidebarOpen(!isSidebarOpen);
+    } else {
+      setActiveActivityView(view);
+      setIsSidebarOpen(true);
+    }
+  };
+
+  if (authLoading || loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen w-screen bg-[#1e1e1e] text-neutral-400 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-sky-400" />
-        <span className="text-sm font-medium">Authenticating & entering collaborative workspace...</span>
+      <div 
+        className="h-screen w-screen flex flex-col items-center justify-center gap-4 select-none"
+        style={{ backgroundColor: 'var(--ide-bg)', color: 'var(--ide-text)' }}
+      >
+        <Loader2 className="w-8 h-8 animate-spin text-sky-500" />
+        <p className="text-sm font-medium text-neutral-400">Loading CodeCollab IDE Workspace...</p>
       </div>
     );
   }
 
-  // Unauthorized screen
-  if (unauthorized) {
+  if (unauthorized || !project) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen w-screen bg-[#181818] text-neutral-400 p-6 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mb-4">
-          <ShieldAlert className="w-7 h-7" />
-        </div>
-        <h2 className="text-xl font-bold text-white mb-2">Access Denied (403)</h2>
-        <p className="text-xs text-neutral-400 max-w-sm mb-6">
-          You are not authorized to view or edit this project. You must be added as a member by the project owner.
+      <div 
+        className="h-screen w-screen flex flex-col items-center justify-center gap-4 text-neutral-300 p-6 select-none"
+        style={{ backgroundColor: 'var(--ide-bg)' }}
+      >
+        <ShieldAlert className="w-12 h-12 text-rose-500" />
+        <h2 className="text-xl font-bold text-white">Access Denied</h2>
+        <p className="text-sm text-neutral-400 max-w-md text-center">
+          You do not have permission to view or edit this project workspace.
         </p>
         <Link
           href="/"
-          className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-medium transition-colors"
+          className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded text-sm font-medium transition-colors"
         >
           Return to Dashboard
         </Link>
@@ -646,267 +1004,388 @@ export function Workspace({ projectId }: WorkspaceProps) {
     );
   }
 
-  if (!project) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen w-screen bg-[#1e1e1e] text-neutral-400 gap-4">
-        <h2 className="text-lg font-bold text-white">Project Not Found</h2>
-        <p className="text-xs">The project may have been deleted.</p>
-        <Link href="/" className="px-4 py-2 bg-sky-600 text-white rounded text-xs font-medium">
-          Return to Dashboard
-        </Link>
-      </div>
-    );
-  }
+  const activeGroup = getActiveGroup();
+  const activeFile = activeGroup.openFiles.find(f => f.id === activeGroup.activeFileId) || null;
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#1e1e1e] text-[#cccccc] overflow-hidden">
-      {/* Top Navbar */}
-      <header className="h-10 bg-[#252526] border-b border-[#333333] px-3 flex items-center justify-between select-none z-20">
-        <div className="flex items-center gap-3">
+    <div 
+      className="h-screen w-screen flex flex-col overflow-hidden text-neutral-200 select-none"
+      style={{
+        backgroundColor: 'var(--ide-bg)',
+        color: 'var(--ide-text)',
+      }}
+    >
+      {/* 1. Top IDE App Header */}
+      <header 
+        className="h-9 border-b flex items-center justify-between px-2 text-xs flex-shrink-0 z-30"
+        style={{
+          backgroundColor: 'var(--ide-activity)',
+          borderColor: 'var(--ide-border)',
+        }}
+      >
+        {/* Left branding & Workspace Switcher */}
+        <div className="flex items-center gap-2">
           <Link
             href="/"
-            className="flex items-center gap-1 text-xs text-neutral-300 hover:text-white px-2 py-1 rounded hover:bg-[#333333] transition-colors"
-            title="Back to Dashboard"
+            className="flex items-center gap-1.5 px-1.5 py-1 text-neutral-400 hover:text-white rounded hover:bg-white/10 transition-colors"
+            title="Return to Dashboard"
           >
             <ChevronLeft className="w-4 h-4" />
-            <span className="font-semibold hidden sm:inline">Projects</span>
           </Link>
 
-          <div className="h-4 w-px bg-neutral-600" />
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-white tracking-wide">
+          <button
+            onClick={() => setIsProjectSwitcherOpen(true)}
+            className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/10 transition-colors group text-left"
+            title="Switch Workspace (Ctrl+Alt+O)"
+          >
+            <span className="font-bold text-white tracking-wide group-hover:text-sky-300 transition-colors">
+              CodeCollab
+            </span>
+            <span className="text-neutral-500">/</span>
+            <span className="font-medium text-neutral-200 truncate max-w-[140px] group-hover:underline">
               {project.name}
             </span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded font-medium ${
-              role === 'owner' 
-                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' 
-                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-            }`}>
-              {role === 'owner' ? 'Owner' : 'Member'}
-            </span>
-          </div>
+          </button>
+
+          <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded font-bold uppercase bg-sky-500/20 text-sky-300 border border-sky-500/30">
+            {role}
+          </span>
         </div>
 
-        {/* Center Quick Search Button */}
-        <div className="hidden md:flex items-center gap-2">
+        {/* Center: Quick Open / Command Search Box */}
+        <div className="flex-1 max-w-md mx-4 hidden md:block">
           <button
-            onClick={() => setIsCommandPaletteOpen(true)}
-            className="flex items-center gap-2 px-3 py-1 bg-[#1e1e1e] hover:bg-[#2a2a2a] text-neutral-400 hover:text-white rounded-lg border border-[#3c3c3c] text-xs transition-colors"
+            onClick={() => setIsQuickOpen(true)}
+            className="w-full flex items-center justify-between px-3 py-1 rounded-md text-xs text-neutral-400 border transition-all hover:border-neutral-500 hover:text-neutral-200"
+            style={{
+              backgroundColor: 'var(--ide-card-bg)',
+              borderColor: 'var(--ide-border)',
+            }}
           >
-            <Search className="w-3.5 h-3.5" />
-            <span>Search commands & files...</span>
-            <kbd className="text-[10px] bg-[#333333] px-1.5 py-0.5 rounded border border-[#444444]">
-              Ctrl+K
+            <div className="flex items-center gap-2">
+              <Search className="w-3.5 h-3.5 text-neutral-400" />
+              <span>Search files ({project.name})</span>
+            </div>
+            <kbd className="px-1.5 py-0.2 bg-black/40 rounded text-[10px] text-neutral-400 border border-white/10 font-mono">
+              Ctrl+P
             </kbd>
           </button>
         </div>
 
-        {/* Right Controls */}
+        {/* Right Tools & Presence */}
         <div className="flex items-center gap-2">
-          {/* Toggle Terminal / Comm Dock Button */}
-          <button
-            onClick={() => setIsDockOpen(!isDockOpen)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors border ${
-              isDockOpen
-                ? 'bg-sky-600 text-white border-sky-500'
-                : 'bg-[#1e1e1e] text-neutral-300 hover:text-white border-[#3c3c3c] hover:bg-[#2a2a2a]'
-            }`}
-            title="Toggle Terminal & Communication Dock (Ctrl+`)"
-          >
-            <Terminal className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Dock</span>
-            {unreadCount > 0 && !isDockOpen && (
-              <span className="px-1.5 py-0.2 rounded-full bg-sky-500 text-[9px] font-bold text-white">
-                {unreadCount}
-              </span>
-            )}
-          </button>
-
-          {/* Quick Voice Call Indicator Button */}
-          {isInVoice ? (
-            <button
-              onClick={() => setIsDockOpen(true)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-medium animate-pulse"
-              title="You are in voice chat. Click to open dock."
-            >
-              <Mic className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Voice Active</span>
-            </button>
-          ) : voicePeers.length > 0 ? (
-            <button
-              onClick={() => {
-                setIsDockOpen(true);
-                joinVoice();
-              }}
-              className="flex items-center gap-1 px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-[#3c3c3c] text-xs font-medium"
-              title="Collaborators are in voice. Click to join."
-            >
-              <Mic className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Join Voice ({voicePeers.length})</span>
-            </button>
-          ) : null}
-
-          {/* Active Collaborators Presence */}
+          {/* Peer Presence indicator */}
           <ProjectPresence
             projectId={projectId}
-            activeFileId={activeFileId}
-            activeFileName={activeFile ? activeFile.name : null}
+            activeFileId={activeFile?.id || null}
+            activeFileName={activeFile?.name || null}
             members={members}
             isInVoice={isInVoice}
-            voicePeers={voicePeers}
+            voicePeers={voicePeers.map(vp => ({ userId: vp.userId, userName: vp.userName, isMuted: vp.isMuted }))}
+            onPresenceChange={(peers) => {
+              // Group peers by active file
+              const fileMap: Record<string, { id: string; name: string; color: string }[]> = {};
+              const peerList: any[] = [];
+              peers.forEach(p => {
+                peerList.push({
+                  id: p.id,
+                  name: p.name,
+                  color: p.color,
+                  currentFileId: p.currentFileId,
+                  currentFileName: files.find(f => f.id === p.currentFileId)?.name || p.fileName,
+                  inVoice: p.inVoice,
+                });
+                if (p.currentFileId) {
+                  if (!fileMap[p.currentFileId]) fileMap[p.currentFileId] = [];
+                  fileMap[p.currentFileId].push({ id: p.id, name: p.name, color: p.color });
+                }
+              });
+              setCollaboratorsByFile(fileMap);
+              setOnlinePeersList(peerList);
+            }}
           />
-
-          {/* Export Project ZIP Button */}
-          <button
-            onClick={handleExportProject}
-            title="Export Project as ZIP"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#1e1e1e] hover:bg-[#2a2a2a] text-neutral-300 hover:text-white border border-[#3c3c3c] text-xs font-medium transition-colors"
-          >
-            <Download className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden lg:inline">Export</span>
-          </button>
 
           {/* GitHub Sync Button */}
           <button
             onClick={() => setIsGitHubOpen(true)}
-            title="Connect & Sync with GitHub"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#1e1e1e] hover:bg-[#2a2a2a] text-neutral-300 hover:text-white border border-[#3c3c3c] text-xs font-medium transition-colors"
+            className="flex items-center gap-1 px-2 py-1 rounded hover:bg-white/10 text-neutral-300 hover:text-white transition-colors"
+            title="GitHub Integration"
           >
-            <Github className="w-3.5 h-3.5 text-neutral-300" />
-            <span className="hidden lg:inline">GitHub</span>
+            <Github className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline text-[11px]">GitHub</span>
           </button>
 
-          {/* Share / Invite Collaborators Button */}
+          {/* Export Project ZIP */}
+          <button
+            onClick={handleExportProject}
+            className="p-1.5 rounded hover:bg-white/10 text-neutral-300 hover:text-white transition-colors"
+            title="Export Project ZIP"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Invite Teammates */}
           <button
             onClick={() => setIsInviteOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition-colors shadow-sm"
+            className="flex items-center gap-1 px-2 py-1 rounded font-medium text-white transition-colors"
+            style={{ backgroundColor: 'var(--ide-accent)' }}
           >
             <UserPlus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Collaborators</span>
+            <span className="hidden sm:inline text-[11px]">Invite</span>
           </button>
 
-          {/* Editor Settings button */}
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            title="Editor Settings"
-            className="p-1.5 rounded hover:bg-[#333333] text-neutral-400 hover:text-white transition-colors"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-
-          {/* User profile dropdown */}
-          <UserMenu />
+          {/* User Account Menu */}
+          <UserMenu onOpenProfileModal={() => setIsProfileModalOpen(true)} />
         </div>
       </header>
 
-      {/* Main Workspace Body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar: File Tree */}
-        <aside className="w-64 border-r border-[#3c3c3c] bg-[#252526] flex flex-col flex-shrink-0">
-          <FileTree
-            files={files}
-            activeFileId={activeFileId}
-            onSelectFile={handleSelectFile}
-            onCreateFile={handleCreateFile}
-            onRenameFile={handleRenameFile}
-            onDeleteFile={handleDeleteFile}
-            onUploadFiles={handleUploadFiles}
-            onUploadFolder={handleUploadFolder}
-          />
-        </aside>
+      {/* 2. Main Middle Workspace Layout */}
+      <div className="flex-1 flex min-h-0 relative">
+        {/* Persistent Activity Bar */}
+        <ActivityBar
+          activeView={isSidebarOpen ? activeActivityView : null}
+          onSelectView={handleSelectActivityView}
+          collaboratorCount={members.length}
+          gitChangedCount={0}
+          unreadNotifications={notifications.filter(n => !n.read).length}
+          onOpenSettings={() => setIsProfileModalOpen(true)}
+          onOpenShortcuts={() => setIsShortcutsOpen(true)}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
+          onOpenNotifications={() => setIsNotificationsOpen(prev => !prev)}
+          userAvatar={user?.avatar_url}
+          userName={user?.full_name || 'User'}
+        />
 
-        {/* Center / Right: Editor Area + Dock in left/right/bottom orientation */}
-        <div className={`flex-1 flex min-w-0 bg-[#1e1e1e] overflow-hidden ${
-          isDockOpen && (dockOrientation === 'left' || dockOrientation === 'right')
-            ? 'flex-row'
-            : 'flex-col'
-        }`}>
-          {/* Dock on Left (if orientation === 'left') */}
-          {isDockOpen && dockOrientation === 'left' && (
-            <BottomDock
-              projectId={projectId}
-              projectName={project.name}
-              isOpen={isDockOpen}
-              onClose={() => setIsDockOpen(false)}
-              activeFileName={activeFile?.name}
-              userId={user?.id || 'guest'}
-              userName={user?.full_name || 'Anonymous Peer'}
-              userEmail={user?.email}
-              userAvatar={user?.avatar_url}
-              userColor={userColor}
-              unreadCount={unreadCount}
-              onClearUnread={() => setUnreadCount(0)}
-              onNewMessageReceived={() => {
-                if (!isDockOpen) {
-                  setUnreadCount((c) => c + 1);
-                }
-              }}
-              onActivityEvent={(details) => logAndBroadcastActivity('media_uploaded', details)}
-              isInVoice={isInVoice}
-              isMuted={isMuted}
-              voicePeers={voicePeers}
-              voiceConnectionState={voiceConnectionState}
-              onJoinVoice={joinVoice}
-              onLeaveVoice={leaveVoice}
-              onToggleMute={toggleMute}
-              orientation={dockOrientation}
-              onChangeOrientation={handleOrientationChange}
-            />
-          )}
+        {/* Collapsible Sidebar */}
+        {isSidebarOpen && activeActivityView && (
+          <div 
+            className="w-64 h-full flex flex-col border-r flex-shrink-0 z-20 transition-all duration-100"
+            style={{
+              backgroundColor: 'var(--ide-sidebar)',
+              borderColor: 'var(--ide-border)',
+            }}
+          >
+            {activeActivityView === 'explorer' && (
+              <FileTree
+                files={files}
+                activeFileId={activeFile?.id || null}
+                onSelectFile={handleSelectFile}
+                onCreateFile={handleCreateFile}
+                onRenameFile={handleRenameFile}
+                onDeleteFile={handleDeleteFile}
+                onUploadFiles={handleUploadFiles}
+                onUploadFolder={handleUploadFolder}
+                collaboratorsByFile={collaboratorsByFile}
+              />
+            )}
 
-          {/* Main Editor Center Area */}
-          <main className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e] overflow-hidden relative">
-            {/* Tabs */}
-            <OpenTabs
-              openFiles={openFiles}
-              activeFileId={activeFileId}
-              onSelectTab={handleSelectFile}
-              onCloseTab={handleCloseTab}
-            />
-
-            {/* Media Viewer, Monaco Editor, or Empty State */}
-            <div className="flex-1 w-full h-full relative overflow-hidden">
-              {activeFile ? (
-                (isMediaFile(activeFile.name).isMedia || !!activeFile.media_type) ? (
-                  <MediaViewer
-                    key={activeFile.id}
-                    file={activeFile}
-                    projectId={projectId}
-                  />
-                ) : (
-                  <MonacoEditorWrapper
-                    key={activeFile.id}
-                    projectId={projectId}
-                    file={activeFile}
-                    settings={settings}
-                    onContentSaved={(latestText) => {
-                      setFiles((prev) =>
-                        prev.map((f) => (f.id === activeFile.id ? { ...f, content: latestText } : f))
-                      );
-                      setOpenFiles((prev) =>
-                        prev.map((f) => (f.id === activeFile.id ? { ...f, content: latestText } : f))
-                      );
-                      syncFileToWorkspace(activeFile.name, latestText);
-                    }}
-                    onCursorChange={(line, col) => setCursorPos({ line, col })}
-                  />
-                )
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-3 select-none">
-                  <Command className="w-12 h-12 text-neutral-600" />
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-neutral-400">No file is open</p>
-                    <p className="text-xs text-neutral-500 mt-1">
-                      Press <kbd className="px-1.5 py-0.5 bg-[#252526] rounded text-neutral-300 border border-[#3c3c3c]">Ctrl+P</kbd> to open a file, or <kbd className="px-1.5 py-0.5 bg-[#252526] rounded text-neutral-300 border border-[#3c3c3c]">Ctrl+`</kbd> to open terminal.
-                    </p>
-                  </div>
+            {activeActivityView === 'search' && (
+              <div className="flex flex-col h-full">
+                <div className="p-3 border-b flex items-center justify-between font-bold text-[11px] uppercase tracking-wider text-neutral-400" style={{ borderColor: 'var(--ide-border)' }}>
+                  <span>Search Workspace</span>
+                  <button onClick={() => setIsGlobalSearchOpen(true)} className="p-1 hover:text-white rounded hover:bg-white/10" title="Full Search Window">
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              )}
+                <div className="p-3">
+                  <button
+                    onClick={() => setIsGlobalSearchOpen(true)}
+                    className="w-full py-2 px-3 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    <span>Open Global Search (Ctrl+Shift+F)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeActivityView === 'git' && (
+              <div className="flex flex-col h-full">
+                <GitPanel
+                  projectId={projectId}
+                  projectName={project.name}
+                  userName={user?.full_name || 'Anonymous Peer'}
+                  userEmail={user?.email}
+                  onActivityEvent={(d) => logAndBroadcastActivity('media_uploaded', d)}
+                />
+              </div>
+            )}
+
+            {activeActivityView === 'collaborators' && (
+              <CollaboratorsPanel
+                members={members}
+                onlinePeers={onlinePeersList}
+                voicePeers={voicePeers}
+                isInVoice={isInVoice}
+                onInviteClick={() => setIsInviteOpen(true)}
+                onSelectMemberProfile={(uid) => setSelectedPublicUserId(uid)}
+                onJumpToFile={(fid) => handleNavigateToLocation(fid)}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Center: Editor Area + Groups/Splits */}
+        <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
+          {/* Main Editor Center Container with Split Layout support */}
+          <main className="flex-1 flex min-w-0 overflow-hidden relative">
+            <div 
+              className={`flex-1 flex w-full h-full min-w-0 ${
+                splitLayout === 'vertical'
+                  ? 'flex-row divide-x'
+                  : splitLayout === 'horizontal'
+                  ? 'flex-col divide-y'
+                  : 'flex-col'
+              }`}
+              style={{ borderColor: 'var(--ide-border)' }}
+            >
+              {editorGroups.map((group) => {
+                const groupActiveFile = group.openFiles.find(f => f.id === group.activeFileId) || null;
+                const isGroupActive = group.id === activeGroupId;
+
+                return (
+                  <div
+                    key={group.id}
+                    onClick={() => setActiveGroupId(group.id)}
+                    className={`flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative ${
+                      isGroupActive ? 'ring-1 ring-inset ring-sky-500/20' : ''
+                    }`}
+                    style={{ backgroundColor: 'var(--ide-bg)' }}
+                  >
+                    {/* Tabs for this group */}
+                    <OpenTabs
+                      openFiles={group.openFiles}
+                      activeFileId={group.activeFileId}
+                      onSelectTab={(f) => handleSelectFile(f, group.id)}
+                      onCloseTab={(fid) => handleCloseTabInGroup(group.id, fid)}
+                      onCloseOthers={(fid) => handleCloseOthersInGroup(group.id, fid)}
+                      onCloseToRight={(fid) => handleCloseToRightInGroup(group.id, fid)}
+                      onCloseAll={() => handleCloseAllInGroup(group.id)}
+                      onSplitRight={splitLayout === 'single' ? handleSplitRight : undefined}
+                      onSplitDown={splitLayout === 'single' ? handleSplitDown : undefined}
+                      onCloseGroup={splitLayout !== 'single' ? () => handleCloseGroup(group.id) : undefined}
+                      canCloseGroup={splitLayout !== 'single'}
+                      collaboratorsByFile={collaboratorsByFile}
+                    />
+
+                    {/* Breadcrumbs for this group */}
+                    <Breadcrumbs
+                      file={groupActiveFile}
+                      allFiles={files}
+                    />
+
+                    {/* Editor / Media Content */}
+                    <div className="flex-1 w-full h-full relative overflow-hidden">
+                      {groupActiveFile ? (
+                        (isMediaFile(groupActiveFile.name).isMedia || !!groupActiveFile.media_type) ? (
+                          <MediaViewer
+                            key={groupActiveFile.id}
+                            file={groupActiveFile}
+                            projectId={projectId}
+                          />
+                        ) : (
+                          <MonacoEditorWrapper
+                            key={groupActiveFile.id}
+                            projectId={projectId}
+                            file={groupActiveFile}
+                            settings={settings}
+                            targetLocation={isGroupActive ? targetJumpLocation : null}
+                            onContentSaved={(latestText) => {
+                              setFiles((prev) =>
+                                prev.map((f) => (f.id === groupActiveFile.id ? { ...f, content: latestText } : f))
+                              );
+                              setEditorGroups((prev) =>
+                                prev.map((g) => ({
+                                  ...g,
+                                  openFiles: g.openFiles.map((f) => (f.id === groupActiveFile.id ? { ...f, content: latestText } : f)),
+                                }))
+                              );
+                              syncFileToWorkspace(groupActiveFile.name, latestText);
+                            }}
+                            onCursorChange={(line, col) => {
+                              if (isGroupActive) setCursorPos({ line, col });
+                            }}
+                            onProblemsChange={(newProblems) => {
+                              setProblems((prev) => {
+                                const filtered = prev.filter(p => p.fileId !== groupActiveFile.id);
+                                return [...filtered, ...newProblems];
+                              });
+                            }}
+                          />
+                        )
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-3 select-none">
+                          <Command className="w-12 h-12 text-neutral-600 opacity-60" />
+                          <div className="text-center">
+                            <p className="text-sm font-medium text-neutral-400">No file open in this editor</p>
+                            <p className="text-xs text-neutral-500 mt-1">
+                              Press <kbd className="px-1.5 py-0.5 rounded text-neutral-300 border border-neutral-700 bg-neutral-800">Ctrl+P</kbd> to quick open, or select a file from Explorer.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Dock on Bottom (if orientation === 'bottom') */}
-            {isDockOpen && dockOrientation === 'bottom' && (
+            {/* Contextual Chat Toast Notification in Editor */}
+            {chatToast && (
+              <div 
+                className="absolute bottom-4 right-4 z-40 max-w-sm p-3 rounded-lg shadow-2xl border flex items-start gap-2.5 animate-in slide-in-from-bottom-3 duration-200"
+                style={{
+                  backgroundColor: 'var(--ide-card-bg)',
+                  borderColor: 'var(--ide-border)',
+                }}
+              >
+                <div className="mt-0.5">
+                  <MessageSquare className="w-4 h-4 text-sky-400" />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white text-[11px]">{chatToast.senderName}</span>
+                    <button 
+                      onClick={() => setChatToast(null)} 
+                      className="text-neutral-500 hover:text-white p-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <p className="text-neutral-300 text-[11.5px] mt-0.5 line-clamp-2 leading-relaxed">{chatToast.message}</p>
+
+                  <div className="flex items-center gap-2 mt-2">
+                    {chatToast.filePath ? (
+                      <button
+                        onClick={() => {
+                          handleNavigateToLocation(chatToast.filePath!, chatToast.line);
+                          setChatToast(null);
+                        }}
+                        className="px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium text-[10.5px] flex items-center gap-1"
+                      >
+                        <FileCode className="w-3 h-3" />
+                        <span>Open in Editor ({chatToast.filePath}:{chatToast.line || 1})</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setIsDockOpen(true);
+                          setActiveDockTab('chat');
+                          setChatToast(null);
+                        }}
+                        className="px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium text-[10.5px]"
+                      >
+                        Open Chat
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Dock on Right (if orientation === 'right') */}
+            {isDockOpen && dockOrientation === 'right' && (
               <BottomDock
                 projectId={projectId}
                 projectName={project.name}
@@ -921,7 +1400,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 unreadCount={unreadCount}
                 onClearUnread={() => setUnreadCount(0)}
                 onNewMessageReceived={() => {
-                  if (!isDockOpen) {
+                  if (!isDockOpen || activeDockTab !== 'chat') {
                     setUnreadCount((c) => c + 1);
                   }
                 }}
@@ -935,12 +1414,20 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onToggleMute={toggleMute}
                 orientation={dockOrientation}
                 onChangeOrientation={handleOrientationChange}
+                onOpenMediaInEditor={handleOpenMediaInEditor}
+                problems={problems}
+                onNavigateToProblem={handleNavigateToLocation}
+                outputLogs={outputLogs}
+                onClearOutputLogs={() => setOutputLogs([])}
+                activeTab={activeDockTab}
+                onTabChange={setActiveDockTab}
+                onNavigateToFile={handleNavigateToLocation}
               />
             )}
           </main>
 
-          {/* Dock on Right (if orientation === 'right') */}
-          {isDockOpen && dockOrientation === 'right' && (
+          {/* Dock on Bottom (if orientation === 'bottom') */}
+          {isDockOpen && dockOrientation === 'bottom' && (
             <BottomDock
               projectId={projectId}
               projectName={project.name}
@@ -955,7 +1442,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
               unreadCount={unreadCount}
               onClearUnread={() => setUnreadCount(0)}
               onNewMessageReceived={() => {
-                if (!isDockOpen) {
+                if (!isDockOpen || activeDockTab !== 'chat') {
                   setUnreadCount((c) => c + 1);
                 }
               }}
@@ -969,6 +1456,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
               onToggleMute={toggleMute}
               orientation={dockOrientation}
               onChangeOrientation={handleOrientationChange}
+              onOpenMediaInEditor={handleOpenMediaInEditor}
+              problems={problems}
+              onNavigateToProblem={handleNavigateToLocation}
+              outputLogs={outputLogs}
+              onClearOutputLogs={() => setOutputLogs([])}
+              activeTab={activeDockTab}
+              onTabChange={setActiveDockTab}
+              onNavigateToFile={handleNavigateToLocation}
             />
           )}
 
@@ -988,7 +1483,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
               unreadCount={unreadCount}
               onClearUnread={() => setUnreadCount(0)}
               onNewMessageReceived={() => {
-                if (!isDockOpen) {
+                if (!isDockOpen || activeDockTab !== 'chat') {
                   setUnreadCount((c) => c + 1);
                 }
               }}
@@ -1003,55 +1498,121 @@ export function Workspace({ projectId }: WorkspaceProps) {
               orientation={dockOrientation}
               onChangeOrientation={handleOrientationChange}
               onOpenMediaInEditor={handleOpenMediaInEditor}
+              problems={problems}
+              onNavigateToProblem={handleNavigateToLocation}
+              outputLogs={outputLogs}
+              onClearOutputLogs={() => setOutputLogs([])}
+              activeTab={activeDockTab}
+              onTabChange={setActiveDockTab}
+              onNavigateToFile={handleNavigateToLocation}
             />
           )}
         </div>
       </div>
 
-      {/* Bottom Status Bar */}
-      <footer className="h-6 bg-[#007acc] text-white px-3 flex items-center justify-between text-[11px] font-medium select-none z-20">
+      {/* 3. Bottom Developer Status Bar */}
+      <footer 
+        className="h-6 px-3 flex items-center justify-between text-[11px] font-medium select-none z-30"
+        style={{
+          backgroundColor: 'var(--ide-status-bg)',
+          color: 'var(--ide-status-text)',
+        }}
+      >
         <div className="flex items-center gap-4">
+          {/* Toggle Terminal / Dock Button */}
           <button
-            onClick={() => setIsDockOpen(!isDockOpen)}
+            onClick={() => {
+              setIsDockOpen(!isDockOpen);
+              if (!isDockOpen) setActiveDockTab('terminal');
+            }}
             className="flex items-center gap-1.5 hover:underline font-semibold"
           >
             <Terminal className="w-3 h-3" />
-            <span>{isDockOpen ? 'Hide Dock' : 'Dock (Ctrl+`)'}</span>
+            <span>{isDockOpen ? 'Hide Dock' : 'Terminal (Ctrl+`)'}</span>
           </button>
 
           {/* Git Branch Indicator */}
           <button
-            onClick={() => setIsDockOpen(true)}
-            className="flex items-center gap-1 text-sky-200 hover:text-white hover:underline font-mono"
-            title="Current Git Branch. Click to open Source Control."
+            onClick={() => {
+              setIsDockOpen(true);
+              setActiveDockTab('git');
+            }}
+            className="flex items-center gap-1 opacity-90 hover:opacity-100 hover:underline font-mono"
+            title="Current Git Branch"
           >
-            <GitBranch className="w-3 h-3 text-sky-300" />
+            <GitBranch className="w-3 h-3" />
             <span>{currentGitBranch}</span>
           </button>
 
+          {/* Problems Indicator */}
+          <button
+            onClick={() => {
+              setIsDockOpen(true);
+              setActiveDockTab('problems');
+            }}
+            className="flex items-center gap-1.5 opacity-90 hover:opacity-100 hover:underline"
+            title="Diagnostics"
+          >
+            <AlertCircle className="w-3 h-3" />
+            <span>{problems.filter(p => p.severity === 'error').length}</span>
+            <AlertTriangle className="w-3 h-3 ml-1" />
+            <span>{problems.filter(p => p.severity === 'warning').length}</span>
+          </button>
+
+          {/* Voice status */}
           {isInVoice && (
-            <span className="flex items-center gap-1 text-emerald-200 bg-emerald-700/50 px-2 py-0.5 rounded font-semibold">
-              <Mic className="w-3 h-3 text-emerald-300 animate-pulse" />
-              <span>Voice: {isMuted ? 'Muted' : 'Speaking'} ({voicePeers.length + 1})</span>
+            <span className="flex items-center gap-1 bg-black/20 px-2 py-0.5 rounded font-semibold text-emerald-200">
+              <Mic className="w-3 h-3 animate-pulse" />
+              <span>Voice ({voicePeers.length + 1})</span>
             </span>
           )}
 
-          {activeFile && (
-            <span>
-              Language: <span className="font-semibold uppercase">{activeFile.language || 'TEXT'}</span>
-            </span>
-          )}
+          {/* Collaborator count */}
+          <span className="flex items-center gap-1 opacity-90">
+            <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+            <span>{members.length} Collaborator{members.length > 1 ? 's' : ''}</span>
+          </span>
         </div>
 
-        <div className="flex items-center gap-4 text-sky-100">
+        <div className="flex items-center gap-4 opacity-90">
           <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
           <span>Spaces: {settings.tabSize}</span>
           <span>UTF-8</span>
-          <span className="font-semibold">CodeCollab Level 5</span>
+          <span>LF</span>
+          {activeFile && (
+            <span className="uppercase font-semibold">{activeFile.language || 'TEXT'}</span>
+          )}
+          <span className="font-semibold">CodeCollab IDE</span>
         </div>
       </footer>
 
-      {/* Modals & Tools */}
+      {/* Notifications Popover */}
+      <NotificationsPopover
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        notifications={notifications}
+        onMarkAllRead={() => {
+          if (user) DataService.markAllNotificationsRead(user.id);
+          setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+        }}
+        onAcceptPartnerRequest={async (reqId) => {
+          await DataService.respondToPartnerRequest(reqId, true);
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+        }}
+        onDeclinePartnerRequest={async (reqId) => {
+          await DataService.respondToPartnerRequest(reqId, false);
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+        }}
+        onOpenProject={(pid) => {
+          setIsNotificationsOpen(false);
+          window.location.href = `/project/${pid}`;
+        }}
+        onDismissNotification={(id) => {
+          setNotifications(prev => prev.filter(n => n.id !== id));
+        }}
+      />
+
+      {/* Modals & IDE Tools */}
       <InviteMemberModal
         isOpen={isInviteOpen}
         onClose={() => setIsInviteOpen(false)}
@@ -1096,7 +1657,43 @@ export function Workspace({ projectId }: WorkspaceProps) {
         currentBranch={currentGitBranch}
         onSyncComplete={() => {
           logAndBroadcastActivity('media_uploaded', 'Synchronized changes with GitHub');
+          appendOutputLog('git', 'GitHub sync completed.');
         }}
+      />
+
+      {user && (
+        <UserProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          currentUser={user}
+          settings={settings}
+          onUpdateSettings={updateSettings}
+        />
+      )}
+
+      {selectedPublicUserId && (
+        <PublicProfileModal
+          isOpen={!!selectedPublicUserId}
+          userId={selectedPublicUserId}
+          currentUserId={user?.id || 'guest'}
+          onClose={() => setSelectedPublicUserId(null)}
+          onInviteToProject={() => {
+            setSelectedPublicUserId(null);
+            setIsInviteOpen(true);
+          }}
+        />
+      )}
+
+      <ProjectSwitcherModal
+        isOpen={isProjectSwitcherOpen}
+        onClose={() => setIsProjectSwitcherOpen(false)}
+        currentProjectId={projectId}
+        userId={user?.id || 'guest'}
+      />
+
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
     </div>
   );

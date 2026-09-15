@@ -21,6 +21,7 @@ interface ProjectPresenceProps {
   members: ProjectMember[];
   isInVoice?: boolean;
   voicePeers?: { userId: string; userName: string; isMuted: boolean }[];
+  onPresenceChange?: (peers: ExtendedPresenceUser[]) => void;
 }
 
 export function ProjectPresence({
@@ -30,6 +31,7 @@ export function ProjectPresence({
   members,
   isInVoice = false,
   voicePeers = [],
+  onPresenceChange,
 }: ProjectPresenceProps) {
   const { user } = useAuth();
   const [onlineUsers, setOnlineUsers] = useState<ExtendedPresenceUser[]>([]);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { FileItem } from '@/lib/types';
 import { FileIcon } from './FileIcon';
 import { 
@@ -14,8 +14,15 @@ import {
   Check, 
   X,
   Upload,
-  Loader2
+  Loader2,
+  Copy
 } from 'lucide-react';
+
+interface CollaboratorPeer {
+  id: string;
+  name: string;
+  color: string;
+}
 
 interface FileTreeProps {
   files: FileItem[];
@@ -26,6 +33,7 @@ interface FileTreeProps {
   onDeleteFile: (fileId: string) => Promise<void>;
   onUploadFiles?: (parentId: string | null, files: FileList) => Promise<void>;
   onUploadFolder?: (parentId: string | null, files: FileList) => Promise<void>;
+  collaboratorsByFile?: Record<string, CollaboratorPeer[]>;
 }
 
 export function FileTree({
@@ -37,6 +45,7 @@ export function FileTree({
   onDeleteFile,
   onUploadFiles,
   onUploadFolder,
+  collaboratorsByFile = {},
 }: FileTreeProps) {
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({
     'folder-src': true // default open common folder if present
@@ -47,8 +56,28 @@ export function FileTree({
   const [createName, setCreateName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [targetUploadParent, setTargetUploadParent] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    item: FileItem | null;
+  } | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Dismiss context menu on click outside
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    if (contextMenu) {
+      window.addEventListener('click', handleClick);
+      return () => window.removeEventListener('click', handleClick);
+    }
+  }, [contextMenu]);
 
   const toggleFolder = (folderId: string) => {
     setOpenFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
@@ -58,6 +87,7 @@ export function FileTree({
     e.stopPropagation();
     setEditingId(item.id);
     setEditName(item.name);
+    setContextMenu(null);
   };
 
   const handleSaveRename = async (fileId: string) => {
@@ -95,17 +125,13 @@ export function FileTree({
   };
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files;
-    if (!selectedFiles || selectedFiles.length === 0 || !onUploadFiles) return;
-
-    setUploading(true);
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0 || !onUploadFiles) return;
     try {
-      await onUploadFiles(targetUploadParent, selectedFiles);
-      if (targetUploadParent) {
-        setOpenFolders(prev => ({ ...prev, [targetUploadParent]: true }));
-      }
+      setUploading(true);
+      await onUploadFiles(targetUploadParent, fileList);
     } catch (err) {
-      console.error('Failed to upload files:', err);
+      console.error('File upload failed:', err);
     } finally {
       setUploading(false);
       setTargetUploadParent(null);
@@ -113,38 +139,63 @@ export function FileTree({
   };
 
   const handleFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files;
-    if (!selectedFiles || selectedFiles.length === 0) return;
-
-    setUploading(true);
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0 || !onUploadFolder) return;
     try {
-      if (onUploadFolder) {
-        await onUploadFolder(targetUploadParent, selectedFiles);
-      } else if (onUploadFiles) {
-        await onUploadFiles(targetUploadParent, selectedFiles);
-      }
-      if (targetUploadParent) {
-        setOpenFolders(prev => ({ ...prev, [targetUploadParent]: true }));
-      }
+      setUploading(true);
+      await onUploadFolder(targetUploadParent, fileList);
     } catch (err) {
-      console.error('Failed to upload folder:', err);
+      console.error('Folder upload failed:', err);
     } finally {
       setUploading(false);
       setTargetUploadParent(null);
     }
   };
 
-  // Build recursive tree
-  const rootFiles = files.filter(f => f.parent_id === null);
+  // Build tree structure
+  const fileMap = new Map<string, FileItem & { children: FileItem[] }>();
+  const rootFiles: (FileItem & { children: FileItem[] })[] = [];
 
-  const renderNode = (item: FileItem, depth: number = 0) => {
+  files.forEach(file => {
+    fileMap.set(file.id, { ...file, children: [] });
+  });
+
+  files.forEach(file => {
+    const item = fileMap.get(file.id)!;
+    if (file.parent_id && fileMap.has(file.parent_id)) {
+      fileMap.get(file.parent_id)!.children.push(item);
+    } else {
+      rootFiles.push(item);
+    }
+  });
+
+  const sortItems = (items: FileItem[]) => {
+    return [...items].sort((a, b) => {
+      if (a.is_folder && !b.is_folder) return -1;
+      if (!a.is_folder && b.is_folder) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, item: FileItem | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      item,
+    });
+  };
+
+  const renderNode = (item: FileItem, depth = 0) => {
     const isFolder = item.is_folder;
-    const isOpen = Boolean(openFolders[item.id]);
+    const isOpen = !!openFolders[item.id];
     const isActive = activeFileId === item.id;
-    const children = files.filter(f => f.parent_id === item.id);
+    const children = sortItems(item.children || []);
+    const peersOnThisFile = !isFolder ? (collaboratorsByFile[item.id] || []) : [];
 
     return (
-      <div key={item.id} className="select-none">
+      <div key={item.id} className="text-xs select-none">
         <div
           onClick={() => {
             if (isFolder) {
@@ -153,22 +204,27 @@ export function FileTree({
               onSelectFile(item);
             }
           }}
-          style={{ paddingLeft: `${depth * 14 + 10}px` }}
-          className={`group flex items-center justify-between pr-2 py-1 cursor-pointer text-xs transition-colors rounded-sm ${
+          onContextMenu={(e) => handleContextMenu(e, item)}
+          style={{ paddingLeft: `${depth * 12 + 10}px` }}
+          className={`group flex items-center justify-between pr-2 py-1 cursor-pointer transition-colors ${
             isActive
-              ? 'bg-[#094771] text-white font-medium'
-              : 'text-[#cccccc] hover:bg-[#2a2d2e] hover:text-white'
+              ? 'bg-sky-500/15 text-white font-medium border-l-2 border-sky-400'
+              : 'text-neutral-300 hover:bg-white/5 hover:text-white'
           }`}
         >
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            {isFolder && (
-              <span className="text-neutral-400">
+          <div className="flex items-center gap-1.5 overflow-hidden flex-1 min-w-0 pr-1">
+            {isFolder ? (
+              <span className="text-neutral-500 flex-shrink-0">
                 {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
               </span>
+            ) : (
+              <span className="w-3.5 flex-shrink-0" />
             )}
+
             <FileIcon name={item.name} isFolder={isFolder} isOpen={isOpen} className="w-4 h-4 flex-shrink-0" />
+
             {editingId === item.id ? (
-              <div className="flex items-center gap-1 flex-1" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-1 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
                   value={editName}
@@ -178,28 +234,36 @@ export function FileTree({
                     if (e.key === 'Escape') setEditingId(null);
                   }}
                   autoFocus
-                  className="bg-[#1e1e1e] border border-sky-500 rounded px-1 text-xs text-white outline-none w-full"
+                  className="bg-[#1e1e1e] border border-sky-500 rounded px-1 py-0.2 text-xs text-white outline-none w-full"
                 />
-                <button
-                  onClick={() => handleSaveRename(item.id)}
-                  className="text-emerald-400 hover:text-emerald-300"
-                >
-                  <Check className="w-3.5 h-3.5" />
+                <button onClick={() => handleSaveRename(item.id)} className="text-emerald-400 hover:text-emerald-300 p-0.5">
+                  <Check className="w-3 h-3" />
                 </button>
-                <button
-                  onClick={() => setEditingId(null)}
-                  className="text-neutral-400 hover:text-neutral-300"
-                >
-                  <X className="w-3.5 h-3.5" />
+                <button onClick={() => setEditingId(null)} className="text-neutral-400 hover:text-neutral-300 p-0.5">
+                  <X className="w-3 h-3" />
                 </button>
               </div>
             ) : (
-              <span className="truncate">{item.name}</span>
+              <span className="truncate font-mono text-[11.5px]">{item.name}</span>
             )}
           </div>
 
+          {/* Collaborator Presence Dots */}
+          {peersOnThisFile.length > 0 && (
+            <div className="flex items-center -space-x-1 flex-shrink-0 mr-1" title={`Editing: ${peersOnThisFile.map(p => p.name).join(', ')}`}>
+              {peersOnThisFile.slice(0, 3).map((peer) => (
+                <span
+                  key={peer.id}
+                  className="w-2.5 h-2.5 rounded-full border border-black/50"
+                  style={{ backgroundColor: peer.color }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Inline Action Buttons */}
           {editingId !== item.id && (
-            <div className="hidden group-hover:flex items-center gap-0.5 text-neutral-400">
+            <div className="hidden group-hover:flex items-center gap-0.5 text-neutral-400 flex-shrink-0">
               {isFolder && (
                 <>
                   <button
@@ -209,7 +273,7 @@ export function FileTree({
                       setOpenFolders(prev => ({ ...prev, [item.id]: true }));
                     }}
                     title="New File inside folder"
-                    className="p-1 hover:text-white rounded hover:bg-[#383b3d]"
+                    className="p-1 hover:text-white rounded hover:bg-white/10"
                   >
                     <FilePlus className="w-3 h-3" />
                   </button>
@@ -220,7 +284,7 @@ export function FileTree({
                       setOpenFolders(prev => ({ ...prev, [item.id]: true }));
                     }}
                     title="New Subfolder"
-                    className="p-1 hover:text-white rounded hover:bg-[#383b3d]"
+                    className="p-1 hover:text-white rounded hover:bg-white/10"
                   >
                     <FolderPlus className="w-3 h-3" />
                   </button>
@@ -230,7 +294,7 @@ export function FileTree({
                       triggerUpload(item.id);
                     }}
                     title="Upload Media to this folder"
-                    className="p-1 hover:text-sky-300 rounded hover:bg-[#383b3d]"
+                    className="p-1 hover:text-sky-300 rounded hover:bg-white/10"
                   >
                     <Upload className="w-3 h-3" />
                   </button>
@@ -239,7 +303,7 @@ export function FileTree({
               <button
                 onClick={(e) => handleStartRename(e, item)}
                 title="Rename"
-                className="p-1 hover:text-white rounded hover:bg-[#383b3d]"
+                className="p-1 hover:text-white rounded hover:bg-white/10"
               >
                 <Edit2 className="w-3 h-3" />
               </button>
@@ -251,7 +315,7 @@ export function FileTree({
                   }
                 }}
                 title="Delete"
-                className="p-1 hover:text-rose-400 rounded hover:bg-[#383b3d]"
+                className="p-1 hover:text-rose-400 rounded hover:bg-white/10"
               >
                 <Trash2 className="w-3 h-3" />
               </button>
@@ -262,8 +326,8 @@ export function FileTree({
         {/* Render child creation input if active */}
         {creatingInParent?.parentId === item.id && (
           <div
-            style={{ paddingLeft: `${(depth + 1) * 14 + 10}px` }}
-            className="flex items-center gap-1.5 pr-2 py-1 bg-[#2a2d2e]"
+            style={{ paddingLeft: `${(depth + 1) * 12 + 10}px` }}
+            className="flex items-center gap-1.5 pr-2 py-1 bg-white/[0.04]"
           >
             <FileIcon name={createName} isFolder={creatingInParent.isFolder} className="w-4 h-4 flex-shrink-0" />
             <input
@@ -298,7 +362,14 @@ export function FileTree({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#252526] select-none relative">
+    <div 
+      className="flex flex-col h-full select-none relative"
+      style={{
+        backgroundColor: 'var(--ide-sidebar)',
+        color: 'var(--ide-text)',
+      }}
+      onContextMenu={(e) => handleContextMenu(e, null)}
+    >
       {/* Hidden File Input for Media / File Upload */}
       <input
         ref={fileInputRef}
@@ -321,14 +392,17 @@ export function FileTree({
       />
 
       {/* Explorer Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#333333] text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+      <div 
+        className="flex items-center justify-between px-3 py-2 border-b text-[11px] font-bold uppercase tracking-wider text-neutral-400 flex-shrink-0"
+        style={{ borderColor: 'var(--ide-border)' }}
+      >
         <span>Files Explorer</span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => triggerUpload(null)}
             title="Upload Files"
             disabled={uploading}
-            className="p-1 hover:text-sky-300 rounded hover:bg-[#333333] transition-colors disabled:opacity-40"
+            className="p-1 hover:text-sky-300 rounded hover:bg-white/10 transition-colors disabled:opacity-40"
           >
             {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" /> : <Upload className="w-3.5 h-3.5" />}
           </button>
@@ -336,21 +410,21 @@ export function FileTree({
             onClick={() => triggerUploadFolder(null)}
             title="Upload Complete Folder"
             disabled={uploading}
-            className="p-1 hover:text-amber-300 rounded hover:bg-[#333333] transition-colors disabled:opacity-40"
+            className="p-1 hover:text-amber-300 rounded hover:bg-white/10 transition-colors disabled:opacity-40"
           >
             <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
           </button>
           <button
             onClick={() => setCreatingInParent({ parentId: null, isFolder: false })}
             title="New File in Root"
-            className="p-1 hover:text-white rounded hover:bg-[#333333] transition-colors"
+            className="p-1 hover:text-white rounded hover:bg-white/10 transition-colors"
           >
             <FilePlus className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setCreatingInParent({ parentId: null, isFolder: true })}
             title="New Folder in Root"
-            className="p-1 hover:text-white rounded hover:bg-[#333333] transition-colors"
+            className="p-1 hover:text-white rounded hover:bg-white/10 transition-colors"
           >
             <FolderPlus className="w-3.5 h-3.5" />
           </button>
@@ -367,7 +441,10 @@ export function FileTree({
 
       {/* Root creation input */}
       {creatingInParent?.parentId === null && (
-        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2a2d2e] border-b border-[#3c3c3c]">
+        <div 
+          className="flex items-center gap-1.5 px-3 py-1.5 border-b"
+          style={{ backgroundColor: 'var(--ide-bg)', borderColor: 'var(--ide-border)' }}
+        >
           <FileIcon name={createName} isFolder={creatingInParent.isFolder} className="w-4 h-4 flex-shrink-0" />
           <input
             type="text"
@@ -379,7 +456,7 @@ export function FileTree({
               if (e.key === 'Escape') setCreatingInParent(null);
             }}
             autoFocus
-            className="bg-[#1e1e1e] border border-sky-500 rounded px-1.5 py-0.5 text-xs text-white outline-none flex-1"
+            className="bg-black/30 border border-sky-500 rounded px-1.5 py-0.5 text-xs text-white outline-none flex-1"
           />
           <button onClick={handleSaveCreate} className="text-emerald-400 hover:text-emerald-300 p-0.5">
             <Check className="w-3.5 h-3.5" />
@@ -400,6 +477,91 @@ export function FileTree({
           rootFiles.map(f => renderNode(f, 0))
         )}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className="fixed z-50 py-1 rounded shadow-2xl border text-xs min-w-[170px] bg-[#252526] border-[#3c3c3c] text-neutral-200"
+        >
+          <button
+            onClick={() => {
+              setCreatingInParent({ 
+                parentId: contextMenu.item?.is_folder ? contextMenu.item.id : (contextMenu.item?.parent_id || null), 
+                isFolder: false 
+              });
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-sky-600 hover:text-white flex items-center gap-2"
+          >
+            <FilePlus className="w-3.5 h-3.5" />
+            <span>New File</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setCreatingInParent({ 
+                parentId: contextMenu.item?.is_folder ? contextMenu.item.id : (contextMenu.item?.parent_id || null), 
+                isFolder: true 
+              });
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-sky-600 hover:text-white flex items-center gap-2"
+          >
+            <FolderPlus className="w-3.5 h-3.5" />
+            <span>New Folder</span>
+          </button>
+
+          {contextMenu.item && (
+            <>
+              <div className="h-px bg-neutral-700 my-1" />
+
+              <button
+                onClick={(e) => {
+                  if (contextMenu.item) {
+                    setEditingId(contextMenu.item.id);
+                    setEditName(contextMenu.item.name);
+                  }
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-sky-600 hover:text-white flex items-center gap-2"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>Rename</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (contextMenu.item) {
+                    navigator.clipboard.writeText(contextMenu.item.name);
+                  }
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-sky-600 hover:text-white flex items-center gap-2"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy File Name</span>
+              </button>
+
+              <div className="h-px bg-neutral-700 my-1" />
+
+              <button
+                onClick={async () => {
+                  if (contextMenu.item && confirm(`Delete ${contextMenu.item.name}?`)) {
+                    await onDeleteFile(contextMenu.item.id);
+                  }
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-red-600 hover:text-white flex items-center gap-2 text-red-400"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

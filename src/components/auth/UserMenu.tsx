@@ -5,7 +5,11 @@ import { useAuth } from '@/context/AuthContext';
 import { AuthModal } from './AuthModal';
 import { LogOut, User, LogIn, ChevronDown } from 'lucide-react';
 
-export function UserMenu() {
+interface UserMenuProps {
+  onOpenProfileModal?: () => void;
+}
+
+export function UserMenu({ onOpenProfileModal }: UserMenuProps = {}) {
   const { user, loading, signOut } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -64,6 +68,19 @@ export function UserMenu() {
             <div className="font-semibold text-white truncate">{user.full_name}</div>
             <div className="text-[11px] text-neutral-400 truncate">{user.email}</div>
           </div>
+
+          {onOpenProfileModal && (
+            <button
+              onClick={() => {
+                onOpenProfileModal();
+                setIsDropdownOpen(false);
+              }}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-white transition-colors mb-1"
+            >
+              <User className="w-3.5 h-3.5 text-sky-400" />
+              <span>Developer Profile & Preferences</span>
+            </button>
+          )}
 
           <button
             onClick={async () => {

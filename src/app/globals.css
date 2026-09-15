@@ -6,27 +6,36 @@
   --ide-bg: #1e1e1e;
   --ide-sidebar: #252526;
   --ide-activity: #333333;
+  --ide-dock: #181818;
+  --ide-dock-header: #252526;
+  --ide-tab-active: #1e1e1e;
+  --ide-tab-inactive: #2d2d2d;
   --ide-border: #3c3c3c;
   --ide-text: #cccccc;
   --ide-text-muted: #858585;
   --ide-accent: #007acc;
   --ide-accent-hover: #0098ff;
+  --ide-status-bg: #007acc;
+  --ide-status-text: #ffffff;
+  --ide-input-bg: #3c3c3c;
+  --ide-card-bg: #252526;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #1e1e1e;
-  color: #cccccc;
+  background-color: var(--ide-bg);
+  color: var(--ide-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   overflow: hidden;
   user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-/* Custom scrollbars matching VS Code */
+/* Custom scrollbars matching modern IDE */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -34,17 +43,19 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(121, 121, 121, 0.4);
+  background: rgba(121, 121, 121, 0.35);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 100, 100, 0.7);
+  background: rgba(121, 121, 121, 0.6);
 }
 
 /* Yjs Remote cursor widget styles */
 .yRemoteSelection {
-  background-color: rgba(250, 204, 21, 0.3);
+  background-color: rgba(250, 204, 21, 0.25);
   position: absolute;
+  pointer-events: none;
 }
 
 .yRemoteSelectionHead {
@@ -52,6 +63,7 @@ body {
   border-left: 2px solid;
   height: 100%;
   box-sizing: border-box;
+  pointer-events: none;
 }
 
 .yRemoteSelectionHead::after {
@@ -61,6 +73,22 @@ body {
   border-radius: 4px;
   left: -4px;
   top: -5px;
+}
+
+/* Remote cursor user name tag */
+.yRemoteSelectionHead::before {
+  position: absolute;
+  content: ' ';
+  top: -16px;
+  left: -2px;
+  font-size: 9px;
+  font-family: monospace;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0.85;
 }
 
 /* Xterm.js full-height viewport fixes for full-bleed rendering */
@@ -78,3 +106,11 @@ body {
   height: 100% !important;
 }
 
+/* No scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
