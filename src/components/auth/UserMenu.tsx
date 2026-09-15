@@ -11,7 +11,8 @@ import {
   Keyboard, 
   ExternalLink,
   ShieldCheck,
-  Code2
+  Code2,
+  Users
 } from 'lucide-react';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { EditorSettingsModal, EditorSettings } from '@/components/workspace/EditorSettingsModal';
@@ -25,6 +26,7 @@ export interface UserMenuProps {
   onOpenSettingsModal?: () => void;
   onOpenShortcutsModal?: () => void;
   onViewPublicProfile?: () => void;
+  onOpenDiscoveryModal?: () => void;
 }
 
 const DEFAULT_SETTINGS: EditorSettings = {
@@ -39,7 +41,8 @@ export function UserMenu({
   onOpenProfileModal, 
   onOpenSettingsModal, 
   onOpenShortcutsModal, 
-  onViewPublicProfile 
+  onViewPublicProfile,
+  onOpenDiscoveryModal
 }: UserMenuProps = {}) {
   const { user, loading, signOut } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -272,6 +275,29 @@ export function UserMenu({
                 <div>
                   <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>View Public Profile</div>
                   <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Public developer bio & activity</div>
+                </div>
+              </div>
+            </button>
+
+            {/* Discover Developers & Peers */}
+            <button
+              onClick={() => {
+                setIsDropdownOpen(false);
+                if (onOpenDiscoveryModal) {
+                  onOpenDiscoveryModal();
+                } else if (typeof window !== 'undefined') {
+                  window.location.href = '/profile/' + (user.username || user.id);
+                }
+              }}
+              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400 group-hover:scale-105 transition-transform">
+                  <Users className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>Discover Developers</div>
+                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Find peers & coding partners</div>
                 </div>
               </div>
             </button>

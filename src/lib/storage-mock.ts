@@ -1,4 +1,4 @@
-import { Project, FileItem, ProjectMember, UserProfile, detectLanguage, ChatMessage, ActivityEvent } from '@/lib/types';
+import { Project, FileItem, ProjectMember, UserProfile, detectLanguage, ChatMessage, ActivityEvent, DirectMessage } from '@/lib/types';
 
 const STORAGE_KEY_PROJECTS = 'codecollab_projects';
 const STORAGE_KEY_MEMBERS = 'codecollab_members';
@@ -6,25 +6,97 @@ const STORAGE_KEY_FILES = 'codecollab_files';
 const STORAGE_KEY_USERS = 'codecollab_users';
 const STORAGE_KEY_MESSAGES = 'codecollab_messages';
 const STORAGE_KEY_ACTIVITIES = 'codecollab_activities';
+const STORAGE_KEY_DIRECT_MESSAGES = 'codecollab_direct_messages';
+const STORAGE_KEY_SHORTCUTS = 'codecollab_custom_shortcuts';
 
 export const DEMO_USERS: UserProfile[] = [
   {
     id: 'user-alice-1111',
     email: 'alice@codecollab.io',
     full_name: 'Alice Dev',
+    username: 'alice',
+    role: 'Lead Cloud Architect',
+    location: 'San Francisco, CA',
+    education: 'M.S. Computer Science, Stanford',
+    bio: 'Building high-concurrency real-time systems, collaborative developer tools, and distributed cloud runtimes.',
+    skills: ['TypeScript', 'Next.js', 'Go', 'Rust', 'Docker', 'WebSockets', 'Yjs'],
+    languages: ['TypeScript', 'Go', 'Python'],
+    technologies: ['React', 'TailwindCSS', 'Node.js', 'PostgreSQL', 'Redis'],
+    website: 'https://alicedev.io',
+    github_username: 'alicedev',
+    linkedin_url: 'https://linkedin.com/in/alicedev',
+    collaboration_interests: ['Cloud IDEs', 'Real-time CRDTs', 'Developer Experience'],
+    readme_markdown: `# Hey, I'm Alice 👋\n\nI lead cloud infrastructure and real-time collaborative protocols at CodeCollab.\n\n## 🛠️ What I'm building\n- Distributed WebAssembly execution sandboxes\n- Low-latency operational transformation & Yjs state sync\n- Multi-region peer-to-peer developer voice relays\n\n## 🚀 Tech Stack\n\`TypeScript\` · \`Go\` · \`Rust\` · \`Next.js\` · \`Docker\`\n\nFeel free to send a **Coding Partner** request or collaborate on open workspaces!`,
+    pinned_project_ids: ['proj-welcome-demo'],
     avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Alice',
+    privacy: {
+      show_location: true,
+      show_education: true,
+      show_links: true,
+      show_skills: true,
+      show_activity: true,
+      show_readme: true,
+      show_partners: true,
+      show_email: true,
+    },
   },
   {
     id: 'user-bob-2222',
     email: 'bob@codecollab.io',
     full_name: 'Bob Coder',
+    username: 'bob',
+    role: 'Full Stack Engineer',
+    location: 'Berlin, Germany',
+    education: 'B.Sc. Software Engineering, TU Berlin',
+    bio: 'Passionate frontend engineer obsessed with typography, micro-animations, and responsive developer workflows.',
+    skills: ['React', 'TypeScript', 'TailwindCSS', 'CSS Animations', 'Vite', 'GraphQL'],
+    languages: ['TypeScript', 'JavaScript', 'HTML/CSS'],
+    technologies: ['Next.js', 'Monaco Editor', 'Node.js'],
+    website: 'https://bobcodes.dev',
+    github_username: 'bobcoder',
+    linkedin_url: 'https://linkedin.com/in/bobcoder',
+    collaboration_interests: ['UI Design Systems', 'Web Performance', 'Interactive Canvas'],
+    readme_markdown: `# Hi there! I'm Bob 👨‍💻\n\nPassionate about creating fluid, beautiful, and tactile web interfaces that feel like native desktop software.\n\n### Current Focus\n- Monaco editor customizations & custom language grammars\n- Accessible dark mode palette architectures\n- Minimalist design aesthetics`,
+    pinned_project_ids: ['proj-welcome-demo'],
     avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Bob',
+    privacy: {
+      show_location: true,
+      show_education: true,
+      show_links: true,
+      show_skills: true,
+      show_activity: true,
+      show_readme: true,
+      show_partners: true,
+      show_email: false,
+    },
   },
   {
     id: 'user-charlie-3333',
     email: 'charlie@codecollab.io',
     full_name: 'Charlie Eng',
+    username: 'charlie',
+    role: 'Systems & Runtime Engineer',
+    location: 'London, UK',
+    education: 'Imperial College London',
+    bio: 'Linux kernel hacker, container runtime developer, and terminal enthusiast.',
+    skills: ['Python', 'Rust', 'C++', 'Linux', 'Containers', 'WebAssembly'],
+    languages: ['Python', 'Rust', 'C++'],
+    technologies: ['PTY Terminal', 'Docker', 'SQLite'],
+    github_username: 'charlie-eng',
+    collaboration_interests: ['Server-side PTYs', 'Container security', 'Compiler optimizations'],
+    readme_markdown: `# Charlie Eng\n\nSystems programming, PTY bridges, and container orchestration.\n\n*Building the engine underneath your code.*`,
+    pinned_project_ids: [],
     avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Charlie',
+    privacy: {
+      show_location: true,
+      show_education: true,
+      show_links: true,
+      show_skills: true,
+      show_activity: true,
+      show_readme: true,
+      show_partners: true,
+      show_email: false,
+    },
   }
 ];
 
@@ -454,6 +526,62 @@ export const StorageMock = {
       if (n.user_id === userId) n.read = true;
     });
     setStored('codecollab_notifications', list);
+  },
+
+  // Level 8: Direct Developer Messaging & Profile Lookups
+  getProfileByUsername(username: string): UserProfile | null {
+    const clean = username.replace(/^@/, '').toLowerCase().trim();
+    const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, DEMO_USERS);
+    return users.find(u => (u.username?.toLowerCase() === clean) || (u.id === clean)) || null;
+  },
+
+  getAllProfiles(): UserProfile[] {
+    return getStored<UserProfile[]>(STORAGE_KEY_USERS, DEMO_USERS);
+  },
+
+  getDirectMessages(user1Id: string, user2Id: string): DirectMessage[] {
+    const msgs = getStored<DirectMessage[]>(STORAGE_KEY_DIRECT_MESSAGES, []);
+    return msgs.filter(m => 
+      (m.sender_id === user1Id && m.receiver_id === user2Id) ||
+      (m.sender_id === user2Id && m.receiver_id === user1Id)
+    ).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  },
+
+  saveDirectMessage(msg: DirectMessage): DirectMessage {
+    const msgs = getStored<DirectMessage[]>(STORAGE_KEY_DIRECT_MESSAGES, []);
+    msgs.push(msg);
+    setStored(STORAGE_KEY_DIRECT_MESSAGES, msgs);
+    return msg;
+  },
+
+  markDirectMessagesRead(senderId: string, receiverId: string): void {
+    const msgs = getStored<DirectMessage[]>(STORAGE_KEY_DIRECT_MESSAGES, []);
+    let changed = false;
+    msgs.forEach(m => {
+      if (m.sender_id === senderId && m.receiver_id === receiverId && !m.read) {
+        m.read = true;
+        changed = true;
+      }
+    });
+    if (changed) {
+      setStored(STORAGE_KEY_DIRECT_MESSAGES, msgs);
+    }
+  },
+
+  getCustomShortcuts(): Record<string, string> {
+    return getStored<Record<string, string>>(STORAGE_KEY_SHORTCUTS, {});
+  },
+
+  saveCustomShortcut(commandId: string, shortcut: string): void {
+    const map = getStored<Record<string, string>>(STORAGE_KEY_SHORTCUTS, {});
+    map[commandId] = shortcut;
+    setStored(STORAGE_KEY_SHORTCUTS, map);
+  },
+
+  resetCustomShortcuts(): void {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY_SHORTCUTS);
+    }
   }
 };
 

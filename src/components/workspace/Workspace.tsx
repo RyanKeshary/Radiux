@@ -35,6 +35,7 @@ import { EditorSettingsModal, EditorSettings } from './EditorSettingsModal';
 import { GitHubModal } from './GitHubModal';
 import { UserProfileModal } from './UserProfileModal';
 import { PublicProfileModal } from './PublicProfileModal';
+import { DeveloperDiscoveryModal } from '@/components/profile/DeveloperDiscoveryModal';
 import { ProjectSwitcherModal } from './ProjectSwitcherModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { NotificationsPopover, AppNotification } from './NotificationsPopover';
@@ -70,7 +71,9 @@ import {
   X,
   Bell,
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  Users,
+  User
 } from 'lucide-react';
 
 interface WorkspaceProps {
@@ -232,6 +235,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isGitHubOpen, setIsGitHubOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedPublicUserId, setSelectedPublicUserId] = useState<string | null>(null);
+  const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
   const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -706,6 +710,23 @@ export function Workspace({ projectId }: WorkspaceProps) {
     setActiveGroupId('group-1');
   };
 
+  const handleOpenToSide = useCallback((file: FileItem) => {
+    if (splitLayout === 'single') {
+      const currentGroup = getActiveGroup();
+      const newGroup: EditorGroupState = {
+        id: 'group-2',
+        openFiles: [file],
+        activeFileId: file.id,
+      };
+      setSplitLayout('vertical');
+      setEditorGroups([currentGroup, newGroup]);
+      setActiveGroupId('group-2');
+      appendOutputLog('system', `Opened ${file.name} to side.`);
+    } else {
+      handleSelectFile(file, 'group-2');
+    }
+  }, [splitLayout, getActiveGroup, appendOutputLog, handleSelectFile]);
+
   // Request Chromium Keyboard Lock API to prevent browser from hijacking IDE shortcuts (like Ctrl+W, Ctrl+N, Ctrl+P)
   useEffect(() => {
     if (typeof window !== 'undefined' && 'keyboard' in navigator && 'lock' in (navigator as any).keyboard) {
@@ -1149,6 +1170,28 @@ export function Workspace({ projectId }: WorkspaceProps) {
       icon: <Settings className="w-4 h-4 text-neutral-400" />,
       action: () => setIsProfileModalOpen(true),
     },
+    {
+      id: 'discover-developers',
+      title: 'Discover Developers & Collaborators',
+      subtitle: 'Find developers by skill, tech stack and send partner requests',
+      shortcut: 'Ctrl+Shift+D',
+      category: 'Community',
+      icon: <Users className="w-4 h-4 text-emerald-400" />,
+      action: () => setIsDiscoveryOpen(true),
+    },
+    {
+      id: 'open-profile',
+      title: 'Open Developer Profile Page',
+      subtitle: 'View your public profile, activity and pinned projects',
+      shortcut: 'Ctrl+Shift+U',
+      category: 'Profile',
+      icon: <User className="w-4 h-4 text-indigo-400" />,
+      action: () => {
+        if (user) {
+          window.open(`/profile/${user.username || user.id}`, '_blank');
+        }
+      },
+    },
   ];
 
   // Activity Bar View change handler
@@ -1347,6 +1390,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
             onOpenProfileModal={() => setIsProfileModalOpen(true)}
             onOpenSettingsModal={() => setIsSettingsOpen(true)}
             onOpenShortcutsModal={() => setIsShortcutsOpen(true)}
+            onOpenDiscoveryModal={() => setIsDiscoveryOpen(true)}
             onViewPublicProfile={() => {
               if (user?.id) setSelectedPublicUserId(user.id);
             }}
@@ -1393,6 +1437,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 files={files}
                 activeFileId={activeFile?.id || null}
                 onSelectFile={handleSelectFile}
+                onOpenToSide={handleOpenToSide}
                 onCreateFile={handleCreateFile}
                 onRenameFile={handleRenameFile}
                 onDeleteFile={handleDeleteFile}
@@ -1915,6 +1960,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
           }}
         />
       )}
+
+      <DeveloperDiscoveryModal
+        isOpen={isDiscoveryOpen}
+        onClose={() => setIsDiscoveryOpen(false)}
+      />
 
       <ProjectSwitcherModal
         isOpen={isProjectSwitcherOpen}

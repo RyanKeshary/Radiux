@@ -15,8 +15,12 @@ import {
   X,
   Upload,
   Loader2,
-  Copy
+  Copy,
+  Download,
+  SplitSquareVertical,
+  FileText
 } from 'lucide-react';
+import { ContextMenu, ContextMenuItem } from './ContextMenu';
 
 interface CollaboratorPeer {
   id: string;
@@ -28,6 +32,7 @@ interface FileTreeProps {
   files: FileItem[];
   activeFileId: string | null;
   onSelectFile: (file: FileItem) => void;
+  onOpenToSide?: (file: FileItem) => void;
   onCreateFile: (parentId: string | null, name: string, isFolder: boolean) => Promise<void>;
   onRenameFile: (fileId: string, newName: string) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
@@ -40,6 +45,7 @@ export function FileTree({
   files,
   activeFileId,
   onSelectFile,
+  onOpenToSide,
   onCreateFile,
   onRenameFile,
   onDeleteFile,
@@ -64,20 +70,28 @@ export function FileTree({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Dismiss context menu on click outside
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-      }
-    };
-    if (contextMenu) {
-      window.addEventListener('click', handleClick);
-      return () => window.removeEventListener('click', handleClick);
+  const getPathForItem = (item: FileItem): string => {
+    const parts: string[] = [item.name];
+    let curr = item;
+    while (curr.parent_id) {
+      const parent = files.find(f => f.id === curr.parent_id);
+      if (!parent) break;
+      parts.unshift(parent.name);
+      curr = parent;
     }
-  }, [contextMenu]);
+    return parts.join('/');
+  };
+
+  const handleDownloadFile = (item: FileItem) => {
+    const blob = new Blob([item.content || ''], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = item.name;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const toggleFolder = (folderId: string) => {
     setOpenFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
@@ -493,96 +507,157 @@ export function FileTree({
         )}
       </div>
 
-      {/* Context Menu */}
-      {contextMenu && (
-        <div
-          ref={menuRef}
-          style={{ 
-            top: contextMenu.y, 
-            left: contextMenu.x,
-            backgroundColor: 'var(--ide-card-bg)',
-            borderColor: 'var(--ide-border)',
-            color: 'var(--ide-text)',
-          }}
-          className="fixed z-50 py-1 rounded shadow-2xl border text-xs min-w-[170px]"
-        >
-          <button
-            onClick={() => {
-              setCreatingInParent({ 
-                parentId: contextMenu.item?.is_folder ? contextMenu.item.id : (contextMenu.item?.parent_id || null), 
-                isFolder: false 
-              });
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-3 py-1.5 hover:bg-sky-600 hover:text-white flex items-center gap-2"
-          >
-            <FilePlus className="w-3.5 h-3.5" />
-            <span>New File</span>
-          </button>
+      {/* Advanced Context Menu */}
+      <ContextMenu
+        x={contextMenu?.x || 0}
+        y={contextMenu?.y || 0}
+        isOpen={!!contextMenu}
+        onClose={() => setContextMenu(null)}
+        items={(() => {
+          if (!contextMenu) return [];
+          const item = contextMenu.item;
 
-          <button
-            onClick={() => {
-              setCreatingInParent({ 
-                parentId: contextMenu.item?.is_folder ? contextMenu.item.id : (contextMenu.item?.parent_id || null), 
-                isFolder: true 
-              });
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-3 py-1.5 hover:bg-sky-600 hover:text-white flex items-center gap-2"
-          >
-            <FolderPlus className="w-3.5 h-3.5" />
-            <span>New Folder</span>
-          </button>
+          if (!item) {
+            return [
+              {
+                id: 'new-file',
+                label: 'New File',
+                icon: <FilePlus className="w-3.5 h-3.5" />,
+                onClick: () => setCreatingInParent({ parentId: null, isFolder: false }),
+              },
+              {
+                id: 'new-folder',
+                label: 'New Folder',
+                icon: <FolderPlus className="w-3.5 h-3.5" />,
+                onClick: () => setCreatingInParent({ parentId: null, isFolder: true }),
+              },
+            ];
+          }
 
-          {contextMenu.item && (
-            <>
-              <div className="h-px my-1" style={{ backgroundColor: 'var(--ide-border)' }} />
-
-              <button
-                onClick={(e) => {
-                  if (contextMenu.item) {
-                    setEditingId(contextMenu.item.id);
-                    setEditName(contextMenu.item.name);
+          if (item.is_folder) {
+            return [
+              {
+                id: 'new-file',
+                label: 'New File',
+                icon: <FilePlus className="w-3.5 h-3.5" />,
+                onClick: () => {
+                  setOpenFolders(prev => ({ ...prev, [item.id]: true }));
+                  setCreatingInParent({ parentId: item.id, isFolder: false });
+                },
+              },
+              {
+                id: 'new-folder',
+                label: 'New Folder',
+                icon: <FolderPlus className="w-3.5 h-3.5" />,
+                onClick: () => {
+                  setOpenFolders(prev => ({ ...prev, [item.id]: true }));
+                  setCreatingInParent({ parentId: item.id, isFolder: true });
+                },
+              },
+              { id: 'div-1', label: '', divider: true },
+              {
+                id: 'rename',
+                label: 'Rename',
+                icon: <Edit2 className="w-3.5 h-3.5" />,
+                shortcut: 'F2',
+                onClick: () => {
+                  setEditingId(item.id);
+                  setEditName(item.name);
+                },
+              },
+              {
+                id: 'delete',
+                label: 'Delete',
+                icon: <Trash2 className="w-3.5 h-3.5" />,
+                danger: true,
+                onClick: async () => {
+                  if (confirm(`Delete folder "${item.name}" and all contents?`)) {
+                    await onDeleteFile(item.id);
                   }
-                  setContextMenu(null);
-                }}
-                className="w-full text-left px-3 py-1.5 hover:bg-sky-600 hover:text-white flex items-center gap-2"
-              >
-                <Edit2 className="w-3.5 h-3.5" />
-                <span>Rename</span>
-              </button>
+                },
+              },
+              { id: 'div-2', label: '', divider: true },
+              {
+                id: 'copy-path',
+                label: 'Copy Path',
+                icon: <Copy className="w-3.5 h-3.5" />,
+                onClick: () => {
+                  navigator.clipboard.writeText(getPathForItem(item));
+                },
+              },
+            ];
+          }
 
-              <button
-                onClick={() => {
-                  if (contextMenu.item) {
-                    navigator.clipboard.writeText(contextMenu.item.name);
-                  }
-                  setContextMenu(null);
-                }}
-                className="w-full text-left px-3 py-1.5 hover:bg-sky-600 hover:text-white flex items-center gap-2"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy File Name</span>
-              </button>
-
-              <div className="h-px my-1" style={{ backgroundColor: 'var(--ide-border)' }} />
-
-              <button
-                onClick={async () => {
-                  if (contextMenu.item && confirm(`Delete ${contextMenu.item.name}?`)) {
-                    await onDeleteFile(contextMenu.item.id);
-                  }
-                  setContextMenu(null);
-                }}
-                className="w-full text-left px-3 py-1.5 hover:bg-red-600 hover:text-white flex items-center gap-2 text-red-400"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete</span>
-              </button>
-            </>
-          )}
-        </div>
-      )}
+          // File items
+          return [
+            {
+              id: 'open',
+              label: 'Open',
+              icon: <FileText className="w-3.5 h-3.5" />,
+              onClick: () => onSelectFile(item),
+            },
+            {
+              id: 'open-to-side',
+              label: 'Open to Side',
+              icon: <SplitSquareVertical className="w-3.5 h-3.5" />,
+              shortcut: 'Ctrl+\\',
+              onClick: () => {
+                if (onOpenToSide) {
+                  onOpenToSide(item);
+                } else {
+                  onSelectFile(item);
+                }
+              },
+            },
+            { id: 'div-1', label: '', divider: true },
+            {
+              id: 'rename',
+              label: 'Rename',
+              icon: <Edit2 className="w-3.5 h-3.5" />,
+              shortcut: 'F2',
+              onClick: () => {
+                setEditingId(item.id);
+                setEditName(item.name);
+              },
+            },
+            {
+              id: 'delete',
+              label: 'Delete',
+              icon: <Trash2 className="w-3.5 h-3.5" />,
+              danger: true,
+              onClick: async () => {
+                if (confirm(`Delete file "${item.name}"?`)) {
+                  await onDeleteFile(item.id);
+                }
+              },
+            },
+            { id: 'div-2', label: '', divider: true },
+            {
+              id: 'copy-path',
+              label: 'Copy Path',
+              icon: <Copy className="w-3.5 h-3.5" />,
+              shortcut: 'Shift+Alt+C',
+              onClick: () => {
+                navigator.clipboard.writeText(getPathForItem(item));
+              },
+            },
+            {
+              id: 'copy-rel-path',
+              label: 'Copy Relative Path',
+              icon: <Copy className="w-3.5 h-3.5" />,
+              onClick: () => {
+                navigator.clipboard.writeText(getPathForItem(item));
+              },
+            },
+            {
+              id: 'download',
+              label: 'Download',
+              icon: <Download className="w-3.5 h-3.5" />,
+              onClick: () => handleDownloadFile(item),
+            },
+          ];
+        })()}
+      />
     </div>
   );
 }

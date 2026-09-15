@@ -7,6 +7,24 @@ export type LanguageType =
   | 'python'
   | 'plaintext';
 
+export interface ProfilePrivacySettings {
+  show_location?: boolean;
+  show_education?: boolean;
+  show_education_history?: boolean;
+  show_links?: boolean;
+  show_skills?: boolean;
+  show_activity?: boolean;
+  show_readme?: boolean;
+  show_partners?: boolean;
+  show_email?: boolean;
+}
+
+export interface CustomDeveloperLink {
+  id: string;
+  title: string;
+  url: string;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -14,10 +32,51 @@ export interface UserProfile {
   avatar_url?: string;
   username?: string;
   bio?: string;
+  role?: string;
+  location?: string;
+  education?: string;
   skills?: string[];
   languages?: string[];
+  technologies?: string[];
+  website?: string;
   github_username?: string;
+  linkedin_url?: string;
+  other_links?: CustomDeveloperLink[];
+  collaboration_interests?: string[];
+  readme_markdown?: string;
+  pinned_project_ids?: string[]; // Maximum 4 projects
+  privacy?: ProfilePrivacySettings;
   preferences?: Record<string, any>;
+  created_at?: string;
+}
+
+export interface DirectMessage {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  created_at: string;
+  read: boolean;
+  media_url?: string;
+  media_type?: 'image' | 'video' | 'audio' | 'file';
+  media_name?: string;
+}
+
+export interface ContributionDay {
+  date: string; // YYYY-MM-DD
+  count: number;
+  level: 0 | 1 | 2 | 3 | 4;
+  details?: { type: string; label: string; count: number }[];
+}
+
+export interface CommandDefinition {
+  id: string;
+  title: string;
+  category: string;
+  description?: string;
+  defaultShortcut?: string;
+  customShortcut?: string;
+  action?: () => void;
 }
 
 export interface EditorGroup {
