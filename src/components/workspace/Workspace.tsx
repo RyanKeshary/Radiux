@@ -175,13 +175,50 @@ export function Workspace({ projectId }: WorkspaceProps) {
   // Corner Pop-up Notification Toasts
   const [toastList, setToastList] = useState<NotificationToastItem[]>([]);
 
+  // Refs to prevent duplicate initialization & refocus toast spam
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+  const hasJoinedWorkspaceRef = useRef(false);
+  const hasShownInitialToastRef = useRef(false);
+  const lastLoadedKeyRef = useRef<string | null>(null);
+
   const showToast = useCallback((item: Omit<NotificationToastItem, 'id'>) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     const newToast: NotificationToastItem = {
       ...item,
-      id: `toast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id,
       createdAt: item.createdAt || 'Just now',
     };
     setToastList((prev) => [newToast, ...prev.slice(0, 2)]);
+
+    // Synchronize to Notification Center panel
+    const notifType: AppNotification['type'] = 
+      item.type === 'partner_request' ? 'partner_request' :
+      item.type === 'project_invite' ? 'project_invite' :
+      item.type === 'member_event' ? 'member_joined' :
+      'system';
+
+    const notifItem: AppNotification = {
+      id,
+      type: notifType,
+      title: item.title,
+      message: item.message,
+      read: false,
+      createdAt: item.createdAt || 'Just now',
+      projectId: item.projectId,
+      partnerRequestId: item.partnerRequestId,
+      senderName: item.title,
+    };
+
+    setNotifications((prev) => {
+      // Prevent duplicate identical unread entries
+      if (prev.some(p => p.id === id || (p.title === item.title && p.message === item.message && !p.read))) {
+        return prev;
+      }
+      return [notifItem, ...prev];
+    });
   }, []);
 
   // Persistent Comm WebSocket Reference
@@ -362,7 +399,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [settings, setSettings] = useState<EditorSettings>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('codecollab_editor_settings');
+        const saved = localStorage.getItem('radiux_editor_settings') || localStorage.getItem('codecollab_editor_settings');
         return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
       } catch (e) {
         return DEFAULT_SETTINGS;
@@ -380,7 +417,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
       if (typeof window !== 'undefined') {
+        localStorage.setItem('radiux_editor_settings', JSON.stringify(updated));
         localStorage.setItem('codecollab_editor_settings', JSON.stringify(updated));
+      }
+      if (updated.theme) {
+        applyThemeVariables(updated.theme as ThemeId);
       }
       return updated;
     });
@@ -439,17 +480,20 @@ export function Workspace({ projectId }: WorkspaceProps) {
       }));
       setNotifications(mappedNotifs);
 
-      // Showcase the latest unread notification in the corner popup immediately on entering!
-      const unreadNotifs = mappedNotifs.filter(n => !n.read);
-      if (unreadNotifs.length > 0) {
-        const latest = unreadNotifs[0];
-        showToast({
-          type: latest.type === 'partner_request' ? 'partner_request' : latest.type === 'project_invite' ? 'project_invite' : 'system',
-          title: latest.title,
-          message: latest.message,
-          partnerRequestId: latest.partnerRequestId,
-          projectId: latest.projectId,
-        });
+      // Showcase the latest unread notification in the corner popup immediately on entering (once)!
+      if (!hasShownInitialToastRef.current) {
+        const unreadNotifs = mappedNotifs.filter(n => !n.read);
+        if (unreadNotifs.length > 0) {
+          const latest = unreadNotifs[0];
+          showToast({
+            type: latest.type === 'partner_request' ? 'partner_request' : latest.type === 'project_invite' ? 'project_invite' : 'system',
+            title: latest.title,
+            message: latest.message,
+            partnerRequestId: latest.partnerRequestId,
+            projectId: latest.projectId,
+          });
+          hasShownInitialToastRef.current = true;
+        }
       }
 
       // Seed remote workspace disk with existing files
@@ -508,8 +552,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
       appendOutputLog('system', `Loaded workspace "${projData?.name || projectId}" with ${filesData.length} files.`);
 
-      // Record workspace entry in project activity timeline
-      if (user && typeof window !== 'undefined') {
+      // Record workspace entry in project activity timeline (ONLY ONCE per session)
+      if (user && typeof window !== 'undefined' && !hasJoinedWorkspaceRef.current) {
+        hasJoinedWorkspaceRef.current = true;
         logAndBroadcastActivity(
           'member_joined',
           `${user.full_name || 'A user'} entered the workspace`,
@@ -550,7 +595,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
           try {
             const msg = JSON.parse(event.data);
             if (msg.type === 'activity_event' && msg.activity) {
-              if (msg.activity.user_id !== user?.id) {
+              const myId = userRef.current?.id || user?.id;
+              const myName = userRef.current?.full_name || user?.full_name;
+              // Never display a toast to oneself for any activity
+              if (
+                msg.activity.user_id !== myId &&
+                (!myName || msg.activity.user_name !== myName)
+              ) {
                 appendOutputLog('system', `${msg.activity.user_name}: ${msg.activity.details}`);
                 showToast({
                   type: msg.activity.action_type.startsWith('file_') || msg.activity.action_type.startsWith('folder_')
@@ -560,6 +611,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                     : 'system',
                   title: msg.activity.user_name,
                   message: msg.activity.details,
+                  projectId: msg.activity.project_id,
                 });
               }
             } else if (msg.type === 'notification' && msg.notification) {
@@ -672,9 +724,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
   useEffect(() => {
     if (user && !authLoading) {
-      loadWorkspaceData();
+      const currentKey = `${projectId}_${user.id}`;
+      if (lastLoadedKeyRef.current !== currentKey) {
+        lastLoadedKeyRef.current = currentKey;
+        loadWorkspaceData();
+      }
     }
-  }, [user, authLoading, loadWorkspaceData]);
+  }, [user?.id, authLoading, projectId, loadWorkspaceData]);
 
   // Persist Workspace State (Debounced)
   useEffect(() => {
@@ -2257,6 +2313,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
           if (user) DataService.markAllNotificationsRead(user.id);
           setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         }}
+        onMarkRead={(id) => {
+          if (user) DataService.markNotificationRead(id);
+          setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+        }}
+        onClearAll={() => {
+          if (user) DataService.clearAllNotifications(user.id);
+          setNotifications([]);
+        }}
         onAcceptPartnerRequest={async (reqId) => {
           await DataService.respondToPartnerRequest(reqId, true);
           soundManager.playSuccess();
@@ -2280,7 +2344,12 @@ export function Workspace({ projectId }: WorkspaceProps) {
           window.location.href = `/project/${pid}`;
         }}
         onDismissNotification={(id) => {
+          if (user) DataService.dismissNotification(id);
           setNotifications(prev => prev.filter(n => n.id !== id));
+        }}
+        onUserClick={(uid) => {
+          setIsNotificationsOpen(false);
+          handleUserIdentityClick(uid);
         }}
       />
 

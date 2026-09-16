@@ -16,13 +16,15 @@ import {
 
 export interface AppNotification {
   id: string;
-  type: 'partner_request' | 'partner_accepted' | 'project_invite' | 'mention';
+  type: 'partner_request' | 'partner_accepted' | 'partner_declined' | 'project_invite' | 'mention' | 'member_joined' | 'system';
   title: string;
   message: string;
   senderName?: string;
   senderAvatar?: string;
+  senderId?: string;
   projectId?: string;
   partnerRequestId?: string;
+  actionStatus?: 'pending' | 'accepted' | 'ignored' | 'rejected' | 'completed';
   read: boolean;
   createdAt: string;
 }

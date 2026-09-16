@@ -437,64 +437,156 @@ export function GitPanel({
         color: 'var(--ide-text)',
       }}
     >
-      {/* Top Action Bar */}
+      {/* Top Action Bar: Fully responsive 2-row proportional layout */}
       <div 
-        className="px-4 py-2.5 border-b flex items-center justify-between"
+        className="px-3 py-2 border-b flex flex-col gap-2"
         style={{
           backgroundColor: 'var(--ide-dock-header)',
           borderColor: 'var(--ide-border)',
         }}
       >
-        {/* Left: Branch & Status */}
-        <div className="flex items-center gap-2">
-          <div 
-            className="flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono"
-            style={{
-              backgroundColor: 'var(--ide-input-bg)',
-              borderColor: 'var(--ide-border)',
-              color: 'var(--ide-text)',
-            }}
-          >
-            <GitBranch className="w-3.5 h-3.5 text-sky-400" />
-            <span className="font-semibold">{currentBranch}</span>
+        {/* Row 1: Branch info on left, Quick Actions on right */}
+        <div className="flex items-center justify-between gap-1.5 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0 flex-shrink">
+            <div 
+              className="flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-mono truncate"
+              style={{
+                backgroundColor: 'var(--ide-input-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text)',
+              }}
+            >
+              <GitBranch className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+              <span className="font-semibold truncate max-w-[110px]">{currentBranch}</span>
+            </div>
+
+            {status && (
+              <div className="flex items-center gap-1 text-[11px] flex-shrink-0">
+                <button
+                  onClick={handleDirectPush}
+                  disabled={syncing !== null || status.ahead === 0}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
+                    status.ahead > 0
+                      ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 font-semibold cursor-pointer border border-emerald-500/30'
+                      : 'text-neutral-500 cursor-default opacity-60'
+                  }`}
+                  title={status.ahead > 0 ? `Click to push ${status.ahead} commit(s) to remote` : 'No outgoing commits'}
+                >
+                  <ArrowUp className={`w-3 h-3 ${syncing === 'push' ? 'animate-bounce' : ''}`} />
+                  <span>{status.ahead}</span>
+                </button>
+
+                <button
+                  onClick={handleDirectPull}
+                  disabled={syncing !== null || status.behind === 0}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
+                    status.behind > 0
+                      ? 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 font-semibold cursor-pointer border border-sky-500/30'
+                      : 'text-neutral-500 cursor-default opacity-60'
+                  }`}
+                  title={status.behind > 0 ? `Click to pull ${status.behind} commit(s) from remote` : 'No incoming commits'}
+                >
+                  <ArrowDown className={`w-3 h-3 ${syncing === 'pull' ? 'animate-bounce' : ''}`} />
+                  <span>{status.behind}</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {status && (
-            <div className="flex items-center gap-1 text-[11px]">
-              <button
-                onClick={handleDirectPush}
-                disabled={syncing !== null || status.ahead === 0}
-                className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
-                  status.ahead > 0
-                    ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 font-semibold cursor-pointer border border-emerald-500/30'
-                    : 'text-neutral-500 cursor-default opacity-60'
-                }`}
-                title={status.ahead > 0 ? `Click to push ${status.ahead} commit(s) to remote` : 'No outgoing commits'}
-              >
-                <ArrowUp className={`w-3 h-3 ${syncing === 'push' ? 'animate-bounce' : ''}`} />
-                <span>{status.ahead}</span>
-              </button>
+          {/* Right Tools: Push, Pull, GitHub, Terminal, Dock, Refresh */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={handleDirectPush}
+              disabled={syncing !== null}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors border ${
+                status && status.ahead > 0
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-sm font-semibold'
+                  : 'hover:opacity-80'
+              }`}
+              style={{
+                backgroundColor: status && status.ahead > 0 ? undefined : 'var(--ide-input-bg)',
+                borderColor: status && status.ahead > 0 ? undefined : 'var(--ide-border)',
+                color: status && status.ahead > 0 ? undefined : 'var(--ide-text)',
+              }}
+              title="Push commits to GitHub remote"
+            >
+              {syncing === 'push' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+              )}
+              <span className="hidden sm:inline">Push</span>
+              {status && status.ahead > 0 && <span className="text-[10px]">({status.ahead})</span>}
+            </button>
 
+            <button
+              onClick={handleDirectPull}
+              disabled={syncing !== null}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border transition-colors hover:opacity-80"
+              style={{
+                backgroundColor: 'var(--ide-input-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text)',
+              }}
+              title="Pull changes from GitHub remote"
+            >
+              {syncing === 'pull' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <ArrowDown className="w-3.5 h-3.5 text-sky-400" />
+              )}
+              <span className="hidden sm:inline">Pull</span>
+            </button>
+
+            <button
+              onClick={() => setIsGitHubModalOpen(true)}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border transition-colors hover:opacity-80"
+              style={{
+                backgroundColor: 'var(--ide-input-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text)',
+              }}
+              title="GitHub Remote & Sync"
+            >
+              <Github className="w-3.5 h-3.5" style={{ color: 'var(--ide-text-muted)' }} />
+              <span className="hidden md:inline">GitHub</span>
+            </button>
+
+            {onSwitchToTerminal && (
               <button
-                onClick={handleDirectPull}
-                disabled={syncing !== null || status.behind === 0}
-                className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
-                  status.behind > 0
-                    ? 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 font-semibold cursor-pointer border border-sky-500/30'
-                    : 'text-neutral-500 cursor-default opacity-60'
-                }`}
-                title={status.behind > 0 ? `Click to pull ${status.behind} commit(s) from remote` : 'No incoming commits'}
+                onClick={() => onSwitchToTerminal('output')}
+                className="p-1 rounded hover:opacity-80 transition-colors text-neutral-400 hover:text-sky-400"
+                title="Inspect Git logs in output dock"
               >
-                <ArrowDown className={`w-3 h-3 ${syncing === 'pull' ? 'animate-bounce' : ''}`} />
-                <span>{status.behind}</span>
+                <Terminal className="w-3.5 h-3.5" />
               </button>
-            </div>
-          )}
+            )}
+
+            {onOpenInBottomPanel && !isBottomPanel && (
+              <button
+                onClick={onOpenInBottomPanel}
+                className="p-1 rounded hover:opacity-80 transition-colors text-neutral-400 hover:text-sky-400"
+                title="Open Git in Bottom Dock"
+              >
+                <PanelBottom className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            <button
+              onClick={refreshGit}
+              disabled={loading}
+              className="p-1 rounded hover:opacity-80 transition-colors"
+              style={{ color: 'var(--ide-text-muted)' }}
+              title="Refresh Git Status"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-400' : ''}`} />
+            </button>
+          </div>
         </div>
 
-        {/* Center Subtabs */}
+        {/* Row 2: Subtabs: Changes, History, Branches, Deploy - takes 100% width and scales proportionally */}
         <div 
-          className="flex items-center gap-1 p-0.5 rounded-lg border text-xs"
+          className="grid grid-cols-4 gap-1 p-0.5 rounded-lg border text-xs w-full"
           style={{
             backgroundColor: 'var(--ide-card-bg)',
             borderColor: 'var(--ide-border)',
@@ -502,7 +594,7 @@ export function GitPanel({
         >
           <button
             onClick={() => setActiveSubTab('changes')}
-            className={`px-3 py-1 rounded-md transition-colors font-medium ${
+            className={`px-1 py-1 rounded-md transition-colors font-medium text-center truncate flex items-center justify-center gap-1 min-w-0 ${
               activeSubTab === 'changes'
                 ? 'bg-sky-600 text-white shadow-sm'
                 : 'hover:opacity-80'
@@ -510,12 +602,20 @@ export function GitPanel({
             style={{
               color: activeSubTab === 'changes' ? '#ffffff' : 'var(--ide-text-muted)',
             }}
+            title={`Changes (${stagedCount + changesCount})`}
           >
-            Changes {(stagedCount + changesCount) > 0 && `(${stagedCount + changesCount})`}
+            <span className="truncate">Changes</span>
+            {(stagedCount + changesCount) > 0 && (
+              <span className={`text-[10px] px-1 py-0.2 rounded font-mono ${
+                activeSubTab === 'changes' ? 'bg-white/20 text-white' : 'bg-sky-500/20 text-sky-400'
+              }`}>
+                {stagedCount + changesCount}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveSubTab('history')}
-            className={`px-3 py-1 rounded-md transition-colors font-medium ${
+            className={`px-1 py-1 rounded-md transition-colors font-medium text-center truncate flex items-center justify-center gap-1 min-w-0 ${
               activeSubTab === 'history'
                 ? 'bg-sky-600 text-white shadow-sm'
                 : 'hover:opacity-80'
@@ -523,12 +623,20 @@ export function GitPanel({
             style={{
               color: activeSubTab === 'history' ? '#ffffff' : 'var(--ide-text-muted)',
             }}
+            title={`History (${commits.length})`}
           >
-            History {commits.length > 0 && `(${commits.length})`}
+            <span className="truncate">History</span>
+            {commits.length > 0 && (
+              <span className={`text-[10px] px-1 py-0.2 rounded font-mono ${
+                activeSubTab === 'history' ? 'bg-white/20 text-white' : 'bg-neutral-500/20 text-neutral-400'
+              }`}>
+                {commits.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveSubTab('branches')}
-            className={`px-3 py-1 rounded-md transition-colors font-medium ${
+            className={`px-1 py-1 rounded-md transition-colors font-medium text-center truncate min-w-0 ${
               activeSubTab === 'branches'
                 ? 'bg-sky-600 text-white shadow-sm'
                 : 'hover:opacity-80'
@@ -536,12 +644,13 @@ export function GitPanel({
             style={{
               color: activeSubTab === 'branches' ? '#ffffff' : 'var(--ide-text-muted)',
             }}
+            title="Branches"
           >
-            Branches
+            <span className="truncate">Branches</span>
           </button>
           <button
             onClick={() => setActiveSubTab('deploy')}
-            className={`px-3 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5 ${
+            className={`px-1 py-1 rounded-md transition-colors font-medium text-center truncate flex items-center justify-center gap-1 min-w-0 ${
               activeSubTab === 'deploy'
                 ? 'bg-sky-600 text-white shadow-sm'
                 : 'hover:opacity-80'
@@ -549,99 +658,10 @@ export function GitPanel({
             style={{
               color: activeSubTab === 'deploy' ? '#ffffff' : 'var(--ide-text-muted)',
             }}
+            title="Deploy"
           >
-            <Cloud className="w-3.5 h-3.5" />
-            <span>Deploy</span>
-          </button>
-        </div>
-
-        {/* Right Tools: Push, Pull, Refresh & GitHub */}
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleDirectPush}
-            disabled={syncing !== null}
-            className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors border ${
-              status && status.ahead > 0
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-sm font-semibold'
-                : 'hover:opacity-80'
-            }`}
-            style={{
-              backgroundColor: status && status.ahead > 0 ? undefined : 'var(--ide-input-bg)',
-              borderColor: status && status.ahead > 0 ? undefined : 'var(--ide-border)',
-              color: status && status.ahead > 0 ? undefined : 'var(--ide-text)',
-            }}
-            title="Push commits to GitHub remote"
-          >
-            {syncing === 'push' ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
-            )}
-            <span className="hidden sm:inline">Push</span>
-            {status && status.ahead > 0 && <span className="text-[10px]">({status.ahead})</span>}
-          </button>
-
-          <button
-            onClick={handleDirectPull}
-            disabled={syncing !== null}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--ide-input-bg)',
-              borderColor: 'var(--ide-border)',
-              color: 'var(--ide-text)',
-            }}
-            title="Pull changes from GitHub remote"
-          >
-            {syncing === 'pull' ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <ArrowDown className="w-3.5 h-3.5 text-sky-400" />
-            )}
-            <span className="hidden sm:inline">Pull</span>
-          </button>
-
-          <button
-            onClick={() => setIsGitHubModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--ide-input-bg)',
-              borderColor: 'var(--ide-border)',
-              color: 'var(--ide-text)',
-            }}
-            title="GitHub Remote & Sync"
-          >
-            <Github className="w-3.5 h-3.5" style={{ color: 'var(--ide-text-muted)' }} />
-            <span className="hidden sm:inline">GitHub</span>
-          </button>
-
-          {onSwitchToTerminal && (
-            <button
-              onClick={() => onSwitchToTerminal('output')}
-              className="p-1 rounded hover:opacity-80 transition-colors text-neutral-400 hover:text-sky-400"
-              title="Inspect Git logs in output dock"
-            >
-              <Terminal className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {onOpenInBottomPanel && !isBottomPanel && (
-            <button
-              onClick={onOpenInBottomPanel}
-              className="p-1 rounded hover:opacity-80 transition-colors text-neutral-400 hover:text-sky-400"
-              title="Open Git in Bottom Dock"
-            >
-              <PanelBottom className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          <button
-            onClick={refreshGit}
-            disabled={loading}
-            className="p-1 rounded hover:opacity-80 transition-colors"
-            style={{ color: 'var(--ide-text-muted)' }}
-            title="Refresh Git Status"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-400' : ''}`} />
+            <Cloud className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">Deploy</span>
           </button>
         </div>
       </div>

@@ -321,13 +321,19 @@ export function EditorSettingsModal({
             {/* 1. IDE & Editor */}
             {activeSection === 'ide' && (
               <div className="space-y-6 max-w-xl">
-                <div>
-                  <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--ide-text)' }}>
-                    Development Environment & Editor
-                  </h3>
-                  <p className="text-[11px] opacity-70">
-                    Fine-tune code editor parameters, typography, layout, and feedback.
-                  </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--ide-text)' }}>
+                      Development Environment & Editor
+                    </h3>
+                    <p className="text-[11px] opacity-70">
+                      Fine-tune code editor parameters, typography, layout, and feedback.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10.5px] font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Auto-applied in real-time</span>
+                  </div>
                 </div>
 
                 {/* Theme Selector */}
@@ -346,7 +352,7 @@ export function EditorSettingsModal({
                             applyThemeVariables(tId);
                           }}
                           className={`p-2 rounded-lg border text-left transition-all ${
-                            isSel ? 'border-sky-400 bg-sky-500/15 text-sky-300' : 'border-white/10 hover:border-white/30'
+                            isSel ? 'border-sky-400 bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/50' : 'border-white/10 hover:border-white/30'
                           }`}
                         >
                           <div className="font-semibold text-[11px] truncate mb-1">{t.name}</div>
@@ -472,6 +478,83 @@ export function EditorSettingsModal({
                     }}
                     className="w-4 h-4 accent-sky-500 cursor-pointer"
                   />
+                </div>
+
+                {/* Live Code Preview Card */}
+                <div 
+                  className="rounded-xl border overflow-hidden transition-all shadow-md"
+                  style={{ 
+                    borderColor: 'var(--ide-border)',
+                    backgroundColor: 'var(--ide-card-bg)',
+                  }}
+                >
+                  <div 
+                    className="px-3 py-2 border-b flex items-center justify-between text-[11px]"
+                    style={{ 
+                      backgroundColor: 'var(--ide-dock-header)',
+                      borderColor: 'var(--ide-border)'
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
+                      <span className="font-mono font-medium ml-1">Live Editor Preview</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] opacity-70 font-mono">
+                      <span>{settings.fontSize}px</span>
+                      <span>•</span>
+                      <span>{settings.wordWrap === 'on' ? 'Wrap' : 'No-wrap'}</span>
+                      <span>•</span>
+                      <span>{settings.minimap ? 'Minimap ON' : 'Minimap OFF'}</span>
+                    </div>
+                  </div>
+
+                  <div 
+                    className="p-3.5 relative overflow-hidden flex"
+                    style={{
+                      fontFamily: settings.fontFamily || "'Fira Code', Consolas, monospace",
+                      fontSize: `${settings.fontSize}px`,
+                      lineHeight: 1.5,
+                      backgroundColor: 'var(--ide-editor-bg)',
+                      color: 'var(--ide-text)',
+                    }}
+                  >
+                    {/* Line numbers */}
+                    <div 
+                      className="pr-3 text-right select-none opacity-40 font-mono border-r mr-3"
+                      style={{ borderColor: 'var(--ide-border)' }}
+                    >
+                      <div>1</div>
+                      <div>2</div>
+                      <div>3</div>
+                      <div>4</div>
+                      <div>5</div>
+                    </div>
+
+                    {/* Code lines */}
+                    <div className={`flex-1 ${settings.wordWrap === 'on' ? 'break-words' : 'overflow-x-auto whitespace-pre'}`}>
+                      <div><span className="text-sky-400 font-semibold">import</span> &#123; createClient &#125; <span className="text-sky-400 font-semibold">from</span> <span className="text-emerald-400">&apos;@radiux/client&apos;</span>;</div>
+                      <div className="mt-0.5"><span className="text-sky-400 font-semibold">export function</span> <span className="text-amber-300 font-semibold">useRadiuxIDE</span>() &#123;</div>
+                      <div className="pl-4 mt-0.5"><span className="text-sky-400 font-semibold">const</span> ide = createClient(&#123; theme: <span className="text-emerald-400">&apos;{settings.theme}&apos;</span> &#125;);</div>
+                      <div className="pl-4 mt-0.5"><span className="text-sky-400 font-semibold">return</span> ide.init();</div>
+                      <div className="mt-0.5">&#125;</div>
+                    </div>
+
+                    {/* Simulated Minimap */}
+                    {settings.minimap && (
+                      <div 
+                        className="w-12 ml-2 border-l pl-1 select-none opacity-30 flex flex-col gap-1 py-1"
+                        style={{ borderColor: 'var(--ide-border)' }}
+                      >
+                        <div className="h-1 bg-sky-400/80 rounded w-full" />
+                        <div className="h-1 bg-emerald-400/80 rounded w-4/5" />
+                        <div className="h-1 bg-amber-400/80 rounded w-3/4" />
+                        <div className="h-1 bg-sky-400/60 rounded w-1/2" />
+                        <div className="h-1 bg-neutral-400/50 rounded w-2/3" />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -1004,6 +1087,60 @@ export function EditorSettingsModal({
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Bottom Modal Footer: Live feedback, Reset and Apply & Close Button */}
+        <div 
+          className="h-14 px-6 border-t flex items-center justify-between flex-shrink-0"
+          style={{ 
+            borderColor: 'var(--ide-border)', 
+            backgroundColor: 'var(--ide-dock-header)' 
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
+            <span className="text-[11px] font-medium" style={{ color: 'var(--ide-text-muted)' }}>
+              Settings are auto-saved to your profile and active across all workspace tabs
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                const defaultSettings: EditorSettings = {
+                  theme: 'dark',
+                  fontSize: 14,
+                  tabSize: 2,
+                  wordWrap: 'off',
+                  minimap: true,
+                  soundEnabled: true,
+                };
+                onUpdateSettings(defaultSettings);
+                applyThemeVariables('dark');
+                soundManager.playSuccess();
+              }}
+              className="px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-white/5 transition-colors"
+              style={{
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text-muted)',
+              }}
+            >
+              Reset to Defaults
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                soundManager.playSuccess();
+                onClose();
+              }}
+              className="px-4 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-sky-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Check className="w-4 h-4" />
+              <span>Apply & Close</span>
+            </button>
           </div>
         </div>
       </div>
