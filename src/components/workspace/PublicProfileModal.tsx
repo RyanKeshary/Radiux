@@ -57,6 +57,15 @@ export function PublicProfileModal({
     }
   }, [isOpen, userId, currentUserId]);
 
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !userId) return null;
 
   const handleAddPartner = async () => {
@@ -72,23 +81,30 @@ export function PublicProfileModal({
     setSendingRequest(false);
   };
 
+  const bannerStyle = profile?.banner_url
+    ? { backgroundImage: `url(${profile.banner_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : {};
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in select-none p-4">
       <div 
-        className="w-full max-w-md rounded-xl shadow-2xl border flex flex-col overflow-hidden text-xs"
+        className="w-full max-w-md rounded-2xl shadow-2xl border flex flex-col overflow-hidden text-xs"
         style={{
           backgroundColor: 'var(--ide-card-bg)',
           borderColor: 'var(--ide-border)',
           color: 'var(--ide-text)',
         }}
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* Header Banner */}
         <div 
-          className="h-24 bg-gradient-to-r from-sky-600/40 via-indigo-600/30 to-purple-600/30 relative flex justify-end p-3"
+          style={bannerStyle}
+          className="h-28 bg-gradient-to-r from-sky-600/40 via-indigo-600/30 to-purple-600/30 relative flex justify-end p-3 transition-all"
         >
           <button
             onClick={onClose}
-            className="p-1 rounded-full bg-black/40 hover:bg-black/70 text-neutral-300 hover:text-white transition-colors h-fit"
+            className="p-1.5 rounded-full bg-black/40 hover:bg-black/70 text-neutral-300 hover:text-white transition-colors h-fit backdrop-blur-md"
+            title="Close (Esc)"
           >
             <X className="w-4 h-4" />
           </button>

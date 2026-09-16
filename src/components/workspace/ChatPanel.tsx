@@ -31,6 +31,8 @@ interface ChatPanelProps {
   onNewMessageReceived?: () => void;
   onOpenMediaInEditor?: (media: { name: string; url: string; type: 'image' | 'video' | 'audio' | 'file' }) => void;
   onNavigateToFile?: (filePath: string, line?: number) => void;
+  onUserClick?: (user: { id: string; full_name?: string; username?: string; avatar_url?: string; bio?: string }, e?: React.MouseEvent) => void;
+  userColor?: string;
 }
 
 interface PendingMedia {
@@ -164,6 +166,7 @@ export function ChatPanel({
   onNewMessageReceived,
   onOpenMediaInEditor,
   onNavigateToFile,
+  onUserClick,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -292,6 +295,16 @@ export function ChatPanel({
           })
         );
       }
+
+      // Log collaborative activity event
+      DataService.logActivity(
+        projectId,
+        userId,
+        userName,
+        'chat_message',
+        `Sent a message: "${content.slice(0, 45)}"`,
+        'chat'
+      ).catch(() => {});
     } catch (err) {
       console.error('Failed to send message:', err);
     } finally {
@@ -348,9 +361,20 @@ export function ChatPanel({
                     isMe ? 'flex-row-reverse' : 'flex-row'
                   }`}
                 >
-                  <span className="font-semibold" style={{ color: 'var(--ide-text)' }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      if (!isMe && onUserClick) {
+                        e.stopPropagation();
+                        onUserClick({ id: msg.user_id, full_name: msg.user_name, avatar_url: msg.user_avatar }, e);
+                      }
+                    }}
+                    className={`font-semibold ${!isMe ? 'hover:underline hover:text-sky-400 cursor-pointer' : ''}`}
+                    style={{ color: 'var(--ide-text)' }}
+                    title={!isMe ? `Click to preview ${msg.user_name}'s profile` : undefined}
+                  >
                     {isMe ? 'You' : msg.user_name}
-                  </span>
+                  </button>
                   <span className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>{timeStr}</span>
                 </div>
 
@@ -360,13 +384,21 @@ export function ChatPanel({
                   }`}
                 >
                   {!isMe && (
-                    <div 
-                      className="w-7 h-7 rounded-full border flex items-center justify-center text-xs font-semibold flex-shrink-0 overflow-hidden"
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        if (onUserClick) {
+                          e.stopPropagation();
+                          onUserClick({ id: msg.user_id, full_name: msg.user_name, avatar_url: msg.user_avatar }, e);
+                        }
+                      }}
+                      className="w-7 h-7 rounded-full border flex items-center justify-center text-xs font-semibold flex-shrink-0 overflow-hidden hover:ring-2 hover:ring-sky-500 transition-all cursor-pointer"
                       style={{
                         backgroundColor: 'var(--ide-card-bg)',
                         borderColor: 'var(--ide-border)',
                         color: 'var(--ide-text)',
                       }}
+                      title={`Click to preview ${msg.user_name}'s profile`}
                     >
                       {msg.user_avatar ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
@@ -378,7 +410,7 @@ export function ChatPanel({
                       ) : (
                         msg.user_name[0]?.toUpperCase() || '?'
                       )}
-                    </div>
+                    </button>
                   )}
 
                   <div

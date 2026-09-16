@@ -204,10 +204,10 @@ export function UserMenu({
         />
       </button>
 
-      {/* Enhanced Dropdown Menu */}
+      {/* Enhanced Dropdown Menu - Sleek & Compact */}
       {isDropdownOpen && (
         <div 
-          className="absolute right-0 mt-2 w-72 rounded-xl border shadow-2xl z-50 p-2 text-xs backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-150 select-none"
+          className="absolute right-0 mt-2 w-64 rounded-xl border shadow-2xl z-50 p-1.5 text-xs backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-150 select-none"
           style={{
             backgroundColor: 'var(--ide-card-bg)',
             borderColor: 'var(--ide-border)',
@@ -216,14 +216,14 @@ export function UserMenu({
         >
           {/* User Header Profile Card */}
           <div 
-            className="p-3 rounded-lg border mb-2 flex items-center gap-3"
+            className="p-2.5 rounded-lg border mb-1.5 flex items-center gap-2.5"
             style={{
               backgroundColor: 'var(--ide-dock-header)',
               borderColor: 'var(--ide-border)',
             }}
           >
             <div className="relative flex-shrink-0">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow ring-2 ring-white/10 overflow-hidden">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center text-xs font-bold shadow ring-1 ring-white/10 overflow-hidden">
                 {user.avatar_url ? (
                   <img src={user.avatar_url} alt={user.full_name || 'User'} className="w-full h-full object-cover" />
                 ) : (
@@ -231,31 +231,31 @@ export function UserMenu({
                 )}
               </div>
               <span 
-                className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-[var(--ide-dock-header)]" 
+                className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-[var(--ide-dock-header)]" 
                 title="Online" 
               />
             </div>
 
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-[13px] truncate" style={{ color: 'var(--ide-text)' }}>
+              <div className="font-semibold text-xs truncate" style={{ color: 'var(--ide-text)' }}>
                 {user.full_name || 'Anonymous Developer'}
               </div>
-              <div className="text-[11px] truncate opacity-75" style={{ color: 'var(--ide-text-muted)' }}>
+              <div className="text-[10.5px] truncate opacity-70" style={{ color: 'var(--ide-text-muted)' }}>
                 {user.email}
               </div>
-              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+              <div className="mt-0.5 flex items-center gap-1">
                 <span 
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                  className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-medium"
                   style={{
                     backgroundColor: 'rgba(14, 165, 233, 0.15)',
                     color: 'var(--ide-accent)',
                   }}
                 >
                   <ShieldCheck className="w-2.5 h-2.5" />
-                  Developer
+                  Dev
                 </span>
                 {user.username && (
-                  <span className="text-[10.5px] opacity-60">@{user.username}</span>
+                  <span className="text-[10px] opacity-60">@{user.username}</span>
                 )}
               </div>
             </div>
@@ -266,15 +266,15 @@ export function UserMenu({
             {/* 1. View Public Profile */}
             <button
               onClick={handleViewPublicProfile}
-              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center justify-between p-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-md bg-sky-500/10 text-sky-400 group-hover:scale-105 transition-transform">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1 rounded bg-sky-500/10 text-sky-400 group-hover:scale-105 transition-transform">
                   <ExternalLink className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>View Public Profile</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Public developer bio & activity</div>
+                  <div className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>View Public Profile</div>
+                  <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Public developer bio</div>
                 </div>
               </div>
             </button>
@@ -289,15 +289,15 @@ export function UserMenu({
                   window.location.href = '/profile/' + (user.username || user.id);
                 }
               }}
-              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center justify-between p-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400 group-hover:scale-105 transition-transform">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1 rounded bg-emerald-500/10 text-emerald-400 group-hover:scale-105 transition-transform">
                   <Users className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>Discover Developers</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Find peers & coding partners</div>
+                  <div className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Discover Developers</div>
+                  <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Find peers & partners</div>
                 </div>
               </div>
             </button>
@@ -305,15 +305,15 @@ export function UserMenu({
             {/* 2. Developer Profile & Account Preferences */}
             <button
               onClick={handleOpenProfile}
-              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center justify-between p-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-md bg-indigo-500/10 text-indigo-400 group-hover:scale-105 transition-transform">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1 rounded bg-indigo-500/10 text-indigo-400 group-hover:scale-105 transition-transform">
                   <User className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>Profile & Account</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Avatar, bio, skills & handles</div>
+                  <div className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Profile & Account</div>
+                  <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Avatar, bio & handles</div>
                 </div>
               </div>
             </button>
@@ -321,53 +321,39 @@ export function UserMenu({
             {/* 3. Editor & IDE Settings */}
             <button
               onClick={handleOpenSettings}
-              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center justify-between p-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400 group-hover:scale-105 transition-transform">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1 rounded bg-emerald-500/10 text-emerald-400 group-hover:scale-105 transition-transform">
                   <Settings className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>Settings</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Font size, theme & indentation</div>
+                  <div className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Settings</div>
+                  <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Font, theme & indent</div>
                 </div>
               </div>
-              <kbd 
-                className="px-1.5 py-0.5 rounded text-[10px] font-mono border"
-                style={{
-                  borderColor: 'var(--ide-border)',
-                  backgroundColor: 'var(--ide-dock-header)',
-                  color: 'var(--ide-text-muted)',
-                }}
-              >
+              <span className="px-1.5 py-0.5 rounded border text-[10px] font-mono opacity-50" style={{ borderColor: 'var(--ide-border)' }}>
                 Ctrl+,
-              </kbd>
+              </span>
             </button>
 
             {/* 4. Keyboard Shortcuts */}
             <button
               onClick={handleOpenShortcuts}
-              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center justify-between p-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-400 group-hover:scale-105 transition-transform">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1 rounded bg-amber-500/10 text-amber-400 group-hover:scale-105 transition-transform">
                   <Keyboard className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>Keyboard Shortcuts</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Shortcuts & keybindings guide</div>
+                  <div className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Keyboard Shortcuts</div>
+                  <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Keybindings guide</div>
                 </div>
               </div>
-              <kbd 
-                className="px-1.5 py-0.5 rounded text-[10px] font-mono border"
-                style={{
-                  borderColor: 'var(--ide-border)',
-                  backgroundColor: 'var(--ide-dock-header)',
-                  color: 'var(--ide-text-muted)',
-                }}
-              >
-                Ctrl+Shift+P
-              </kbd>
+              <span className="px-1.5 py-0.5 rounded border text-[10px] font-mono opacity-50" style={{ borderColor: 'var(--ide-border)' }}>
+                Alt+P
+              </span>
             </button>
           </div>
 

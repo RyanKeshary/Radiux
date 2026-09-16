@@ -30,6 +30,8 @@ export interface UserProfile {
   email: string;
   full_name: string;
   avatar_url?: string;
+  banner_url?: string;
+  status_quote?: string;
   username?: string;
   bio?: string;
   role?: string;
@@ -60,6 +62,7 @@ export interface DirectMessage {
   media_url?: string;
   media_type?: 'image' | 'video' | 'audio' | 'file';
   media_name?: string;
+  sender?: UserProfile;
 }
 
 export interface ContributionDay {
@@ -93,6 +96,9 @@ export interface CodingPartner {
   created_at: string;
   updated_at: string;
   profile?: UserProfile;
+  partner?: UserProfile;
+  requester?: UserProfile;
+  receiver?: UserProfile;
 }
 
 export interface NotificationItem {
@@ -123,6 +129,7 @@ export interface ProjectMember {
   role: 'owner' | 'member';
   created_at: string;
   profile?: UserProfile;
+  user?: UserProfile;
 }
 
 export interface FileItem {
@@ -247,7 +254,10 @@ export type ActivityActionType =
   | 'voice_unmuted'
   // Runtime events
   | 'server_started'
-  | 'server_stopped';
+  | 'server_stopped'
+  // Chat & Terminal events
+  | 'chat_message'
+  | 'terminal_command';
 
 export interface ActivityEvent {
   id: string;

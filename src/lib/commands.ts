@@ -236,6 +236,43 @@ export class CommandRegistry {
     StorageMock.resetCustomShortcuts();
   }
 
+  static matchesEvent(cmdId: string, e: KeyboardEvent): boolean {
+    const cmd = CORE_COMMANDS.find(c => c.id === cmdId || c.actionId === cmdId);
+    if (!cmd) return false;
+
+    const assigned = this.getEffectiveShortcut(cmd);
+    const assignedNorm = this.normalizeShortcut(assigned);
+
+    // Build combo string from KeyboardEvent
+    const parts: string[] = [];
+    if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
+    if (e.shiftKey) parts.push('Shift');
+    if (e.altKey) parts.push('Alt');
+
+    let key = e.key;
+    if (key === ' ' || key === 'Spacebar') key = 'Space';
+    else if (key === '`' || key === '~') key = '`';
+    else if (key.length === 1) key = key.toUpperCase();
+    parts.push(key);
+
+    const eventNorm = this.normalizeShortcut(parts.join('+'));
+    if (eventNorm === assignedNorm) return true;
+
+    // Also support default Chrome-safe alternatives if custom wasn't set
+    const customMap = StorageMock.getCustomShortcuts();
+    if (!customMap[cmd.id]) {
+      // Check alternative safe chords:
+      if (cmd.actionId === 'closeActiveTab' && (eventNorm === 'ALT+W' || eventNorm === 'CTRL+Q')) return true;
+      if (cmd.actionId === 'quickOpen' && eventNorm === 'ALT+P') return true;
+      if (cmd.actionId === 'commandPalette' && eventNorm === 'ALT+SHIFT+P') return true;
+      if (cmd.actionId === 'toggleSidebar' && eventNorm === 'ALT+B') return true;
+      if (cmd.actionId === 'toggleDock' && (eventNorm === 'ALT+`' || eventNorm === 'CTRL+J')) return true;
+      if (cmd.actionId === 'globalSearch' && eventNorm === 'ALT+SHIFT+F') return true;
+    }
+
+    return false;
+  }
+
   static normalizeShortcut(shortcut: string): string {
     return shortcut
       .replace(/Cmd/i, 'Ctrl')

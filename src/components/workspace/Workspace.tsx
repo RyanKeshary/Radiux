@@ -39,6 +39,17 @@ import { DeveloperDiscoveryModal } from '@/components/profile/DeveloperDiscovery
 import { ProjectSwitcherModal } from './ProjectSwitcherModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { NotificationsPopover, AppNotification } from './NotificationsPopover';
+import { NotificationsDrawer } from './NotificationsDrawer';
+import { NotificationToastStack } from './NotificationToastStack';
+import { DeploymentModal } from './DeploymentModal';
+import { ProfileHoverCard } from './ProfileHoverCard';
+import { ChatPanel } from './ChatPanel';
+import { VoicePanel } from './VoicePanel';
+import { ActivityFeed } from './ActivityFeed';
+import { playNotificationChime } from '@/lib/sound';
+import { triggerHaptic } from '@/lib/haptics';
+import { CommandRegistry } from '@/lib/commands';
+import { Rocket } from 'lucide-react';
 
 import { 
   ChevronLeft, 
@@ -232,6 +243,12 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isQuickOpen, setIsQuickOpen] = useState(false);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'preferences' | 'profile' | 'partners' | 'account' | 'deployments'>('preferences');
+  const [isDeploymentModalOpen, setIsDeploymentModalOpen] = useState(false);
+  const [hoverCardUser, setHoverCardUser] = useState<{
+    user: { id: string; full_name?: string; username?: string; avatar_url?: string; bio?: string };
+    position: { x: number; y: number };
+  } | null>(null);
   const [isGitHubOpen, setIsGitHubOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedPublicUserId, setSelectedPublicUserId] = useState<string | null>(null);
@@ -241,6 +258,18 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [currentGitBranch, setCurrentGitBranch] = useState('main');
+
+  // Universal handler for user click with "click again to view profile" preview
+  const handleUserClick = useCallback((u: { id: string; full_name?: string; username?: string; avatar_url?: string; bio?: string }, e?: React.MouseEvent) => {
+    if (hoverCardUser && hoverCardUser.user.id === u.id) {
+      setHoverCardUser(null);
+      setSelectedPublicUserId(u.id);
+    } else {
+      const x = e ? e.clientX : (typeof window !== 'undefined' ? window.innerWidth / 2 - 120 : 100);
+      const y = e ? e.clientY : 120;
+      setHoverCardUser({ user: u, position: { x, y } });
+    }
+  }, [hoverCardUser]);
 
   // User-specific custom resizable sidebar width
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -753,105 +782,196 @@ export function Workspace({ projectId }: WorkspaceProps) {
     };
   }, []);
 
-  // Global Capture-Phase Keyboard listener: catches Ctrl+W, Ctrl+S, Ctrl+P etc. BEFORE browser tab closes or print dialog triggers
+  // Global Capture-Phase Keyboard listener: handles custom keybindings, Chrome-safe shortcuts, and universal Escape
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+      // Universal Escape handler to close modals/popups/hovercards
+      if (e.key === 'Escape') {
+        let handled = false;
+        if (hoverCardUser) {
+          setHoverCardUser(null);
+          handled = true;
+        }
+        if (isNotificationsOpen) {
+          setIsNotificationsOpen(false);
+          handled = true;
+        }
+        if (isCommandPaletteOpen) {
+          setIsCommandPaletteOpen(false);
+          handled = true;
+        }
+        if (isQuickOpen) {
+          setIsQuickOpen(false);
+          handled = true;
+        }
+        if (isGlobalSearchOpen) {
+          setIsGlobalSearchOpen(false);
+          handled = true;
+        }
+        if (isDeploymentModalOpen) {
+          setIsDeploymentModalOpen(false);
+          handled = true;
+        }
+        if (isSettingsOpen) {
+          setIsSettingsOpen(false);
+          handled = true;
+        }
+        if (isProfileModalOpen) {
+          setIsProfileModalOpen(false);
+          handled = true;
+        }
+        if (selectedPublicUserId) {
+          setSelectedPublicUserId(null);
+          handled = true;
+        }
+        if (isDiscoveryOpen) {
+          setIsDiscoveryOpen(false);
+          handled = true;
+        }
+        if (isProjectSwitcherOpen) {
+          setIsProjectSwitcherOpen(false);
+          handled = true;
+        }
+        if (isShortcutsOpen) {
+          setIsShortcutsOpen(false);
+          handled = true;
+        }
+        if (isInviteOpen) {
+          setIsInviteOpen(false);
+          handled = true;
+        }
+        if (isGitHubOpen) {
+          setIsGitHubOpen(false);
+          handled = true;
+        }
+        if (handled) {
+          e.preventDefault();
+          e.stopPropagation();
+          triggerHaptic('light');
+          return;
+        }
+      }
 
-      // 1. Close Active Editor Tab: Ctrl+W / Cmd+W (CRITICAL: intercept so browser tab doesn't close)
-      if (cmdOrCtrl && !e.altKey && !e.shiftKey && (e.key === 'w' || e.key === 'W' || e.code === 'KeyW')) {
+      // 1. Close Active Editor Tab (Alt+W, Ctrl+Q, or Ctrl+W)
+      if (CommandRegistry.matchesEvent('workbench.action.closeActiveEditor', e)) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        triggerHaptic('light');
         handleCloseActiveTab();
         return;
       }
 
-      // 2. Command Palette: Ctrl+Shift+P / Cmd+Shift+P
-      if (cmdOrCtrl && e.shiftKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
+      // 2. Command Palette (Ctrl+Shift+P, Alt+Shift+P, F1)
+      if (CommandRegistry.matchesEvent('workbench.action.showCommands', e)) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        triggerHaptic('light');
         setIsCommandPaletteOpen((prev) => !prev);
         return;
       }
 
-      // 3. Quick Open File: Ctrl+P / Cmd+P
-      if (cmdOrCtrl && !e.shiftKey && !e.altKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
+      // 3. Quick Open File (Ctrl+P, Alt+P)
+      if (CommandRegistry.matchesEvent('workbench.action.quickOpen', e)) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        triggerHaptic('light');
         setIsQuickOpen((prev) => !prev);
         return;
       }
 
-      // 4. Save: Ctrl+S / Cmd+S (Prevent browser 'Save webpage as HTML' dialog)
-      if (cmdOrCtrl && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S' || e.code === 'KeyS')) {
+      // 4. Save: Ctrl+S (Prevent browser 'Save webpage' dialog)
+      if (CommandRegistry.matchesEvent('workbench.action.save', e)) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        triggerHaptic('selection');
         return;
       }
 
-      // 5. Global Search: Ctrl+Shift+F / Cmd+Shift+F
-      if (cmdOrCtrl && e.shiftKey && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
+      // 5. Global Search (Ctrl+Shift+F, Alt+Shift+F)
+      if (CommandRegistry.matchesEvent('workbench.action.findInFiles', e)) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        triggerHaptic('light');
         setIsGlobalSearchOpen((prev) => !prev);
         return;
       }
 
-      // 6. Toggle Sidebar: Ctrl+B / Cmd+B
-      if (cmdOrCtrl && !e.shiftKey && !e.altKey && (e.key === 'b' || e.key === 'B' || e.code === 'KeyB')) {
+      // 6. Toggle Sidebar (Ctrl+B, Alt+B)
+      if (CommandRegistry.matchesEvent('workbench.action.toggleSidebar', e)) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        triggerHaptic('light');
         setIsSidebarOpen((prev) => !prev);
         return;
       }
 
-      // 7. Toggle Terminal / Dock: Ctrl+` or Ctrl+J / Cmd+` or Cmd+J
-      if (cmdOrCtrl && !e.shiftKey && !e.altKey && (e.key === '`' || e.key === '~' || e.code === 'Backquote' || e.key === 'j' || e.key === 'J' || e.code === 'KeyJ')) {
+      // 7. Toggle Terminal / Dock (Ctrl+`, Alt+`, Ctrl+J)
+      if (CommandRegistry.matchesEvent('workbench.action.terminal.toggle', e)) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        triggerHaptic('light');
         setIsDockOpen((prev) => !prev);
         return;
       }
 
-      // 8. Split Editor: Ctrl+\ / Cmd+\
-      if (cmdOrCtrl && !e.shiftKey && !e.altKey && (e.key === '\\' || e.code === 'Backslash')) {
+      // 8. Split Editor (Ctrl+\, Alt+\)
+      if (CommandRegistry.matchesEvent('workbench.action.splitEditorRight', e)) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        triggerHaptic('light');
         handleSplitRight();
         return;
       }
 
-      // 9. Cycle Tabs: Ctrl+Tab / Ctrl+Shift+Tab
-      if (e.ctrlKey && !e.altKey && (e.key === 'Tab' || e.code === 'Tab')) {
+      // 9. Open Settings (Ctrl+,, Alt+,)
+      if (CommandRegistry.matchesEvent('workbench.action.openSettings', e)) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-        handleCycleTab(e.shiftKey ? 'prev' : 'next');
+        triggerHaptic('light');
+        setSettingsInitialTab('preferences');
+        setIsProfileModalOpen(true);
         return;
       }
 
-      // 10. Project Switcher: Ctrl+Alt+O / Cmd+Alt+O
-      if (cmdOrCtrl && e.altKey && (e.key === 'o' || e.key === 'O' || e.code === 'KeyO')) {
+      // 10. Switch Project (Ctrl+Alt+O)
+      if (CommandRegistry.matchesEvent('workbench.action.switchProject', e)) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        triggerHaptic('light');
         setIsProjectSwitcherOpen(true);
+        return;
+      }
+
+      // 11. Cycle Tabs: Ctrl+Tab / Ctrl+Shift+Tab
+      if (e.ctrlKey && !e.altKey && (e.key === 'Tab' || e.code === 'Tab')) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCycleTab(e.shiftKey ? 'prev' : 'next');
         return;
       }
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
-  }, [handleCloseActiveTab, handleSplitRight, handleCycleTab]);
+  }, [
+    handleCloseActiveTab, 
+    handleSplitRight, 
+    handleCycleTab, 
+    hoverCardUser, 
+    isNotificationsOpen, 
+    isCommandPaletteOpen, 
+    isQuickOpen, 
+    isGlobalSearchOpen, 
+    isDeploymentModalOpen, 
+    isSettingsOpen, 
+    isProfileModalOpen, 
+    selectedPublicUserId, 
+    isDiscoveryOpen, 
+    isProjectSwitcherOpen, 
+    isShortcutsOpen, 
+    isInviteOpen, 
+    isGitHubOpen
+  ]);
 
   // Navigate to problem or line from Problems panel or Chat
   const handleNavigateToLocation = (fileIdOrPath: string, line?: number, col?: number) => {
@@ -1354,6 +1474,22 @@ export function Workspace({ projectId }: WorkspaceProps) {
             }}
           />
 
+          {/* Deploy Button */}
+          <button
+            onClick={() => {
+              triggerHaptic('light');
+              setIsDeploymentModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded font-medium text-white shadow-sm transition-all transform active:scale-95 text-[11px]"
+            style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #0d9488 100%)',
+            }}
+            title="Deploy to Vercel & Render"
+          >
+            <Rocket className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Deploy</span>
+          </button>
+
           {/* GitHub Sync Button */}
           <button
             onClick={() => setIsGitHubOpen(true)}
@@ -1387,8 +1523,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
           {/* User Account Menu */}
           <UserMenu 
-            onOpenProfileModal={() => setIsProfileModalOpen(true)}
-            onOpenSettingsModal={() => setIsSettingsOpen(true)}
+            onOpenProfileModal={() => {
+              setSettingsInitialTab('profile');
+              setIsProfileModalOpen(true);
+            }}
+            onOpenSettingsModal={() => {
+              setSettingsInitialTab('preferences');
+              setIsProfileModalOpen(true);
+            }}
             onOpenShortcutsModal={() => setIsShortcutsOpen(true)}
             onOpenDiscoveryModal={() => setIsDiscoveryOpen(true)}
             onViewPublicProfile={() => {
@@ -1407,9 +1549,15 @@ export function Workspace({ projectId }: WorkspaceProps) {
           collaboratorCount={members.length}
           gitChangedCount={0}
           unreadNotifications={notifications.filter(n => !n.read).length}
-          onOpenSettings={() => setIsProfileModalOpen(true)}
+          onOpenSettings={() => {
+            setSettingsInitialTab('preferences');
+            setIsProfileModalOpen(true);
+          }}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
-          onOpenProfile={() => setIsProfileModalOpen(true)}
+          onOpenProfile={() => {
+            setSettingsInitialTab('profile');
+            setIsProfileModalOpen(true);
+          }}
           onOpenNotifications={() => setIsNotificationsOpen(prev => !prev)}
           userAvatar={user?.avatar_url}
           userName={user?.full_name || 'User'}
@@ -1474,7 +1622,22 @@ export function Workspace({ projectId }: WorkspaceProps) {
                   projectName={project.name}
                   userName={user?.full_name || 'Anonymous Peer'}
                   userEmail={user?.email}
-                  onActivityEvent={(d) => logAndBroadcastActivity('media_uploaded', d)}
+                  onActivityEvent={(d) => {
+                    let act: any = 'git_commit';
+                    if (d.includes('pushed')) act = 'git_push';
+                    else if (d.includes('pulled')) act = 'git_pull';
+                    else if (d.includes('branch') && d.includes('created')) act = 'git_branch_created';
+                    else if (d.includes('switched')) act = 'git_branch_switched';
+                    else if (d.includes('initialized')) act = 'git_init';
+                    logAndBroadcastActivity(act, d, 'git');
+                    appendOutputLog('git', d);
+                  }}
+                  onDockToBottom={() => {
+                    setIsDockOpen(true);
+                    setActiveDockTab('git');
+                    setIsSidebarOpen(false);
+                  }}
+                  isDocked={false}
                 />
               </div>
             )}
@@ -1486,9 +1649,59 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 voicePeers={voicePeers}
                 isInVoice={isInVoice}
                 onInviteClick={() => setIsInviteOpen(true)}
-                onSelectMemberProfile={(uid) => setSelectedPublicUserId(uid)}
+                onSelectMemberProfile={(uid) => {
+                  const m = members.find(x => x.user_id === uid);
+                  handleUserClick({
+                    id: uid,
+                    full_name: m?.user?.full_name || 'Collaborator',
+                    username: m?.user?.username,
+                    avatar_url: m?.user?.avatar_url,
+                  });
+                }}
                 onJumpToFile={(fid) => handleNavigateToLocation(fid)}
               />
+            )}
+
+            {activeActivityView === 'chat' && (
+              <div className="flex flex-col h-full overflow-hidden">
+                <ChatPanel
+                  projectId={projectId}
+                  userId={user?.id || 'guest'}
+                  userName={user?.full_name || 'Anonymous Peer'}
+                  userAvatar={user?.avatar_url}
+                  userColor={userColor}
+                  onNewMessageReceived={() => {}}
+                  onOpenMediaInEditor={handleOpenMediaInEditor}
+                  onNavigateToFile={handleNavigateToLocation}
+                  onUserClick={handleUserClick}
+                />
+              </div>
+            )}
+
+            {activeActivityView === 'voice' && (
+              <div className="flex flex-col h-full overflow-hidden">
+                <VoicePanel
+                  isInVoice={isInVoice}
+                  isMuted={isMuted}
+                  voicePeers={voicePeers}
+                  connectionState={voiceConnectionState}
+                  onJoinVoice={joinVoice}
+                  onLeaveVoice={leaveVoice}
+                  onToggleMute={toggleMute}
+                  userName={user?.full_name || 'Anonymous Peer'}
+                  userAvatar={user?.avatar_url}
+                />
+              </div>
+            )}
+
+            {activeActivityView === 'activity' && (
+              <div className="flex flex-col h-full overflow-hidden">
+                <ActivityFeed
+                  projectId={projectId}
+                  currentUserId={user?.id || 'guest'}
+                  onUserClick={handleUserClick}
+                />
+              </div>
             )}
           </div>
         )}
@@ -1905,8 +2118,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
         </div>
       </footer>
 
-      {/* Notifications Popover */}
-      <NotificationsPopover
+      {/* Slide-over Notifications Sidebar Drawer */}
+      <NotificationsDrawer
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
         notifications={notifications}
@@ -1917,10 +2130,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
         onAcceptPartnerRequest={async (reqId) => {
           await DataService.respondToPartnerRequest(reqId, true);
           setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+          logAndBroadcastActivity('member_joined', 'Accepted friend / collaboration request');
         }}
         onDeclinePartnerRequest={async (reqId) => {
           await DataService.respondToPartnerRequest(reqId, false);
           setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+        }}
+        onHoldPartnerRequest={async (reqId) => {
+          setNotifications(prev => prev.map(n => n.partnerRequestId === reqId ? { ...n, read: true } : n));
         }}
         onOpenProject={(pid) => {
           setIsNotificationsOpen(false);
@@ -1930,6 +2147,50 @@ export function Workspace({ projectId }: WorkspaceProps) {
           setNotifications(prev => prev.filter(n => n.id !== id));
         }}
       />
+
+      {/* Modern Floating Hover 3D Glassmorphic Toast Stack */}
+      <NotificationToastStack
+        notifications={notifications}
+        onDismissNotification={(id: string) => {
+          setNotifications(prev => prev.filter(n => n.id !== id));
+        }}
+        onOpenDrawer={() => setIsNotificationsOpen(true)}
+        onAcceptPartnerRequest={async (reqId: string) => {
+          await DataService.respondToPartnerRequest(reqId, true);
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+          logAndBroadcastActivity('member_joined', 'Accepted friend / collaboration request');
+        }}
+        onDeclinePartnerRequest={async (reqId: string) => {
+          await DataService.respondToPartnerRequest(reqId, false);
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+        }}
+        onHoldPartnerRequest={async (reqId: string) => {
+          setNotifications(prev => prev.map(n => n.partnerRequestId === reqId ? { ...n, read: true } : n));
+        }}
+        onOpenProject={(pid: string) => {
+          window.location.href = `/project/${pid}`;
+        }}
+      />
+
+      {/* In-IDE Vercel & Render Deployment Modal */}
+      <DeploymentModal
+        isOpen={isDeploymentModalOpen}
+        onClose={() => setIsDeploymentModalOpen(false)}
+        projectName={project.name}
+      />
+
+      {/* Universal Interactive Profile Preview Hover Card */}
+      {hoverCardUser && (
+        <ProfileHoverCard
+          user={hoverCardUser.user}
+          position={hoverCardUser.position}
+          onClose={() => setHoverCardUser(null)}
+          onOpenFullProfile={(uid: string) => {
+            setHoverCardUser(null);
+            setSelectedPublicUserId(uid);
+          }}
+        />
+      )}
 
       {/* Modals & IDE Tools */}
       <InviteMemberModal
@@ -1975,7 +2236,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
         projectName={project.name}
         currentBranch={currentGitBranch}
         onSyncComplete={() => {
-          logAndBroadcastActivity('media_uploaded', 'Synchronized changes with GitHub');
+          logAndBroadcastActivity('git_commit', 'Synchronized changes with GitHub');
           appendOutputLog('git', 'GitHub sync completed.');
         }}
       />
@@ -1987,6 +2248,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
           currentUser={user}
           settings={settings}
           onUpdateSettings={updateSettings}
+          initialTab={settingsInitialTab}
         />
       )}
 

@@ -10,10 +10,13 @@ import {
   Settings, 
   Keyboard, 
   User,
-  Bell
+  Bell,
+  MessageSquare,
+  Mic,
+  Activity
 } from 'lucide-react';
 
-export type ActivityView = 'explorer' | 'search' | 'git' | 'preview' | 'collaborators';
+export type ActivityView = 'explorer' | 'search' | 'git' | 'chat' | 'voice' | 'activity' | 'preview' | 'collaborators';
 
 interface ActivityBarProps {
   activeView: ActivityView | null;
@@ -21,6 +24,8 @@ interface ActivityBarProps {
   collaboratorCount?: number;
   gitChangedCount?: number;
   unreadNotifications?: number;
+  unreadChatCount?: number;
+  isInVoice?: boolean;
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
   onOpenProfile: () => void;
@@ -35,6 +40,8 @@ export function ActivityBar({
   collaboratorCount = 0,
   gitChangedCount = 0,
   unreadNotifications = 0,
+  unreadChatCount = 0,
+  isInVoice = false,
   onOpenSettings,
   onOpenShortcuts,
   onOpenProfile,
@@ -47,26 +54,52 @@ export function ActivityBar({
       id: 'explorer',
       label: 'Explorer',
       icon: <Files className="w-5 h-5" />,
-      shortcut: 'Ctrl+Shift+E',
+      shortcut: 'Alt+E',
     },
     {
       id: 'search',
-      label: 'Search',
+      label: 'Search Workspace',
       icon: <Search className="w-5 h-5" />,
-      shortcut: 'Ctrl+Shift+F',
+      shortcut: 'Alt+Shift+F',
     },
     {
       id: 'git',
-      label: 'Source Control',
+      label: 'Source Control (Git)',
       icon: <GitBranch className="w-5 h-5" />,
-      shortcut: 'Ctrl+Shift+G',
+      shortcut: 'Alt+G',
       badge: gitChangedCount > 0 ? gitChangedCount : undefined,
+    },
+    {
+      id: 'chat',
+      label: 'Team Chat',
+      icon: <MessageSquare className="w-5 h-5" />,
+      shortcut: 'Alt+C',
+      badge: unreadChatCount > 0 ? unreadChatCount : undefined,
+    },
+    {
+      id: 'voice',
+      label: 'Voice Channel',
+      icon: (
+        <div className="relative">
+          <Mic className="w-5 h-5" />
+          {isInVoice && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          )}
+        </div>
+      ),
+      shortcut: 'Alt+V',
+    },
+    {
+      id: 'activity',
+      label: 'Live Activity Feed',
+      icon: <Activity className="w-5 h-5" />,
+      shortcut: 'Alt+A',
     },
     {
       id: 'collaborators',
       label: 'Collaborators & Presence',
       icon: <Users className="w-5 h-5" />,
-      shortcut: 'Ctrl+Shift+C',
+      shortcut: 'Alt+U',
       badge: collaboratorCount > 1 ? collaboratorCount : undefined,
     },
   ];

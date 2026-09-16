@@ -23,7 +23,9 @@ import {
   Clock,
   User,
   Github,
-  X
+  X,
+  PanelBottom,
+  PanelLeft
 } from 'lucide-react';
 import { DataService } from '@/lib/data-service';
 import { GitStatus, GitCommit, GitFileChange } from '@/lib/types';
@@ -36,6 +38,8 @@ interface GitPanelProps {
   userName: string;
   userEmail?: string;
   onActivityEvent?: (details: string) => void;
+  onDockToBottom?: () => void;
+  isDocked?: boolean;
 }
 
 export function GitPanel({
@@ -44,6 +48,8 @@ export function GitPanel({
   userName,
   userEmail = 'user@codecollab.dev',
   onActivityEvent,
+  onDockToBottom,
+  isDocked = false,
 }: GitPanelProps) {
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [commits, setCommits] = useState<GitCommit[]>([]);
@@ -595,6 +601,16 @@ export function GitPanel({
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-400' : ''}`} />
           </button>
+
+          {onDockToBottom && (
+            <button
+              onClick={onDockToBottom}
+              className="p-1 rounded hover:opacity-80 transition-colors text-sky-400 hover:text-sky-300"
+              title={isDocked ? "Dock to Primary Sidebar" : "Dock to Bottom Terminal Panel"}
+            >
+              {isDocked ? <PanelLeft className="w-3.5 h-3.5" /> : <PanelBottom className="w-3.5 h-3.5" />}
+            </button>
+          )}
         </div>
       </div>
 

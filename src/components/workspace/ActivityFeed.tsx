@@ -8,13 +8,15 @@ import { Loader2, Activity as ActivityIcon, RefreshCw, ChevronDown } from 'lucid
 
 interface ActivityFeedProps {
   projectId: string;
+  currentUserId?: string;
+  onUserClick?: (user: { id: string; full_name?: string; username?: string; avatar_url?: string; bio?: string }, e?: React.MouseEvent) => void;
 }
 
 // ============================================================================
 // Compact activity row metadata
 // ============================================================================
 
-type Category = 'file' | 'git' | 'member' | 'voice' | 'runtime';
+type Category = 'file' | 'git' | 'member' | 'voice' | 'runtime' | 'chat';
 
 interface ActionMeta {
   verb: string;
@@ -56,6 +58,9 @@ const ACTION_META: Record<ActivityActionType, ActionMeta> = {
   // Runtime
   server_started:          { verb: 'started',  category: 'runtime' },
   server_stopped:          { verb: 'stopped',  category: 'runtime' },
+  // Chat & Terminal
+  chat_message:            { verb: 'chatted',  category: 'chat' },
+  terminal_command:        { verb: 'ran',      category: 'runtime' },
 };
 
 // Colors for each verb
@@ -68,6 +73,8 @@ const VERB_COLORS: Record<string, string> = {
   'branch+': 'text-emerald-400',
   invited:   'text-sky-400',
   uploaded:  'text-sky-400',
+  chatted:   'text-sky-400',
+  ran:       'text-emerald-400',
   committed: 'text-violet-400',
   pushed:    'text-violet-400',
   pulled:    'text-violet-400',
@@ -94,6 +101,7 @@ const CATEGORY_FILTERS = [
   { label: 'Files', value: 'file' },
   { label: 'Git', value: 'git' },
   { label: 'Members', value: 'member' },
+  { label: 'Chat', value: 'chat' },
   { label: 'Voice', value: 'voice' },
   { label: 'Runtime', value: 'runtime' },
 ] as const;
@@ -140,7 +148,7 @@ function getCategoryForFilter(event: ActivityEvent): Category {
 // Main component
 // ============================================================================
 
-export function ActivityFeed({ projectId }: ActivityFeedProps) {
+export function ActivityFeed({ projectId, onUserClick }: ActivityFeedProps) {
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterValue>('all');
@@ -322,9 +330,19 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
                   </span>
 
                   {/* User */}
-                  <span className="w-28 shrink-0 font-medium truncate pr-2" style={{ color: 'var(--ide-text)' }} title={event.user_name}>
+                  <button
+                    onClick={(e) => {
+                      if (onUserClick) {
+                        e.stopPropagation();
+                        onUserClick({ id: event.user_id, full_name: event.user_name }, e);
+                      }
+                    }}
+                    className="w-28 shrink-0 font-medium truncate pr-2 text-left hover:underline hover:text-sky-400 transition-colors"
+                    style={{ color: 'var(--ide-text)' }}
+                    title={`Click to view profile of ${event.user_name}`}
+                  >
                     {event.user_name}
-                  </span>
+                  </button>
 
                   {/* Action verb — color-coded */}
                   <span className={`w-24 shrink-0 ${verbColor} font-medium`}>

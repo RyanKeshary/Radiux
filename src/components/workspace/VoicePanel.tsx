@@ -10,7 +10,8 @@ interface VoicePanelProps {
   voicePeers: VoicePeer[];
   connectionState: 'disconnected' | 'connecting' | 'connected';
   userName: string;
-  userColor: string;
+  userColor?: string;
+  userAvatar?: string;
   onJoinVoice: () => void;
   onLeaveVoice: () => void;
   onToggleMute: () => void;
