@@ -17,8 +17,10 @@ export const API_URL: string =
 
 /** Deployed app URL — used for OAuth redirects */
 export const APP_URL: string =
-  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_APP_URL) ||
-  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? window.location.origin
+    : (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_APP_URL) ||
+      (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'));
 
 /** Convert a WS URL to its HTTP equivalent (for API calls on the same server) */
 export function wsToHttp(wsUrl: string): string {
