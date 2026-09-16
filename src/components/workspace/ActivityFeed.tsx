@@ -27,10 +27,12 @@ const ACTION_META: Record<ActivityActionType, ActionMeta> = {
   project_renamed:         { verb: 'renamed',   category: 'member' },
   // Member
   member_joined:           { verb: 'joined',    category: 'member' },
+  member_left:             { verb: 'left',      category: 'member' },
   member_invited:          { verb: 'invited',   category: 'member' },
   member_removed:          { verb: 'removed',   category: 'member' },
   // Files
   file_created:            { verb: 'created',   category: 'file' },
+  file_saved:              { verb: 'saved',     category: 'file' },
   file_renamed:            { verb: 'renamed',   category: 'file' },
   file_deleted:            { verb: 'deleted',   category: 'file' },
   file_moved:              { verb: 'moved',     category: 'file' },
@@ -62,6 +64,7 @@ const ACTION_META: Record<ActivityActionType, ActionMeta> = {
 const VERB_COLORS: Record<string, string> = {
   // creates / joins
   created:   'text-emerald-400',
+  saved:     'text-emerald-400',
   joined:    'text-emerald-400',
   started:   'text-emerald-400',
   init:      'text-emerald-400',

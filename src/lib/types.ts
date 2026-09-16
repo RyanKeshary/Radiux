@@ -225,10 +225,12 @@ export type ActivityActionType =
   | 'project_renamed'
   // Workspace / member events
   | 'member_joined'
+  | 'member_left'
   | 'member_invited'
   | 'member_removed'
   // File events
   | 'file_created'
+  | 'file_saved'
   | 'file_renamed'
   | 'file_deleted'
   | 'file_moved'

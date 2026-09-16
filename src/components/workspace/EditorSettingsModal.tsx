@@ -199,6 +199,15 @@ export function EditorSettingsModal({
     }
   };
 
+  const handleUnsendPartner = async (requestId: string) => {
+    await DataService.unsendPartnerRequest(requestId);
+    if (user) {
+      const parts = await DataService.getCodingPartners(user.id);
+      setPartners(parts);
+      soundManager.playSuccess();
+    }
+  };
+
   const SECTIONS: { id: SettingsSection; label: string; icon: React.ReactNode }[] = [
     { id: 'ide', label: '1. IDE & Editor', icon: <Sliders className="w-4 h-4 text-sky-400" /> },
     { id: 'profile', label: '2. Profile', icon: <User className="w-4 h-4 text-indigo-400" /> },
@@ -644,6 +653,16 @@ export function EditorSettingsModal({
                                 className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px]"
                               >
                                 Accept
+                              </button>
+                            )}
+                            {p.status === 'pending' && p.requester_id === user?.id && (
+                              <button
+                                onClick={() => handleUnsendPartner(p.id)}
+                                className="px-2 py-0.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 rounded text-[10.5px] font-medium transition-colors flex items-center gap-1"
+                                title="Unsend friend request"
+                              >
+                                <X className="w-3 h-3" />
+                                <span>Unsend</span>
                               </button>
                             )}
                           </div>

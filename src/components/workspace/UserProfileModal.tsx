@@ -149,6 +149,13 @@ export function UserProfileModal({
     setPartners(prev => prev.filter(p => p.id !== partnerId));
   };
 
+  const handleUnsendPartner = async (partnerId: string) => {
+    const res = await DataService.unsendPartnerRequest(partnerId);
+    setPartners(prev => prev.filter(p => p.id !== partnerId));
+    setPartnerMessage({ text: res.message, success: true });
+    setTimeout(() => setPartnerMessage(null), 3000);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in select-none">
       <div 
@@ -671,9 +678,19 @@ export function UserProfileModal({
                           )}
 
                           {isOutgoingPending && (
-                            <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded font-medium">
-                              Pending Request
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded font-medium border border-amber-500/20">
+                                Pending Request
+                              </span>
+                              <button
+                                onClick={() => handleUnsendPartner(p.id)}
+                                className="px-2 py-0.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 rounded text-[10.5px] font-medium transition-colors flex items-center gap-1"
+                                title="Unsend friend request"
+                              >
+                                <X className="w-3 h-3" />
+                                <span>Unsend</span>
+                              </button>
+                            </div>
                           )}
 
                           {p.status === 'accepted' && (

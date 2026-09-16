@@ -499,6 +499,11 @@ export const StorageMock = {
     setStored('codecollab_coding_partners', partners.filter(p => p.id !== id));
   },
 
+  removeNotificationByPartnerRequestId(partnerRequestId: string): void {
+    const list = getStored<any[]>('codecollab_notifications', []);
+    setStored('codecollab_notifications', list.filter(n => n.partner_request_id !== partnerRequestId && n.data?.partner_request_id !== partnerRequestId));
+  },
+
   getNotifications(userId: string): any[] {
     const list = getStored<any[]>('codecollab_notifications', []);
     return list.filter(n => n.user_id === userId).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());

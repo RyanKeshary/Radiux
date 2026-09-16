@@ -1629,6 +1629,18 @@ export const DataService = {
     StorageMock.removeCodingPartner(partnerId);
   },
 
+  async unsendPartnerRequest(partnerRequestId: string): Promise<{ success: boolean; message: string }> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('coding_partners').delete().eq('id', partnerRequestId);
+        await supabase.from('notifications').delete().eq('partner_request_id', partnerRequestId);
+      } catch (err) {}
+    }
+    StorageMock.removeCodingPartner(partnerRequestId);
+    StorageMock.removeNotificationByPartnerRequestId(partnerRequestId);
+    return { success: true, message: 'Friend request unsent successfully.' };
+  },
+
   // Level 7: Notifications
   async getNotifications(userId: string): Promise<NotificationItem[]> {
     if (isSupabaseConfigured && supabase) {

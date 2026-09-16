@@ -67,6 +67,27 @@ export function DeveloperDiscoveryModal({
     }
   };
 
+  const handleUnsendPartnerRequest = async (targetDev: UserProfile) => {
+    if (!user) return;
+    try {
+      const allPartners = await DataService.getCodingPartners(user.id);
+      const match = allPartners.find(
+        (p) => (p.requester_id === user.id && p.receiver_id === targetDev.id) || 
+               (p.requester_id === targetDev.id && p.receiver_id === user.id)
+      );
+      if (match) {
+        await DataService.unsendPartnerRequest(match.id);
+      }
+      setSentPartners((prev) => {
+        const next = { ...prev };
+        delete next[targetDev.id];
+        return next;
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleNavigateToProfile = (usernameOrId: string) => {
     onClose();
     router.push(`/profile/${usernameOrId}`);
@@ -247,30 +268,27 @@ export function DeveloperDiscoveryModal({
                       </button>
                     )}
 
-                    <button
-                      onClick={() => handleSendPartnerRequest(dev)}
-                      disabled={isReqSent}
-                      className={`px-2.5 py-1 text-xs font-medium rounded transition-all flex items-center gap-1 ${
-                        isReqSent 
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                          : 'text-white shadow-sm hover:brightness-110'
-                      }`}
-                      style={{
-                        backgroundColor: isReqSent ? undefined : 'var(--ide-accent)',
-                      }}
-                    >
-                      {isReqSent ? (
-                        <>
-                          <Check className="w-3 h-3" />
-                          <span>Sent</span>
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="w-3 h-3" />
-                          <span>Partner</span>
-                        </>
-                      )}
-                    </button>
+                    {isReqSent ? (
+                      <button
+                        onClick={() => handleUnsendPartnerRequest(dev)}
+                        className="px-2.5 py-1 text-xs font-medium rounded transition-all flex items-center gap-1 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 group"
+                        title="Click to unsend friend request"
+                      >
+                        <X className="w-3 h-3 group-hover:scale-110 transition-transform" />
+                        <span>Unsend</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleSendPartnerRequest(dev)}
+                        className="px-2.5 py-1 text-xs font-medium rounded transition-all flex items-center gap-1 text-white shadow-sm hover:brightness-110"
+                        style={{
+                          backgroundColor: 'var(--ide-accent)',
+                        }}
+                      >
+                        <UserPlus className="w-3 h-3" />
+                        <span>Partner</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );

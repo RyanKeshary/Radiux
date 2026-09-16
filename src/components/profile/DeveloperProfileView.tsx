@@ -28,6 +28,7 @@ import {
   Shield, 
   ArrowLeft,
   Sparkles,
+  X,
   CheckCheck
 } from 'lucide-react';
 
@@ -56,6 +57,7 @@ export function DeveloperProfileView({
   const [isDirectMessageOpen, setIsDirectMessageOpen] = useState(false);
   const [partnerStatus, setPartnerStatus] = useState<'none' | 'pending' | 'accepted'>('none');
   const [partnerRequestId, setPartnerRequestId] = useState<string | null>(null);
+  const [isRequester, setIsRequester] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
 
   const isOwner = !!(user && user.id === profile.id);
@@ -89,6 +91,7 @@ export function DeveloperProfileView({
       if (match) {
         setPartnerStatus(match.status === 'accepted' ? 'accepted' : 'pending');
         setPartnerRequestId(match.id);
+        setIsRequester(match.requester_id === user.id);
       }
     });
   }, [user, profile.id, isOwner]);
@@ -96,8 +99,24 @@ export function DeveloperProfileView({
   const handleSendPartnerRequest = async () => {
     if (!user || partnerStatus !== 'none') return;
     try {
-      await DataService.sendPartnerRequest(user, profile.id);
-      setPartnerStatus('pending');
+      const res = await DataService.sendPartnerRequest(user, profile.id);
+      if (res.success) {
+        setPartnerStatus('pending');
+        setIsRequester(true);
+        if (res.partner) setPartnerRequestId(res.partner.id);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleUnsendPartnerRequest = async () => {
+    if (!user || !partnerRequestId) return;
+    try {
+      await DataService.unsendPartnerRequest(partnerRequestId);
+      setPartnerStatus('none');
+      setPartnerRequestId(null);
+      setIsRequester(false);
     } catch (e) {
       console.error(e);
     }
@@ -279,34 +298,50 @@ export function DeveloperProfileView({
                     <span>Message</span>
                   </button>
 
-                  <button
-                    onClick={handleSendPartnerRequest}
-                    disabled={partnerStatus !== 'none'}
-                    className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                      partnerStatus === 'accepted'
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                        : partnerStatus === 'pending'
-                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                        : 'text-white shadow-sm hover:brightness-110'
-                    }`}
-                    style={{
-                      backgroundColor: partnerStatus === 'none' ? 'var(--ide-accent)' : undefined,
-                    }}
-                  >
-                    {partnerStatus === 'accepted' ? (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Coding Partner</span>
-                      </>
-                    ) : partnerStatus === 'pending' ? (
-                      <span>Request Pending</span>
-                    ) : (
-                      <>
-                        <UserPlus className="w-3.5 h-3.5" />
-                        <span>Add Partner</span>
-                      </>
-                    )}
-                  </button>
+                  {partnerStatus === 'pending' && isRequester ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                        Request Pending
+                      </span>
+                      <button
+                        onClick={handleUnsendPartnerRequest}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 transition-all group shadow-sm"
+                        title="Unsend friend request"
+                      >
+                        <X className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                        <span>Unsend Request</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleSendPartnerRequest}
+                      disabled={partnerStatus !== 'none'}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                        partnerStatus === 'accepted'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : partnerStatus === 'pending'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'text-white shadow-sm hover:brightness-110'
+                      }`}
+                      style={{
+                        backgroundColor: partnerStatus === 'none' ? 'var(--ide-accent)' : undefined,
+                      }}
+                    >
+                      {partnerStatus === 'accepted' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Coding Partner</span>
+                        </>
+                      ) : partnerStatus === 'pending' ? (
+                        <span>Request Pending</span>
+                      ) : (
+                        <>
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Add Partner</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </>
               )}
             </div>

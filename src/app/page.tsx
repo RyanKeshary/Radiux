@@ -292,7 +292,9 @@ export default function DashboardPage() {
               >
                 <Bell className="w-3.5 h-3.5" />
                 {notifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[var(--ide-dock-header)]" />
+                  <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 text-[9px] font-bold text-white bg-rose-500 rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">
+                    {notifications.filter(n => !n.read).length > 9 ? '9+' : notifications.filter(n => !n.read).length}
+                  </span>
                 )}
               </button>
             </div>
@@ -451,6 +453,18 @@ export default function DashboardPage() {
                         title="Settings"
                       >
                         <Settings className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setIsNotificationsOpen(true)}
+                        className="p-1.5 rounded-md hover:bg-white/10 opacity-70 hover:opacity-100 text-amber-400 transition-colors relative"
+                        title="Notification Center"
+                      >
+                        <Bell className="w-3.5 h-3.5" />
+                        {notifications.filter(n => !n.read).length > 0 && (
+                          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 text-[8.5px] font-bold text-white bg-rose-500 rounded-full flex items-center justify-center leading-none">
+                            {notifications.filter(n => !n.read).length > 9 ? '9+' : notifications.filter(n => !n.read).length}
+                          </span>
+                        )}
                       </button>
                     </div>
                   </div>

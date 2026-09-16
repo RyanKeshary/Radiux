@@ -55,6 +55,7 @@ import { ProjectSwitcherModal } from './ProjectSwitcherModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { NotificationCenterPanel } from './NotificationCenterPanel';
 import { AppNotification } from './NotificationsPopover';
+import { NotificationToastContainer, NotificationToastItem } from './NotificationToast';
 import { ProfilePreviewCard } from '@/components/profile/ProfilePreviewCard';
 import { useKeyboardManager } from '@/hooks/useKeyboardManager';
 import { soundManager } from '@/lib/sound';
@@ -171,6 +172,23 @@ export function Workspace({ projectId }: WorkspaceProps) {
     line?: number;
   } | null>(null);
 
+  // Corner Pop-up Notification Toasts
+  const [toastList, setToastList] = useState<NotificationToastItem[]>([]);
+
+  const showToast = useCallback((item: Omit<NotificationToastItem, 'id'>) => {
+    const newToast: NotificationToastItem = {
+      ...item,
+      id: `toast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      createdAt: item.createdAt || 'Just now',
+    };
+    setToastList((prev) => [newToast, ...prev.slice(0, 2)]);
+  }, []);
+
+  // Persistent Comm WebSocket Reference
+  const commWsRef = useRef<WebSocket | null>(null);
+  const previousPeersRef = useRef<Map<string, string>>(new Map());
+  const initialPresenceLoadedRef = useRef(false);
+
   // Activity Broadcast helper
   const logAndBroadcastActivity = useCallback(async (actionType: any, details: string, targetObject?: string) => {
     try {
@@ -182,13 +200,16 @@ export function Workspace({ projectId }: WorkspaceProps) {
         details,
         targetObject
       );
-      // Broadcast via comm room using centralized config URL
-      const wsUrl = config.buildWsUrl('/comm', { projectId });
-      const tempWs = new WebSocket(wsUrl);
-      tempWs.onopen = () => {
-        tempWs.send(JSON.stringify({ type: 'activity_event', activity: act }));
-        setTimeout(() => tempWs.close(), 300);
-      };
+      if (commWsRef.current && commWsRef.current.readyState === WebSocket.OPEN) {
+        commWsRef.current.send(JSON.stringify({ type: 'activity_event', activity: act }));
+      } else {
+        const wsUrl = config.buildWsUrl('/comm', { projectId });
+        const tempWs = new WebSocket(wsUrl);
+        tempWs.onopen = () => {
+          tempWs.send(JSON.stringify({ type: 'activity_event', activity: act }));
+          setTimeout(() => tempWs.close(), 500);
+        };
+      }
     } catch (e) {}
   }, [projectId, user?.id, user?.full_name]);
 
@@ -404,7 +425,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
       }
       setFiles(filesData);
       setMembers(membersData);
-      setNotifications(notifsData.map(n => ({
+      const mappedNotifs: AppNotification[] = notifsData.map(n => ({
         id: n.id,
         type: n.type as any,
         title: n.title,
@@ -413,7 +434,21 @@ export function Workspace({ projectId }: WorkspaceProps) {
         createdAt: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         projectId: n.data?.project_id,
         partnerRequestId: n.data?.partner_request_id,
-      })));
+      }));
+      setNotifications(mappedNotifs);
+
+      // Showcase the latest unread notification in the corner popup immediately on entering!
+      const unreadNotifs = mappedNotifs.filter(n => !n.read);
+      if (unreadNotifs.length > 0) {
+        const latest = unreadNotifs[0];
+        showToast({
+          type: latest.type === 'partner_request' ? 'partner_request' : latest.type === 'project_invite' ? 'project_invite' : 'system',
+          title: latest.title,
+          message: latest.message,
+          partnerRequestId: latest.partnerRequestId,
+          projectId: latest.projectId,
+        });
+      }
 
       // Seed remote workspace disk with existing files
       try {
@@ -473,24 +508,97 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
       // Record workspace entry in project activity timeline
       if (user && typeof window !== 'undefined') {
-        const sessionKey = `workspace_entered_${projectId}_${user.id}`;
-        if (!sessionStorage.getItem(sessionKey)) {
-          sessionStorage.setItem(sessionKey, 'true');
-          logAndBroadcastActivity(
-            'member_joined',
-            `${user.full_name || 'A user'} entered the workspace`,
-            projectId
-          );
-        }
+        logAndBroadcastActivity(
+          'member_joined',
+          `${user.full_name || 'A user'} entered the workspace`,
+          projectId
+        );
       }
     } catch (err) {
       console.error('Failed to load workspace data:', err);
     } finally {
       setLoading(false);
     }
-  }, [projectId, user, logAndBroadcastActivity, appendOutputLog]);
+  }, [projectId, user, logAndBroadcastActivity, appendOutputLog, showToast]);
 
-  // Background Notifications Polling with Audio Chime
+  // Persistent Comm WebSocket for real-time notifications and activity
+  useEffect(() => {
+    if (!projectId) return;
+    const wsUrl = config.buildWsUrl('/comm', { projectId });
+    let isMounted = true;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: any = null;
+
+    const connect = () => {
+      try {
+        ws = new WebSocket(wsUrl);
+        commWsRef.current = ws;
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'activity_event' && msg.activity) {
+              if (msg.activity.user_id !== user?.id) {
+                appendOutputLog('system', `${msg.activity.user_name}: ${msg.activity.details}`);
+                showToast({
+                  type: msg.activity.action_type.startsWith('file_') || msg.activity.action_type.startsWith('folder_')
+                    ? 'file_event'
+                    : msg.activity.action_type.startsWith('member_')
+                    ? 'member_event'
+                    : 'system',
+                  title: msg.activity.user_name,
+                  message: msg.activity.details,
+                });
+              }
+            } else if (msg.type === 'notification' && msg.notification) {
+              if (msg.notification.user_id === user?.id) {
+                setNotifications(prev => [msg.notification, ...prev]);
+                showToast({
+                  type: msg.notification.type === 'partner_request' ? 'partner_request' : 'system',
+                  title: msg.notification.title,
+                  message: msg.notification.message,
+                  partnerRequestId: msg.notification.partner_request_id,
+                });
+                soundManager.playNotification();
+              }
+            }
+          } catch (e) {}
+        };
+
+        ws.onclose = () => {
+          if (isMounted) {
+            reconnectTimer = setTimeout(connect, 3000);
+          }
+        };
+      } catch (e) {}
+    };
+
+    connect();
+
+    // Log member leaving on unload or unmount
+    const handleBeforeUnload = () => {
+      if (user?.id) {
+        logAndBroadcastActivity('member_left', `${user.full_name || 'A user'} left the workspace`, projectId);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(reconnectTimer);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (user?.id) {
+        logAndBroadcastActivity('member_left', `${user.full_name || 'A user'} left the workspace`, projectId);
+      }
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+      commWsRef.current = null;
+    };
+  }, [projectId, user?.id, user?.full_name, logAndBroadcastActivity, appendOutputLog, showToast]);
+
+  // Background Notifications Polling with Audio Chime & Corner Toast
   useEffect(() => {
     if (!user?.id) return;
     const notifInterval = setInterval(async () => {
@@ -509,17 +617,26 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
         setNotifications((prev) => {
           const prevIds = new Set(prev.map(p => p.id));
-          const hasNewUnread = mapped.some(m => !m.read && !prevIds.has(m.id));
-          if (hasNewUnread) {
+          const newUnreads = mapped.filter(m => !m.read && !prevIds.has(m.id));
+          if (newUnreads.length > 0) {
             soundManager.playNotification();
+            newUnreads.forEach(nu => {
+              showToast({
+                type: nu.type === 'partner_request' ? 'partner_request' : nu.type === 'project_invite' ? 'project_invite' : 'system',
+                title: nu.title,
+                message: nu.message,
+                partnerRequestId: nu.partnerRequestId,
+                projectId: nu.projectId,
+              });
+            });
           }
           return mapped;
         });
       } catch (err) {}
-    }, 12000);
+    }, 10000);
 
     return () => clearInterval(notifInterval);
-  }, [user?.id]);
+  }, [user?.id, showToast]);
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -935,6 +1052,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
         `Created ${isFolder ? 'folder' : 'file'} "${name}"`,
         name
       );
+      showToast({
+        type: 'file_event',
+        title: isFolder ? 'Folder Created' : 'File Created',
+        message: `Created "${name}"`,
+      });
       appendOutputLog('sync', `Created ${isFolder ? 'folder' : 'file'} "${name}"`);
     } catch (err) {
       console.error('Failed to create file:', err);
@@ -955,6 +1077,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
       );
       broadcastFileChange();
       logAndBroadcastActivity('file_renamed', `Renamed to "${newName}"`, newName);
+      showToast({
+        type: 'file_event',
+        title: 'File Renamed',
+        message: `Renamed to "${newName}"`,
+      });
       appendOutputLog('sync', `Renamed file to "${newName}"`);
     } catch (err) {
       console.error('Failed to rename file:', err);
@@ -976,6 +1103,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
       broadcastFileChange();
       if (fileToDelete) {
         logAndBroadcastActivity('file_deleted', `Deleted "${fileToDelete.name}"`, fileToDelete.name);
+        showToast({
+          type: 'file_event',
+          title: 'File Deleted',
+          message: `Deleted "${fileToDelete.name}"`,
+        });
         appendOutputLog('sync', `Deleted "${fileToDelete.name}"`);
       }
     } catch (err) {
@@ -1388,7 +1520,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
               // Group peers by active file
               const fileMap: Record<string, { id: string; name: string; color: string }[]> = {};
               const peerList: any[] = [];
+              const currentPeerMap = new Map<string, string>();
+
               peers.forEach(p => {
+                if (p.id) currentPeerMap.set(p.id, p.name || 'Anonymous Peer');
                 peerList.push({
                   id: p.id,
                   name: p.name,
@@ -1404,6 +1539,36 @@ export function Workspace({ projectId }: WorkspaceProps) {
               });
               setCollaboratorsByFile(fileMap);
               setOnlinePeersList(peerList);
+
+              // Detect joining and leaving members in real time
+              if (initialPresenceLoadedRef.current) {
+                currentPeerMap.forEach((name, id) => {
+                  if (id !== user?.id && !previousPeersRef.current.has(id)) {
+                    logAndBroadcastActivity('member_joined', `${name} joined the workspace session`, name);
+                    showToast({
+                      type: 'member_event',
+                      title: 'Member Joined',
+                      message: `${name} joined the workspace`,
+                    });
+                    soundManager.playNotification();
+                  }
+                });
+
+                previousPeersRef.current.forEach((name, id) => {
+                  if (id !== user?.id && !currentPeerMap.has(id)) {
+                    logAndBroadcastActivity('member_left', `${name} left the workspace session`, name);
+                    showToast({
+                      type: 'member_event',
+                      title: 'Member Left',
+                      message: `${name} left the workspace`,
+                    });
+                  }
+                });
+              } else {
+                initialPresenceLoadedRef.current = true;
+              }
+
+              previousPeersRef.current = currentPeerMap;
             }}
           />
 
@@ -1742,7 +1907,15 @@ export function Workspace({ projectId }: WorkspaceProps) {
                             onCommandPalette={() => setIsCommandPaletteOpen(true)}
                             onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
                             onToggleDock={() => setIsDockOpen((prev) => !prev)}
-                            onSave={() => {}}
+                            onSave={() => {
+                              logAndBroadcastActivity('file_saved', `Saved changes to "${groupActiveFile.name}"`, groupActiveFile.name);
+                              showToast({
+                                type: 'file_event',
+                                title: 'File Saved',
+                                message: `Saved "${groupActiveFile.name}"`,
+                              });
+                              appendOutputLog('sync', `Saved "${groupActiveFile.name}"`);
+                            }}
                             onContentSaved={(latestText) => {
                               setFiles((prev) =>
                                 prev.map((f) => (f.id === groupActiveFile.id ? { ...f, content: latestText } : f))
@@ -2055,6 +2228,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
           await DataService.respondToPartnerRequest(reqId, true);
           soundManager.playSuccess();
           setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+          showToast({
+            type: 'system',
+            title: 'Partner Accepted',
+            message: 'You are now coding partners!',
+          });
           try {
             const m = await DataService.getMembers(projectId);
             setMembers(m);
@@ -2070,6 +2248,35 @@ export function Workspace({ projectId }: WorkspaceProps) {
         }}
         onDismissNotification={(id) => {
           setNotifications(prev => prev.filter(n => n.id !== id));
+        }}
+      />
+
+      {/* Pop-up Notification Showcase & Toast Container */}
+      <NotificationToastContainer
+        toasts={toastList}
+        onDismiss={(id) => setToastList(prev => prev.filter(t => t.id !== id))}
+        onAcceptPartner={async (reqId, notifId) => {
+          await DataService.respondToPartnerRequest(reqId, true, notifId);
+          soundManager.playSuccess();
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+          showToast({
+            type: 'system',
+            title: 'Partner Accepted',
+            message: 'You are now coding partners!',
+          });
+          try {
+            const m = await DataService.getMembers(projectId);
+            setMembers(m);
+          } catch (e) {}
+        }}
+        onDeclinePartner={async (reqId, notifId) => {
+          await DataService.respondToPartnerRequest(reqId, false, notifId);
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+        }}
+        onOpenCenter={() => setIsNotificationsOpen(true)}
+        onOpenTimeline={() => {
+          setIsDockOpen(true);
+          setActiveDockTab('activity');
         }}
       />
 

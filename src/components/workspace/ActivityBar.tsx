@@ -155,7 +155,12 @@ export function ActivityBar({
         >
           <Bell className="w-5 h-5" />
           {unreadNotifications > 0 && (
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span 
+              className="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-1 text-[9.5px] font-extrabold text-white bg-rose-500 rounded-full flex items-center justify-center leading-none shadow-md ring-2 ring-[var(--ide-activity)] animate-pulse"
+              title={`${unreadNotifications} unread notifications`}
+            >
+              {unreadNotifications > 9 ? '9+' : unreadNotifications}
+            </span>
           )}
         </button>
 

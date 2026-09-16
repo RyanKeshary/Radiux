@@ -72,6 +72,21 @@ export function PublicProfileModal({
     setSendingRequest(false);
   };
 
+  const handleUnsendPartner = async () => {
+    if (!profile) return;
+    setSendingRequest(true);
+    const partners = await DataService.getCodingPartners(currentUserId);
+    const match = partners.find(
+      (p) => (p.requester_id === currentUserId && p.receiver_id === profile.id) ||
+             (p.requester_id === profile.id && p.receiver_id === currentUserId)
+    );
+    if (match) {
+      await DataService.unsendPartnerRequest(match.id);
+      setPartnerStatus('none');
+    }
+    setSendingRequest(false);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in select-none">
       <div 
@@ -139,9 +154,20 @@ export function PublicProfileModal({
                         <span>Coding Partner</span>
                       </span>
                     ) : partnerStatus === 'pending' ? (
-                      <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full">
-                        Request Pending
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                          Request Pending
+                        </span>
+                        <button
+                          onClick={handleUnsendPartner}
+                          disabled={sendingRequest}
+                          className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 transition-colors shadow-sm disabled:opacity-50"
+                          title="Unsend friend request"
+                        >
+                          <X className="w-3 h-3" />
+                          <span>Unsend</span>
+                        </button>
+                      </div>
                     ) : (
                       <button
                         onClick={handleAddPartner}
