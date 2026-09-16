@@ -96,7 +96,213 @@ const MIME_TYPES = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
-const server = http.createServer((request, response) => {
+// ============================================================================
+// Multi-User Persistent Storage Helpers (Messages, Notifications, Partners)
+// ============================================================================
+const DATA_ROOT = path.resolve(process.cwd(), '.workspaces', 'data');
+if (!fs.existsSync(DATA_ROOT)) {
+  fs.mkdirSync(DATA_ROOT, { recursive: true });
+}
+
+function loadJsonFile(filePath, defaultVal) {
+  try {
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    }
+  } catch (e) {}
+  return defaultVal;
+}
+
+function saveJsonFile(filePath, data) {
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {
+    console.error(`[Server] Failed to save ${filePath}:`, e);
+  }
+}
+
+// Global user WebSocket registry for instant real-time dispatch to recipients
+const globalUserSockets = new Map(); // userId -> Set<ws>
+
+function registerUserSocket(userId, ws) {
+  if (!userId || userId === 'guest') return;
+  if (!globalUserSockets.has(userId)) {
+    globalUserSockets.set(userId, new Set());
+  }
+  globalUserSockets.get(userId).add(ws);
+}
+
+function unregisterUserSocket(userId, ws) {
+  if (!userId) return;
+  const set = globalUserSockets.get(userId);
+  if (set) {
+    set.delete(ws);
+    if (set.size === 0) globalUserSockets.delete(userId);
+  }
+}
+
+function sendToUser(userId, payload) {
+  const sockets = globalUserSockets.get(userId);
+  if (sockets) {
+    const raw = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    sockets.forEach(ws => {
+      if (ws.readyState === 1) ws.send(raw);
+    });
+  }
+}
+
+// Project Messages
+function getProjectMessages(projectId) {
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'messages.json');
+  return loadJsonFile(file, []);
+}
+
+function saveProjectMessage(projectId, message) {
+  if (!message || !message.id) return message;
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'messages.json');
+  const msgs = loadJsonFile(file, []);
+  if (!msgs.some(m => m.id === message.id)) {
+    msgs.push(message);
+    if (msgs.length > 500) msgs.splice(0, msgs.length - 500);
+    saveJsonFile(file, msgs);
+  }
+  return message;
+}
+
+// Project Activities
+function getProjectActivities(projectId) {
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'activities.json');
+  return loadJsonFile(file, []);
+}
+
+function saveProjectActivity(projectId, activity) {
+  if (!activity || !activity.id) return activity;
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'activities.json');
+  const acts = loadJsonFile(file, []);
+  if (!acts.some(a => a.id === activity.id)) {
+    acts.unshift(activity);
+    if (acts.length > 500) acts.length = 500;
+    saveJsonFile(file, acts);
+  }
+  return activity;
+}
+
+// Global Notifications
+function getGlobalNotifications(userId) {
+  const file = path.join(DATA_ROOT, 'notifications.json');
+  const all = loadJsonFile(file, []);
+  if (!userId) return all;
+  return all.filter(n => n.user_id === userId);
+}
+
+function saveGlobalNotification(item) {
+  if (!item || !item.id) return item;
+  const file = path.join(DATA_ROOT, 'notifications.json');
+  const all = loadJsonFile(file, []);
+  const idx = all.findIndex(n => n.id === item.id);
+  if (idx !== -1) {
+    all[idx] = { ...all[idx], ...item };
+  } else {
+    all.unshift(item);
+  }
+  if (all.length > 1000) all.length = 1000;
+  saveJsonFile(file, all);
+  return item;
+}
+
+function markGlobalNotificationRead({ id, userId, all: markAll }) {
+  const file = path.join(DATA_ROOT, 'notifications.json');
+  const items = loadJsonFile(file, []);
+  items.forEach(n => {
+    if (markAll && userId && n.user_id === userId) {
+      n.read = true;
+    } else if (id && n.id === id) {
+      n.read = true;
+    }
+  });
+  saveJsonFile(file, items);
+}
+
+function deleteGlobalNotification({ id, userId, all: deleteAll, partnerRequestId }) {
+  const file = path.join(DATA_ROOT, 'notifications.json');
+  let items = loadJsonFile(file, []);
+  if (partnerRequestId) {
+    items = items.filter(n => n.partner_request_id !== partnerRequestId);
+  } else if (deleteAll && userId) {
+    items = items.filter(n => n.user_id !== userId);
+  } else if (id) {
+    items = items.filter(n => n.id !== id);
+  }
+  saveJsonFile(file, items);
+}
+
+// Coding Partners
+function getCodingPartners(userId) {
+  const file = path.join(DATA_ROOT, 'coding_partners.json');
+  const all = loadJsonFile(file, []);
+  if (!userId) return all;
+  return all.filter(p => p.requester_id === userId || p.receiver_id === userId);
+}
+
+function saveCodingPartner(partner) {
+  if (!partner || !partner.id) return partner;
+  const file = path.join(DATA_ROOT, 'coding_partners.json');
+  const all = loadJsonFile(file, []);
+  const idx = all.findIndex(p => p.id === partner.id);
+  if (idx !== -1) {
+    all[idx] = { ...all[idx], ...partner };
+  } else {
+    all.unshift(partner);
+  }
+  saveJsonFile(file, all);
+  return partner;
+}
+
+function updateCodingPartnerStatus(requestId, status) {
+  const file = path.join(DATA_ROOT, 'coding_partners.json');
+  const all = loadJsonFile(file, []);
+  const p = all.find(item => item.id === requestId);
+  if (p) {
+    p.status = status;
+    p.updated_at = new Date().toISOString();
+    saveJsonFile(file, all);
+    return p;
+  }
+  return null;
+}
+
+function removeCodingPartner(partnerRequestId) {
+  const file = path.join(DATA_ROOT, 'coding_partners.json');
+  const all = loadJsonFile(file, []);
+  const match = all.find(p => p.id === partnerRequestId);
+  const filtered = all.filter(p => p.id !== partnerRequestId);
+  saveJsonFile(file, filtered);
+  return match;
+}
+
+function readJsonBody(request) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    request.on('data', chunk => {
+      body += chunk;
+      if (body.length > 5 * 1024 * 1024) {
+        reject(new Error('Payload too large'));
+      }
+    });
+    request.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    request.on('error', reject);
+  });
+}
+
+const server = http.createServer(async (request, response) => {
   // Level 6: Production CORS — only allow configured origin
   const origin = request.headers.origin || '';
   if (ALLOWED_ORIGIN) {
@@ -555,6 +761,220 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  // 7. Messages API (Persistent multi-user chat storage & broadcast)
+  if (parsedUrl.pathname === '/api/messages') {
+    if (request.method === 'GET') {
+      const projectId = parsedUrl.searchParams.get('projectId') || 'default';
+      const messages = getProjectMessages(projectId);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ messages }));
+      return;
+    }
+    if (request.method === 'POST') {
+      try {
+        const body = await readJsonBody(request);
+        const { projectId, message } = body;
+        if (!projectId || !message) {
+          response.writeHead(400, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ error: 'Missing projectId or message' }));
+          return;
+        }
+        const saved = saveProjectMessage(projectId, message);
+        // Broadcast over /comm to active clients in the project room
+        const room = commRooms.get(projectId);
+        if (room) {
+          const chatPayload = JSON.stringify({ type: 'chat_message', message: saved });
+          room.forEach(c => {
+            if (c.ws.readyState === 1) c.ws.send(chatPayload);
+          });
+        }
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: true, message: saved }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+  }
+
+  // 8. Activities API
+  if (parsedUrl.pathname === '/api/activities') {
+    if (request.method === 'GET') {
+      const projectId = parsedUrl.searchParams.get('projectId') || 'default';
+      const activities = getProjectActivities(projectId);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ activities }));
+      return;
+    }
+    if (request.method === 'POST') {
+      try {
+        const body = await readJsonBody(request);
+        const { projectId, activity } = body;
+        if (!projectId || !activity) {
+          response.writeHead(400, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ error: 'Missing projectId or activity' }));
+          return;
+        }
+        const saved = saveProjectActivity(projectId, activity);
+        const room = commRooms.get(projectId);
+        if (room) {
+          const actPayload = JSON.stringify({ type: 'activity_event', activity: saved });
+          room.forEach(c => {
+            if (c.ws.readyState === 1) c.ws.send(actPayload);
+          });
+        }
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: true, activity: saved }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+  }
+
+  // 9. Notifications API (Cross-user notification delivery & persistence)
+  if (parsedUrl.pathname === '/api/notifications') {
+    if (request.method === 'GET') {
+      const userId = parsedUrl.searchParams.get('userId');
+      const notifications = getGlobalNotifications(userId);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ notifications }));
+      return;
+    }
+    if (request.method === 'POST') {
+      try {
+        const body = await readJsonBody(request);
+        const { notification } = body;
+        if (!notification || !notification.user_id) {
+          response.writeHead(400, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ error: 'Invalid notification payload' }));
+          return;
+        }
+        const saved = saveGlobalNotification(notification);
+        // Instant broadcast to recipient's connected WebSockets!
+        sendToUser(saved.user_id, {
+          type: 'notification',
+          notification: saved,
+        });
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: true, notification: saved }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+    if (request.method === 'PATCH') {
+      try {
+        const body = await readJsonBody(request);
+        const { id, userId, all } = body;
+        markGlobalNotificationRead({ id, userId, all });
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: true }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+    if (request.method === 'DELETE') {
+      try {
+        const body = await readJsonBody(request);
+        const { id, userId, all, partnerRequestId } = body;
+        deleteGlobalNotification({ id, userId, all, partnerRequestId });
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: true }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+  }
+
+  // 10. Coding Partners API (Friend request persistence & sync)
+  if (parsedUrl.pathname === '/api/partners') {
+    if (request.method === 'GET') {
+      const userId = parsedUrl.searchParams.get('userId');
+      const partners = getCodingPartners(userId);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ partners }));
+      return;
+    }
+    if (request.method === 'POST') {
+      try {
+        const body = await readJsonBody(request);
+        const { partner } = body;
+        if (!partner || !partner.id) {
+          response.writeHead(400, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ error: 'Invalid partner payload' }));
+          return;
+        }
+        const saved = saveCodingPartner(partner);
+        // Send live partner request event to receiver
+        sendToUser(partner.receiver_id, {
+          type: 'partner_request_received',
+          partner: saved,
+        });
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: true, partner: saved }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+    if (request.method === 'PATCH') {
+      try {
+        const body = await readJsonBody(request);
+        const { requestId, status } = body;
+        const updated = updateCodingPartnerStatus(requestId, status);
+        if (updated) {
+          sendToUser(updated.requester_id, {
+            type: 'partner_request_updated',
+            partner: updated,
+          });
+        }
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: true, partner: updated }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+    if (request.method === 'DELETE') {
+      try {
+        const body = await readJsonBody(request);
+        const { partnerRequestId } = body;
+        const removed = removeCodingPartner(partnerRequestId);
+        if (removed) {
+          deleteGlobalNotification({ partnerRequestId });
+          sendToUser(removed.receiver_id, {
+            type: 'partner_request_cancelled',
+            partnerRequestId,
+          });
+        }
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: true }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+  }
+
   response.writeHead(200, { 'Content-Type': 'text/plain' });
   response.end('CodeCollab Real-time Sync & Workspace Server Active');
 });
@@ -565,22 +985,26 @@ const server = http.createServer((request, response) => {
 // Map: projectId -> Set<{ ws, userId, userName, userColor, isMuted }>
 const commRooms = new Map();
 
-function handleCommConnection(ws, projectId, verifiedUser) {
+function handleCommConnection(ws, projectId, verifiedUser, queryUserId) {
   if (!commRooms.has(projectId)) {
     commRooms.set(projectId, new Set());
   }
   const room = commRooms.get(projectId);
+  const initialUserId = verifiedUser?.id || (queryUserId && queryUserId !== 'undefined' ? queryUserId : 'guest');
   let clientMeta = {
     ws,
     peerId: `peer-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     // Level 6: Use verified user identity if available
-    userId: verifiedUser?.id || 'guest',
+    userId: initialUserId,
     userName: verifiedUser?.user_metadata?.full_name || verifiedUser?.email?.split('@')[0] || 'Anonymous',
     userColor: '#38bdf8',
     isMuted: false,
     inVoice: false,
   };
   room.add(clientMeta);
+  if (clientMeta.userId && clientMeta.userId !== 'guest') {
+    registerUserSocket(clientMeta.userId, ws);
+  }
 
   // Send back own assigned peerId
   ws.send(JSON.stringify({
@@ -595,20 +1019,25 @@ function handleCommConnection(ws, projectId, verifiedUser) {
       // 1. Client identifies itself (only allows overriding color, not userId/userName in production)
       if (msg.type === 'identify') {
         // If no verified user, allow identity from message (dev/mock mode)
-        if (!verifiedUser) {
-          clientMeta.userId = msg.userId || clientMeta.userId;
+        if (!verifiedUser && msg.userId) {
+          if (clientMeta.userId && clientMeta.userId !== msg.userId) {
+            unregisterUserSocket(clientMeta.userId, ws);
+          }
+          clientMeta.userId = msg.userId;
           clientMeta.userName = msg.userName || clientMeta.userName;
+          registerUserSocket(clientMeta.userId, ws);
         }
         // Always allow color override
         clientMeta.userColor = msg.userColor || clientMeta.userColor;
         return;
       }
 
-      // 2. Chat message broadcast
+      // 2. Chat message broadcast & automatic persistence
       if (msg.type === 'chat_message') {
+        const savedMsg = saveProjectMessage(projectId, msg.message);
         const chatPayload = JSON.stringify({
           type: 'chat_message',
-          message: msg.message,
+          message: savedMsg,
         });
         room.forEach((client) => {
           if (client.ws.readyState === 1) {
@@ -618,17 +1047,43 @@ function handleCommConnection(ws, projectId, verifiedUser) {
         return;
       }
 
-      // 3. Activity event broadcast
+      // 3. Activity event broadcast & automatic persistence
       if (msg.type === 'activity_event') {
+        const savedAct = saveProjectActivity(projectId, msg.activity);
         const actPayload = JSON.stringify({
           type: 'activity_event',
-          activity: msg.activity,
+          activity: savedAct,
         });
         room.forEach((client) => {
           if (client.ws.readyState === 1) {
             client.ws.send(actPayload);
           }
         });
+        return;
+      }
+
+      // 3b. Partner request and notification live broadcast
+      if (msg.type === 'partner_request') {
+        if (msg.partner) saveCodingPartner(msg.partner);
+        if (msg.notification) saveGlobalNotification(msg.notification);
+        if (msg.partner?.receiver_id) {
+          sendToUser(msg.partner.receiver_id, {
+            type: 'partner_request_received',
+            partner: msg.partner,
+            notification: msg.notification,
+          });
+        }
+        return;
+      }
+
+      if (msg.type === 'notification') {
+        if (msg.notification) {
+          saveGlobalNotification(msg.notification);
+          sendToUser(msg.notification.user_id, {
+            type: 'notification',
+            notification: msg.notification,
+          });
+        }
         return;
       }
 
@@ -728,6 +1183,9 @@ function handleCommConnection(ws, projectId, verifiedUser) {
 
   ws.on('close', () => {
     room.delete(clientMeta);
+    if (clientMeta.userId) {
+      unregisterUserSocket(clientMeta.userId, ws);
+    }
     if (clientMeta.inVoice) {
       const leavePayload = JSON.stringify({
         type: 'voice_peer_left',
@@ -788,6 +1246,7 @@ server.on('upgrade', async (request, socket, head) => {
   if (parsedUrl.pathname === '/comm') {
     const projectId = parsedUrl.searchParams.get('projectId') || 'default';
     const token = parsedUrl.searchParams.get('token') || '';
+    const queryUserId = parsedUrl.searchParams.get('userId') || '';
 
     // Level 6: Verify token
     let verifiedUser = null;
@@ -804,7 +1263,7 @@ server.on('upgrade', async (request, socket, head) => {
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
-      handleCommConnection(ws, projectId, verifiedUser);
+      handleCommConnection(ws, projectId, verifiedUser, queryUserId);
     });
     return;
   }

@@ -5,7 +5,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { config } from '@/lib/config';
-import { Square, RotateCcw, Trash2, Terminal as TerminalIcon, Copy, Clipboard } from 'lucide-react';
+import { Square, RotateCcw, Trash2, Terminal as TerminalIcon, Copy, Clipboard, RefreshCw } from 'lucide-react';
 
 interface TerminalPanelProps {
   projectId: string;
@@ -81,6 +81,10 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
   const [isRunning, setIsRunning] = useState(false);
   const [processPid, setProcessPid] = useState<number | null>(null);
   const [detectedPorts, setDetectedPorts] = useState<number[]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
+  const [reconnectTrigger, setReconnectTrigger] = useState(0);
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<any>(null);
 
   // Update theme dynamically
   useEffect(() => {
@@ -95,6 +99,9 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    let isMounted = true;
+    let ws: WebSocket | null = null;
 
     const termTheme = TERMINAL_THEMES[theme] || TERMINAL_THEMES.dark;
 
@@ -135,62 +142,83 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
     fitAddonRef.current = fitAddon;
 
     term.writeln('\x1b[1;36m[CodeCollab Remote Terminal]\x1b[0m Connecting to workspace environment...');
-
-    // 2. Connect to terminal WebSocket using centralized config URL
-    const wsUrl = config.buildWsUrl('/terminal', { projectId });
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    setConnectionStatus('connecting');
 
     const sendResize = () => {
-      if (ws.readyState === WebSocket.OPEN && term.cols && term.rows) {
+      if (ws && ws.readyState === WebSocket.OPEN && term.cols && term.rows) {
         ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
       }
     };
 
-    ws.onopen = () => {
-      term.writeln('\x1b[1;32m[Connected]\x1b[0m Workspace shell ready (\x1b[36mNode.js\x1b[0m + \x1b[33mPython 3.12\x1b[0m).');
-      term.writeln('\x1b[90mTip: To execute scripts, run \x1b[33mpython <filename>.py\x1b[90m or \x1b[36mnode <filename>.js\x1b[0m');
-      term.writeln('');
-      try {
-        fitAddon.fit();
-        sendResize();
-      } catch (e) {}
-    };
+    // 2. Connect to terminal WebSocket with auto-retry and container wake-up
+    const connectWs = () => {
+      if (!isMounted) return;
+      const wsUrl = config.buildWsUrl('/terminal', { projectId });
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === 'output') {
-          term.write(payload.data);
-        } else if (payload.type === 'status') {
-          setIsRunning(payload.running);
-          if (payload.pid) setProcessPid(payload.pid);
-          if (Array.isArray(payload.ports)) {
-            setDetectedPorts(payload.ports);
-            if (payload.ports.length > 0 && onPortDetected) {
-              onPortDetected(payload.ports[payload.ports.length - 1]);
+      ws.onopen = () => {
+        retryCountRef.current = 0;
+        setConnectionStatus('connected');
+        term.writeln('\x1b[1;32m[Connected]\x1b[0m Workspace shell ready (\x1b[36mNode.js\x1b[0m + \x1b[33mPython 3.12\x1b[0m).');
+        term.writeln('\x1b[90mTip: To execute scripts, run \x1b[33mpython <filename>.py\x1b[90m or \x1b[36mnode <filename>.js\x1b[0m');
+        term.writeln('');
+        try {
+          fitAddon.fit();
+          sendResize();
+        } catch (e) {}
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'output') {
+            term.write(payload.data);
+          } else if (payload.type === 'status') {
+            setIsRunning(payload.running);
+            if (payload.pid) setProcessPid(payload.pid);
+            if (Array.isArray(payload.ports)) {
+              setDetectedPorts(payload.ports);
+              if (payload.ports.length > 0 && onPortDetected) {
+                onPortDetected(payload.ports[payload.ports.length - 1]);
+              }
             }
+          } else if (payload.type === 'port_detected') {
+            setDetectedPorts((prev) => Array.from(new Set([...prev, payload.port])));
+            term.writeln(`\r\n\x1b[1;35m[Web Server Detected]\x1b[0m App listening on port \x1b[1m${payload.port}\x1b[0m (Opening Preview tab)\r\n`);
+            if (onPortDetected) onPortDetected(payload.port);
+          } else if (payload.type === 'exit') {
+            setIsRunning(false);
+            term.writeln(`\r\n\x1b[1;33m[Process Exited with code ${payload.code}]\x1b[0m`);
           }
-        } else if (payload.type === 'port_detected') {
-          setDetectedPorts((prev) => Array.from(new Set([...prev, payload.port])));
-          term.writeln(`\r\n\x1b[1;35m[Web Server Detected]\x1b[0m App listening on port \x1b[1m${payload.port}\x1b[0m (Opening Preview tab)\r\n`);
-          if (onPortDetected) onPortDetected(payload.port);
-        } else if (payload.type === 'exit') {
-          setIsRunning(false);
-          term.writeln(`\r\n\x1b[1;33m[Process Exited with code ${payload.code}]\x1b[0m`);
+        } catch (err) {
+          term.write(event.data);
         }
-      } catch (err) {
-        term.write(event.data);
-      }
+      };
+
+      ws.onerror = () => {
+        setConnectionStatus('error');
+        term.writeln('\r\n\x1b[1;31m[Connection Error]\x1b[0m Could not connect to remote terminal server.');
+        if (retryCountRef.current < 4) {
+          retryCountRef.current += 1;
+          const delay = retryCountRef.current * 2500;
+          term.writeln(`\x1b[1;33m[Auto-Reconnect]\x1b[0m Waking up backend environment... Retrying in ${delay / 1000}s (Attempt ${retryCountRef.current}/4)`);
+          config.wakeUpBackend();
+          clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = setTimeout(() => {
+            if (isMounted) connectWs();
+          }, delay);
+        } else {
+          term.writeln('\x1b[90mTip: Click "Reconnect" above to wake up the terminal container.\x1b[0m');
+        }
+      };
     };
 
-    ws.onerror = () => {
-      term.writeln('\r\n\x1b[1;31m[Connection Error]\x1b[0m Could not connect to remote terminal server.');
-    };
+    connectWs();
 
     // User typing input to terminal (forwards keystrokes directly to PTY)
     term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'input', data }));
       }
     });
@@ -200,7 +228,7 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
       // Allow browser Ctrl+V to paste into xterm
       if (e.ctrlKey && e.key.toLowerCase() === 'v') {
         navigator.clipboard.readText().then((text) => {
-          if (text && ws.readyState === WebSocket.OPEN) {
+          if (text && ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'input', data: text }));
           }
         }).catch(() => {});
@@ -240,6 +268,8 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
     }
 
     return () => {
+      isMounted = false;
+      clearTimeout(retryTimerRef.current);
       if (containerEl) {
         containerEl.removeEventListener('keydown', handleKeyDown);
       }
@@ -247,10 +277,10 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
         resizeObserver.disconnect();
       }
       window.removeEventListener('resize', handleResize);
-      ws.close();
+      if (ws) ws.close();
       term.dispose();
     };
-  }, [projectId]);
+  }, [projectId, reconnectTrigger]);
 
   const handleKill = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -308,6 +338,25 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
             <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-700 text-neutral-300">
               IDLE
             </span>
+          )}
+          {connectionStatus === 'connecting' && (
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Connecting...
+            </span>
+          )}
+          {connectionStatus === 'error' && (
+            <button
+              onClick={() => {
+                config.wakeUpBackend();
+                setReconnectTrigger((prev) => prev + 1);
+              }}
+              className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition-colors font-medium cursor-pointer"
+              title="Click to wake up terminal container & reconnect"
+            >
+              <RotateCcw className="w-2.5 h-2.5" />
+              Reconnect
+            </button>
           )}
         </div>
 

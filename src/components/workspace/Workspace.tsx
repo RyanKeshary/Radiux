@@ -524,7 +524,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
   // Persistent Comm WebSocket for real-time notifications and activity
   useEffect(() => {
     if (!projectId) return;
-    const wsUrl = config.buildWsUrl('/comm', { projectId });
+    const wsUrl = config.buildWsUrl('/comm', { projectId, userId: user?.id || '' });
     let isMounted = true;
     let ws: WebSocket | null = null;
     let reconnectTimer: any = null;
@@ -533,6 +533,16 @@ export function Workspace({ projectId }: WorkspaceProps) {
       try {
         ws = new WebSocket(wsUrl);
         commWsRef.current = ws;
+
+        ws.onopen = () => {
+          if (user?.id) {
+            ws?.send(JSON.stringify({
+              type: 'identify',
+              userId: user.id,
+              userName: user.full_name,
+            }));
+          }
+        };
 
         ws.onmessage = (event) => {
           try {
@@ -551,11 +561,22 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 });
               }
             } else if (msg.type === 'notification' && msg.notification) {
-              if (msg.notification.user_id === user?.id) {
+              if (!msg.notification.user_id || msg.notification.user_id === user?.id) {
                 setNotifications(prev => [msg.notification, ...prev]);
                 showToast({
                   type: msg.notification.type === 'partner_request' ? 'partner_request' : 'system',
                   title: msg.notification.title,
+                  message: msg.notification.message,
+                  partnerRequestId: msg.notification.partner_request_id,
+                });
+                soundManager.playNotification();
+              }
+            } else if (msg.type === 'partner_request_received') {
+              if (msg.notification) {
+                setNotifications(prev => [msg.notification, ...prev]);
+                showToast({
+                  type: 'partner_request',
+                  title: msg.notification.title || 'New Coding Partner Request',
                   message: msg.notification.message,
                   partnerRequestId: msg.notification.partner_request_id,
                 });
@@ -597,6 +618,15 @@ export function Workspace({ projectId }: WorkspaceProps) {
       commWsRef.current = null;
     };
   }, [projectId, user?.id, user?.full_name, logAndBroadcastActivity, appendOutputLog, showToast]);
+
+  // Backend keepalive to keep container awake
+  useEffect(() => {
+    config.wakeUpBackend();
+    const keepAlive = setInterval(() => {
+      config.wakeUpBackend();
+    }, 8 * 60 * 1000);
+    return () => clearInterval(keepAlive);
+  }, []);
 
   // Background Notifications Polling with Audio Chime & Corner Toast
   useEffect(() => {

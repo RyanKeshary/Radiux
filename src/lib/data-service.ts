@@ -27,24 +27,41 @@ export const DataService = {
     return isSupabaseConfigured;
   },
 
-  // Lookup registered user by email
-  async findUserByEmail(email: string): Promise<UserProfile | null> {
-    if (!isSupabaseConfigured || !supabase) {
-      return null;
-    }
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .ilike('email', email.trim())
-      .single();
+  // Lookup registered user by email, ID, or username
+  async findUser(identifier: string): Promise<UserProfile | null> {
+    const clean = (identifier || '').trim();
+    if (!clean) return null;
 
-    if (error || !data) return null;
-    return {
-      id: data.id,
-      email: data.email,
-      full_name: data.full_name,
-      avatar_url: data.avatar_url,
-    };
+    if (isSupabaseConfigured && supabase) {
+      try {
+        let query = supabase.from('profiles').select('*');
+        if (clean.includes('@')) {
+          query = query.ilike('email', clean);
+        } else if (clean.length > 20 && !clean.includes(' ')) {
+          // UUID or ID check
+          query = query.or(`id.eq.${clean},email.ilike.${clean}`);
+        } else {
+          query = query.or(`email.ilike.${clean},full_name.ilike.${clean}`);
+        }
+        const { data, error } = await query.limit(1);
+        if (!error && data && data.length > 0) {
+          const user = data[0];
+          return {
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name || user.email?.split('@')[0],
+            avatar_url: user.avatar_url,
+          };
+        }
+      } catch (e) {}
+    }
+    const mock = StorageMock.getProfile(clean);
+    if (mock) return mock;
+    return null;
+  },
+
+  async findUserByEmail(email: string): Promise<UserProfile | null> {
+    return this.findUser(email);
   },
 
   // Check if a user has access to a project
@@ -322,17 +339,32 @@ export const DataService = {
 
   async getMessages(projectId: string): Promise<ChatMessage[]> {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: true })
-        .limit(150);
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: true })
+          .limit(150);
 
-      if (!error && data) {
-        return data as ChatMessage[];
-      }
+        if (!error && data && data.length > 0) {
+          return data as ChatMessage[];
+        }
+      } catch (err) {}
     }
+
+    // Fallback to Backend API (cross-user persistent store)
+    try {
+      const res = await fetch(buildApiUrl('/api/messages', { projectId }));
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.messages) && json.messages.length > 0) {
+          json.messages.forEach((m: ChatMessage) => StorageMock.saveMessage(m));
+          return json.messages;
+        }
+      }
+    } catch (e) {}
+
     return StorageMock.getMessages(projectId);
   },
 
@@ -375,34 +407,13 @@ export const DataService = {
             .getPublicUrl(storagePath);
           mediaUrl = publicUrl;
         }
-        // If upload fails, fall back to base64 (will work but not ideal for production)
       } catch (storageErr) {
         console.warn('[DataService] Media upload to Storage failed, using base64 fallback:', storageErr);
       }
     }
 
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          project_id: projectId,
-          user_id: userId,
-          user_name: userName,
-          user_avatar: userAvatar || '',
-          content: content.trim(),
-          media_type: media?.type,
-          media_url: mediaUrl,
-          media_name: media?.name,
-        })
-        .select()
-        .single();
-
-      if (!error && data) {
-        StorageMock.saveMessage(data);
-        return data as ChatMessage;
-      }
-    }
-    return StorageMock.saveMessage({
+    const localPayload: ChatMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       project_id: projectId,
       user_id: userId,
       user_name: userName,
@@ -411,22 +422,79 @@ export const DataService = {
       media_type: media?.type,
       media_url: mediaUrl,
       media_name: media?.name,
-    });
+      created_at: new Date().toISOString(),
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .insert({
+            project_id: projectId,
+            user_id: userId,
+            user_name: userName,
+            user_avatar: userAvatar || '',
+            content: content.trim(),
+            media_type: media?.type,
+            media_url: mediaUrl,
+            media_name: media?.name,
+          })
+          .select()
+          .single();
+
+        if (!error && data) {
+          StorageMock.saveMessage(data);
+          return data as ChatMessage;
+        }
+      } catch (err) {}
+    }
+
+    // Persist to Backend API so all collaborators and reloads see this message
+    try {
+      const res = await fetch(buildApiUrl('/api/messages'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, message: localPayload }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.message) {
+          StorageMock.saveMessage(json.message);
+          return json.message;
+        }
+      }
+    } catch (e) {}
+
+    return StorageMock.saveMessage(localPayload);
   },
 
   async getActivities(projectId: string): Promise<ActivityEvent[]> {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('activities')
-        .select('*')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: false })
-        .limit(200);
+      try {
+        const { data, error } = await supabase
+          .from('activities')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false })
+          .limit(200);
 
-      if (!error && data) {
-        return data as ActivityEvent[];
-      }
+        if (!error && data && data.length > 0) {
+          return data as ActivityEvent[];
+        }
+      } catch (err) {}
     }
+
+    try {
+      const res = await fetch(buildApiUrl('/api/activities', { projectId }));
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.activities) && json.activities.length > 0) {
+          json.activities.forEach((a: ActivityEvent) => StorageMock.logActivity(a));
+          return json.activities;
+        }
+      }
+    } catch (e) {}
+
     return StorageMock.getActivities(projectId);
   },
 
@@ -438,33 +506,55 @@ export const DataService = {
     details: string,
     targetObject?: string
   ): Promise<ActivityEvent> {
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('activities')
-        .insert({
-          project_id: projectId,
-          user_id: userId,
-          user_name: userName,
-          action_type: actionType,
-          details: details.trim(),
-          target_object: targetObject || '',
-        })
-        .select()
-        .single();
-
-      if (!error && data) {
-        StorageMock.logActivity(data);
-        return data as ActivityEvent;
-      }
-    }
-    return StorageMock.logActivity({
+    const actPayload: ActivityEvent = {
+      id: `act-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       project_id: projectId,
       user_id: userId,
       user_name: userName,
       action_type: actionType,
       details: details.trim(),
       target_object: targetObject || '',
-    });
+      created_at: new Date().toISOString(),
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('activities')
+          .insert({
+            project_id: projectId,
+            user_id: userId,
+            user_name: userName,
+            action_type: actionType,
+            details: details.trim(),
+            target_object: targetObject || '',
+          })
+          .select()
+          .single();
+
+        if (!error && data) {
+          StorageMock.logActivity(data);
+          return data as ActivityEvent;
+        }
+      } catch (err) {}
+    }
+
+    try {
+      const res = await fetch(buildApiUrl('/api/activities'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, activity: actPayload }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.activity) {
+          StorageMock.logActivity(json.activity);
+          return json.activity;
+        }
+      }
+    } catch (e) {}
+
+    return StorageMock.logActivity(actPayload);
   },
 
   // ==========================================================================
@@ -1437,7 +1527,7 @@ export const DataService = {
           .from('coding_partners')
           .select('*, requester:requester_id(*), receiver:receiver_id(*)')
           .or(`requester_id.eq.${userId},receiver_id.eq.${userId}`);
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
           return data.map((d: any) => ({
             id: d.id,
             requester_id: d.requester_id,
@@ -1450,6 +1540,19 @@ export const DataService = {
         }
       } catch (e) {}
     }
+
+    // Fallback to Backend API (cross-user persistent store)
+    try {
+      const res = await fetch(buildApiUrl('/api/partners', { userId }));
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.partners) && json.partners.length > 0) {
+          json.partners.forEach((p: CodingPartner) => StorageMock.saveCodingPartner(p));
+          return json.partners;
+        }
+      }
+    } catch (e) {}
+
     const mockList = StorageMock.getCodingPartners(userId);
     return mockList.map((m: any) => ({
       ...m,
@@ -1461,8 +1564,8 @@ export const DataService = {
     requester: UserProfile,
     targetIdentifier: string
   ): Promise<{ success: boolean; message: string; partner?: CodingPartner }> {
-    const targetUser = await this.findUserByEmail(targetIdentifier);
-    const target = targetUser || StorageMock.getProfile(targetIdentifier) || StorageMock.getProfile('user-bob-2222');
+    const targetUser = await this.findUser(targetIdentifier);
+    const target = targetUser || StorageMock.getProfile(targetIdentifier);
 
     if (!target) {
       return { success: false, message: `No developer found matching "${targetIdentifier}".` };
@@ -1487,7 +1590,15 @@ export const DataService = {
       }
     }
 
-    let createdPartner: CodingPartner;
+    let createdPartner: CodingPartner = {
+      id: `partner-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      requester_id: requester.id,
+      receiver_id: target.id,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      profile: target,
+    };
 
     if (isSupabaseConfigured && supabase) {
       try {
@@ -1502,33 +1613,20 @@ export const DataService = {
           .single();
         if (!error && data) {
           createdPartner = { ...data, profile: target };
-        } else {
-          throw new Error('Supabase insert failed');
         }
-      } catch (err) {
-        createdPartner = {
-          id: `partner-${Date.now()}`,
-          requester_id: requester.id,
-          receiver_id: target.id,
-          status: 'pending',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          profile: target,
-        };
-        StorageMock.saveCodingPartner(createdPartner);
-      }
-    } else {
-      createdPartner = {
-        id: `partner-${Date.now()}`,
-        requester_id: requester.id,
-        receiver_id: target.id,
-        status: 'pending',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        profile: target,
-      };
-      StorageMock.saveCodingPartner(createdPartner);
+      } catch (err) {}
     }
+
+    // 2. Sync to Backend API
+    try {
+      await fetch(buildApiUrl('/api/partners'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partner: createdPartner }),
+      });
+    } catch (e) {}
+
+    StorageMock.saveCodingPartner(createdPartner);
 
     // Real persistent notification for recipient
     await this.createNotification(target.id, {
@@ -1575,6 +1673,15 @@ export const DataService = {
           .eq('id', requestId);
       } catch (err) {}
     }
+
+    try {
+      await fetch(buildApiUrl('/api/partners'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId, status }),
+      });
+    } catch (e) {}
+
     StorageMock.updateCodingPartner(requestId, status);
 
     if (notificationId) {
@@ -1598,12 +1705,12 @@ export const DataService = {
           partnerData = data;
         }
         if (!partnerData) {
-          const all = StorageMock.getCodingPartners('');
+          const all = await this.getCodingPartners('');
           partnerData = all.find((p: any) => p.id === requestId);
         }
 
         if (partnerData) {
-          const receiver = await this.getProfile(partnerData.receiver_id);
+          const receiver = await this.findUser(partnerData.receiver_id) || StorageMock.getProfile(partnerData.receiver_id);
           await this.createNotification(partnerData.requester_id, {
             type: 'partner_accepted',
             title: 'Partner Request Accepted!',
@@ -1623,9 +1730,15 @@ export const DataService = {
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('coding_partners').delete().eq('id', partnerId);
-        return;
       } catch (err) {}
     }
+    try {
+      await fetch(buildApiUrl('/api/partners'), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnerRequestId: partnerId }),
+      });
+    } catch (e) {}
     StorageMock.removeCodingPartner(partnerId);
   },
 
@@ -1636,6 +1749,15 @@ export const DataService = {
         await supabase.from('notifications').delete().eq('partner_request_id', partnerRequestId);
       } catch (err) {}
     }
+
+    try {
+      await fetch(buildApiUrl('/api/partners'), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnerRequestId }),
+      });
+    } catch (e) {}
+
     StorageMock.removeCodingPartner(partnerRequestId);
     StorageMock.removeNotificationByPartnerRequestId(partnerRequestId);
     return { success: true, message: 'Friend request unsent successfully.' };
@@ -1650,9 +1772,22 @@ export const DataService = {
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
-        if (!error && data) return data;
+        if (!error && data && data.length > 0) return data;
       } catch (err) {}
     }
+
+    // Fallback to Backend API (cross-user persistent store)
+    try {
+      const res = await fetch(buildApiUrl('/api/notifications', { userId }));
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.notifications) && json.notifications.length > 0) {
+          json.notifications.forEach((n: NotificationItem) => StorageMock.saveNotification(n));
+          return json.notifications;
+        }
+      }
+    } catch (e) {}
+
     return StorageMock.getNotifications(userId);
   },
 
@@ -1660,9 +1795,15 @@ export const DataService = {
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('notifications').update({ read: true }).eq('id', notificationId);
-        return;
       } catch (err) {}
     }
+    try {
+      await fetch(buildApiUrl('/api/notifications'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: notificationId }),
+      });
+    } catch (e) {}
     StorageMock.markNotificationRead(notificationId);
   },
 
@@ -1670,9 +1811,15 @@ export const DataService = {
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
-        return;
       } catch (err) {}
     }
+    try {
+      await fetch(buildApiUrl('/api/notifications'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, all: true }),
+      });
+    } catch (e) {}
     StorageMock.markAllNotificationsRead(userId);
   },
 
@@ -1680,9 +1827,15 @@ export const DataService = {
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('notifications').delete().eq('id', notificationId);
-        return;
       } catch (err) {}
     }
+    try {
+      await fetch(buildApiUrl('/api/notifications'), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: notificationId }),
+      });
+    } catch (e) {}
     StorageMock.dismissNotification(notificationId);
   },
 
@@ -1690,9 +1843,15 @@ export const DataService = {
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('notifications').delete().eq('user_id', userId);
-        return;
       } catch (err) {}
     }
+    try {
+      await fetch(buildApiUrl('/api/notifications'), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, all: true }),
+      });
+    } catch (e) {}
     StorageMock.clearAllNotifications(userId);
   },
 
@@ -1712,6 +1871,15 @@ export const DataService = {
         await supabase.from('notifications').insert(item);
       } catch (err) {}
     }
+
+    try {
+      await fetch(buildApiUrl('/api/notifications'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification: item }),
+      });
+    } catch (e) {}
+
     StorageMock.saveNotification(item);
     return item;
   },

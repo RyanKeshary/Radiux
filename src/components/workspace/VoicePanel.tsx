@@ -37,52 +37,52 @@ export function VoicePanel({
     >
       {/* Top Banner / Controls */}
       <div 
-        className="border rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg mb-4"
+        className="border rounded-xl p-3.5 flex flex-col gap-3 shadow-lg mb-4"
         style={{
           backgroundColor: 'var(--ide-card-bg)',
           borderColor: 'var(--ide-border)',
         }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+            className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center transition-colors ${
               isInVoice
                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                 : 'bg-neutral-500/10 text-neutral-400 border border-neutral-500/20'
             }`}
           >
             {isInVoice ? (
-              <Radio className="w-5 h-5 animate-pulse" />
+              <Radio className="w-4 h-4 animate-pulse" />
             ) : (
-              <PhoneCall className="w-5 h-5" />
+              <PhoneCall className="w-4 h-4" />
             )}
           </div>
 
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold" style={{ color: 'var(--ide-text)' }}>Project Voice Channel</h3>
+              <h3 className="text-xs font-bold truncate" style={{ color: 'var(--ide-text)' }}>Project Voice Channel</h3>
               {isInVoice && (
-                <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium">
+                <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium flex-shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                   LIVE
                 </span>
               )}
             </div>
-            <p className="text-[11px] mt-0.5" style={{ color: 'var(--ide-text-muted)' }}>
+            <p className="text-[11px] mt-0.5 leading-relaxed" style={{ color: 'var(--ide-text-muted)' }}>
               {isInVoice
-                ? `${voicePeers.length + 1} participant${voicePeers.length + 1 === 1 ? '' : 's'} connected via peer-to-peer WebRTC.`
+                ? `${voicePeers.length + 1} participant${voicePeers.length + 1 === 1 ? '' : 's'} connected.`
                 : 'Join the voice room to speak with collaborators directly.'}
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-2 w-full">
           {isInVoice ? (
             <>
               <button
                 onClick={onToggleMute}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
                   isMuted
                     ? 'bg-rose-500/20 text-rose-400 border-rose-500/30 hover:bg-rose-500/30'
                     : 'hover:bg-black/5 dark:hover:bg-white/10'
@@ -99,7 +99,7 @@ export function VoicePanel({
 
               <button
                 onClick={onLeaveVoice}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-600 hover:bg-rose-500 text-white transition-colors shadow"
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-600 hover:bg-rose-500 text-white transition-colors shadow"
               >
                 <PhoneOff className="w-3.5 h-3.5" />
                 <span>Disconnect</span>
@@ -109,9 +109,9 @@ export function VoicePanel({
             <button
               onClick={onJoinVoice}
               disabled={connectionState === 'connecting'}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition-colors shadow-md"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition-colors shadow-md"
             >
-              <PhoneCall className="w-3.5 h-3.5" />
+              <PhoneCall className="w-3.5 h-3.5 flex-shrink-0" />
               <span>{connectionState === 'connecting' ? 'Connecting...' : 'Join Voice Call'}</span>
             </button>
           )}

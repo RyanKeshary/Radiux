@@ -180,48 +180,105 @@ export function ChatPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // 1. Fetch initial persistent chat history
+  // 1. Fetch initial persistent chat history & set up background sync
   useEffect(() => {
     let isMounted = true;
-    DataService.getMessages(projectId).then((msgs) => {
-      if (isMounted) {
-        setMessages(msgs);
-        setLoading(false);
-        setTimeout(scrollToBottom, 100);
-      }
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, [projectId]);
-
-  // 2. Connect to real-time chat room WebSocket using centralized config
-  useEffect(() => {
-    const wsUrl = config.buildWsUrl('/comm', { projectId });
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onmessage = (event) => {
+    const fetchMsgs = async () => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'chat_message' && data.message) {
-          const newMsg: ChatMessage = data.message;
+        const msgs = await DataService.getMessages(projectId);
+        if (isMounted) {
           setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
+            if (prev.length === 0) return msgs;
+            const existingIds = new Set(prev.map((m) => m.id));
+            const newOnes = msgs.filter((m) => !existingIds.has(m.id));
+            if (newOnes.length > 0) {
+              const merged = [...prev, ...newOnes].sort(
+                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+              );
+              setTimeout(scrollToBottom, 50);
+              return merged;
+            }
+            return prev;
           });
-          setTimeout(scrollToBottom, 50);
-          if (onNewMessageReceived && newMsg.user_id !== userId) {
-            onNewMessageReceived();
-          }
+          setLoading(false);
         }
       } catch (err) {}
     };
 
+    fetchMsgs().then(() => {
+      if (isMounted) setTimeout(scrollToBottom, 100);
+    });
+
+    // Polling interval every 3.5s to ensure cross-user chat is always in sync
+    const interval = setInterval(fetchMsgs, 3500);
+
     return () => {
-      ws.close();
+      isMounted = false;
+      clearInterval(interval);
     };
-  }, [projectId, userId, onNewMessageReceived]);
+  }, [projectId]);
+
+  // 2. Connect to real-time chat room WebSocket with auto-reconnect
+  useEffect(() => {
+    let isMounted = true;
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: any = null;
+
+    const connect = () => {
+      if (!isMounted) return;
+      const wsUrl = config.buildWsUrl('/comm', { projectId, userId });
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        try {
+          ws?.send(
+            JSON.stringify({
+              type: 'identify',
+              userId,
+              userName,
+              projectId,
+            })
+          );
+        } catch (e) {}
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'chat_message' && data.message) {
+            const newMsg: ChatMessage = data.message;
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+            setTimeout(scrollToBottom, 50);
+            if (onNewMessageReceived && newMsg.user_id !== userId) {
+              onNewMessageReceived();
+            }
+          }
+        } catch (err) {}
+      };
+
+      ws.onclose = () => {
+        if (isMounted) {
+          reconnectTimeout = setTimeout(connect, 3000);
+        }
+      };
+
+      ws.onerror = () => {
+        ws?.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(reconnectTimeout);
+      if (ws) ws.close();
+    };
+  }, [projectId, userId, userName, onNewMessageReceived]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
