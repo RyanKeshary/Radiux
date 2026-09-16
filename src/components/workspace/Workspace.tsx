@@ -38,18 +38,11 @@ import { PublicProfileModal } from './PublicProfileModal';
 import { DeveloperDiscoveryModal } from '@/components/profile/DeveloperDiscoveryModal';
 import { ProjectSwitcherModal } from './ProjectSwitcherModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
-import { NotificationsPopover, AppNotification } from './NotificationsPopover';
-import { NotificationsDrawer } from './NotificationsDrawer';
-import { NotificationToastStack } from './NotificationToastStack';
-import { DeploymentModal } from './DeploymentModal';
-import { ProfileHoverCard } from './ProfileHoverCard';
+import { NotificationsDrawer, StackedNotificationToast, AppNotification } from './NotificationsPopover';
 import { ChatPanel } from './ChatPanel';
 import { VoicePanel } from './VoicePanel';
-import { ActivityFeed } from './ActivityFeed';
-import { playNotificationChime } from '@/lib/sound';
-import { triggerHaptic } from '@/lib/haptics';
 import { CommandRegistry } from '@/lib/commands';
-import { Rocket } from 'lucide-react';
+import { Sound } from '@/lib/audio';
 
 import { 
   ChevronLeft, 
@@ -243,14 +236,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isQuickOpen, setIsQuickOpen] = useState(false);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'preferences' | 'profile' | 'partners' | 'account' | 'deployments'>('preferences');
-  const [isDeploymentModalOpen, setIsDeploymentModalOpen] = useState(false);
-  const [hoverCardUser, setHoverCardUser] = useState<{
-    user: { id: string; full_name?: string; username?: string; avatar_url?: string; bio?: string };
-    position: { x: number; y: number };
-  } | null>(null);
   const [isGitHubOpen, setIsGitHubOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [settingsModalInitialTab, setSettingsModalInitialTab] = useState<'ide' | 'profile' | 'collaborators' | 'account'>('ide');
   const [selectedPublicUserId, setSelectedPublicUserId] = useState<string | null>(null);
   const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
   const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(false);
@@ -258,18 +246,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [currentGitBranch, setCurrentGitBranch] = useState('main');
-
-  // Universal handler for user click with "click again to view profile" preview
-  const handleUserClick = useCallback((u: { id: string; full_name?: string; username?: string; avatar_url?: string; bio?: string }, e?: React.MouseEvent) => {
-    if (hoverCardUser && hoverCardUser.user.id === u.id) {
-      setHoverCardUser(null);
-      setSelectedPublicUserId(u.id);
-    } else {
-      const x = e ? e.clientX : (typeof window !== 'undefined' ? window.innerWidth / 2 - 120 : 100);
-      const y = e ? e.clientY : 120;
-      setHoverCardUser({ user: u, position: { x, y } });
-    }
-  }, [hoverCardUser]);
 
   // User-specific custom resizable sidebar width
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -477,6 +453,35 @@ export function Workspace({ projectId }: WorkspaceProps) {
       loadWorkspaceData();
     }
   }, [user, authLoading, loadWorkspaceData]);
+
+  // Periodic Notifications Refresh with Chime Sound
+  useEffect(() => {
+    if (!user?.id) return;
+    const interval = setInterval(async () => {
+      try {
+        const notifs = await DataService.getNotifications(user.id);
+        const mapped: AppNotification[] = notifs.map(n => ({
+          id: n.id,
+          type: n.type as any,
+          title: n.title,
+          message: n.message,
+          read: n.read,
+          createdAt: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          projectId: n.data?.project_id,
+          partnerRequestId: n.data?.partner_request_id,
+        }));
+        setNotifications(prev => {
+          const prevIds = new Set(prev.map(p => p.id));
+          const hasNew = mapped.some(m => !m.read && !prevIds.has(m.id));
+          if (hasNew) {
+            Sound.notification();
+          }
+          return mapped;
+        });
+      } catch (e) {}
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
   // Persist Workspace State (Debounced)
   useEffect(() => {
@@ -782,171 +787,106 @@ export function Workspace({ projectId }: WorkspaceProps) {
     };
   }, []);
 
-  // Global Capture-Phase Keyboard listener: handles custom keybindings, Chrome-safe shortcuts, and universal Escape
+  // Global Capture-Phase Keyboard listener: catches shortcuts and custom keybindings safely
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Universal Escape handler to close modals/popups/hovercards
+      // 0. Universal ESC handling: close whichever modal, drawer, or popover is open
       if (e.key === 'Escape') {
-        let handled = false;
-        if (hoverCardUser) {
-          setHoverCardUser(null);
-          handled = true;
-        }
-        if (isNotificationsOpen) {
-          setIsNotificationsOpen(false);
-          handled = true;
-        }
-        if (isCommandPaletteOpen) {
-          setIsCommandPaletteOpen(false);
-          handled = true;
-        }
-        if (isQuickOpen) {
-          setIsQuickOpen(false);
-          handled = true;
-        }
-        if (isGlobalSearchOpen) {
-          setIsGlobalSearchOpen(false);
-          handled = true;
-        }
-        if (isDeploymentModalOpen) {
-          setIsDeploymentModalOpen(false);
-          handled = true;
-        }
-        if (isSettingsOpen) {
-          setIsSettingsOpen(false);
-          handled = true;
-        }
-        if (isProfileModalOpen) {
-          setIsProfileModalOpen(false);
-          handled = true;
-        }
-        if (selectedPublicUserId) {
-          setSelectedPublicUserId(null);
-          handled = true;
-        }
-        if (isDiscoveryOpen) {
-          setIsDiscoveryOpen(false);
-          handled = true;
-        }
-        if (isProjectSwitcherOpen) {
-          setIsProjectSwitcherOpen(false);
-          handled = true;
-        }
-        if (isShortcutsOpen) {
-          setIsShortcutsOpen(false);
-          handled = true;
-        }
-        if (isInviteOpen) {
-          setIsInviteOpen(false);
-          handled = true;
-        }
-        if (isGitHubOpen) {
-          setIsGitHubOpen(false);
-          handled = true;
-        }
-        if (handled) {
+        if (isNotificationsOpen) { setIsNotificationsOpen(false); Sound.playHapticPop(); return; }
+        if (isCommandPaletteOpen) { setIsCommandPaletteOpen(false); Sound.playHapticPop(); return; }
+        if (isQuickOpen) { setIsQuickOpen(false); Sound.playHapticPop(); return; }
+        if (isGlobalSearchOpen) { setIsGlobalSearchOpen(false); Sound.playHapticPop(); return; }
+        if (isSettingsOpen) { setIsSettingsOpen(false); Sound.playHapticPop(); return; }
+        if (isProfileModalOpen) { setIsProfileModalOpen(false); Sound.playHapticPop(); return; }
+        if (selectedPublicUserId) { setSelectedPublicUserId(null); Sound.playHapticPop(); return; }
+        if (isShortcutsOpen) { setIsShortcutsOpen(false); Sound.playHapticPop(); return; }
+        if (isProjectSwitcherOpen) { setIsProjectSwitcherOpen(false); Sound.playHapticPop(); return; }
+        if (isInviteOpen) { setIsInviteOpen(false); Sound.playHapticPop(); return; }
+        if (isGitHubOpen) { setIsGitHubOpen(false); Sound.playHapticPop(); return; }
+      }
+
+      // 1. Dynamic check against registered & custom commands from CommandRegistry
+      const allCmds = CommandRegistry.getAllCommands();
+      for (const { item, shortcut } of allCmds) {
+        if (CommandRegistry.matchEvent(e, shortcut)) {
           e.preventDefault();
           e.stopPropagation();
-          triggerHaptic('light');
-          return;
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+
+          switch (item.actionId) {
+            case 'closeActiveTab':
+              handleCloseActiveTab();
+              return;
+            case 'commandPalette':
+              setIsCommandPaletteOpen((prev) => !prev);
+              return;
+            case 'quickOpen':
+              setIsQuickOpen((prev) => !prev);
+              return;
+            case 'globalSearch':
+              setIsGlobalSearchOpen((prev) => !prev);
+              return;
+            case 'toggleSidebar':
+              setIsSidebarOpen((prev) => !prev);
+              return;
+            case 'toggleDock':
+              setIsDockOpen((prev) => !prev);
+              return;
+            case 'splitRight':
+              handleSplitRight();
+              return;
+            case 'cycleTabNext':
+              handleCycleTab('next');
+              return;
+            case 'cycleTabPrev':
+              handleCycleTab('prev');
+              return;
+            case 'switchProject':
+              setIsProjectSwitcherOpen(true);
+              return;
+            case 'openSettings':
+              setSettingsModalInitialTab('ide');
+              setIsProfileModalOpen(true);
+              return;
+            case 'openProfile':
+              setSettingsModalInitialTab('profile');
+              setIsProfileModalOpen(true);
+              return;
+            case 'focusExplorer':
+              setActiveActivityView('explorer');
+              setIsSidebarOpen(true);
+              return;
+            case 'focusGit':
+              setActiveActivityView('git');
+              setIsSidebarOpen(true);
+              return;
+            case 'focusCollaborators':
+              setActiveActivityView('collaborators');
+              setIsSidebarOpen(true);
+              return;
+            case 'saveFile':
+              // Handled by Yjs/Monaco auto-save
+              return;
+          }
         }
       }
 
-      // 1. Close Active Editor Tab (Alt+W, Ctrl+Q, or Ctrl+W)
-      if (CommandRegistry.matchesEvent('workbench.action.closeActiveEditor', e)) {
+      // 2. Fallbacks for Chrome-safe shortcuts
+      const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      // Tab close fallback: Alt+W or Ctrl+Q
+      if ((e.altKey && (e.key === 'w' || e.key === 'W')) || (cmdOrCtrl && (e.key === 'q' || e.key === 'Q'))) {
         e.preventDefault();
         e.stopPropagation();
-        triggerHaptic('light');
         handleCloseActiveTab();
         return;
       }
 
-      // 2. Command Palette (Ctrl+Shift+P, Alt+Shift+P, F1)
-      if (CommandRegistry.matchesEvent('workbench.action.showCommands', e)) {
+      // Save fallback: Ctrl+S
+      if (cmdOrCtrl && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         e.stopPropagation();
-        triggerHaptic('light');
-        setIsCommandPaletteOpen((prev) => !prev);
-        return;
-      }
-
-      // 3. Quick Open File (Ctrl+P, Alt+P)
-      if (CommandRegistry.matchesEvent('workbench.action.quickOpen', e)) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerHaptic('light');
-        setIsQuickOpen((prev) => !prev);
-        return;
-      }
-
-      // 4. Save: Ctrl+S (Prevent browser 'Save webpage' dialog)
-      if (CommandRegistry.matchesEvent('workbench.action.save', e)) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerHaptic('selection');
-        return;
-      }
-
-      // 5. Global Search (Ctrl+Shift+F, Alt+Shift+F)
-      if (CommandRegistry.matchesEvent('workbench.action.findInFiles', e)) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerHaptic('light');
-        setIsGlobalSearchOpen((prev) => !prev);
-        return;
-      }
-
-      // 6. Toggle Sidebar (Ctrl+B, Alt+B)
-      if (CommandRegistry.matchesEvent('workbench.action.toggleSidebar', e)) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerHaptic('light');
-        setIsSidebarOpen((prev) => !prev);
-        return;
-      }
-
-      // 7. Toggle Terminal / Dock (Ctrl+`, Alt+`, Ctrl+J)
-      if (CommandRegistry.matchesEvent('workbench.action.terminal.toggle', e)) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerHaptic('light');
-        setIsDockOpen((prev) => !prev);
-        return;
-      }
-
-      // 8. Split Editor (Ctrl+\, Alt+\)
-      if (CommandRegistry.matchesEvent('workbench.action.splitEditorRight', e)) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerHaptic('light');
-        handleSplitRight();
-        return;
-      }
-
-      // 9. Open Settings (Ctrl+,, Alt+,)
-      if (CommandRegistry.matchesEvent('workbench.action.openSettings', e)) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerHaptic('light');
-        setSettingsInitialTab('preferences');
-        setIsProfileModalOpen(true);
-        return;
-      }
-
-      // 10. Switch Project (Ctrl+Alt+O)
-      if (CommandRegistry.matchesEvent('workbench.action.switchProject', e)) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerHaptic('light');
-        setIsProjectSwitcherOpen(true);
-        return;
-      }
-
-      // 11. Cycle Tabs: Ctrl+Tab / Ctrl+Shift+Tab
-      if (e.ctrlKey && !e.altKey && (e.key === 'Tab' || e.code === 'Tab')) {
-        e.preventDefault();
-        e.stopPropagation();
-        handleCycleTab(e.shiftKey ? 'prev' : 'next');
         return;
       }
     };
@@ -954,22 +894,19 @@ export function Workspace({ projectId }: WorkspaceProps) {
     window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
   }, [
-    handleCloseActiveTab, 
-    handleSplitRight, 
-    handleCycleTab, 
-    hoverCardUser, 
-    isNotificationsOpen, 
-    isCommandPaletteOpen, 
-    isQuickOpen, 
-    isGlobalSearchOpen, 
-    isDeploymentModalOpen, 
-    isSettingsOpen, 
-    isProfileModalOpen, 
-    selectedPublicUserId, 
-    isDiscoveryOpen, 
-    isProjectSwitcherOpen, 
-    isShortcutsOpen, 
-    isInviteOpen, 
+    handleCloseActiveTab,
+    handleSplitRight,
+    handleCycleTab,
+    isNotificationsOpen,
+    isCommandPaletteOpen,
+    isQuickOpen,
+    isGlobalSearchOpen,
+    isSettingsOpen,
+    isProfileModalOpen,
+    selectedPublicUserId,
+    isShortcutsOpen,
+    isProjectSwitcherOpen,
+    isInviteOpen,
     isGitHubOpen
   ]);
 
@@ -1474,22 +1411,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
             }}
           />
 
-          {/* Deploy Button */}
-          <button
-            onClick={() => {
-              triggerHaptic('light');
-              setIsDeploymentModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded font-medium text-white shadow-sm transition-all transform active:scale-95 text-[11px]"
-            style={{
-              background: 'linear-gradient(135deg, #10b981 0%, #0d9488 100%)',
-            }}
-            title="Deploy to Vercel & Render"
-          >
-            <Rocket className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Deploy</span>
-          </button>
-
           {/* GitHub Sync Button */}
           <button
             onClick={() => setIsGitHubOpen(true)}
@@ -1524,11 +1445,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
           {/* User Account Menu */}
           <UserMenu 
             onOpenProfileModal={() => {
-              setSettingsInitialTab('profile');
+              setSettingsModalInitialTab('profile');
               setIsProfileModalOpen(true);
             }}
             onOpenSettingsModal={() => {
-              setSettingsInitialTab('preferences');
+              setSettingsModalInitialTab('ide');
               setIsProfileModalOpen(true);
             }}
             onOpenShortcutsModal={() => setIsShortcutsOpen(true)}
@@ -1549,13 +1470,16 @@ export function Workspace({ projectId }: WorkspaceProps) {
           collaboratorCount={members.length}
           gitChangedCount={0}
           unreadNotifications={notifications.filter(n => !n.read).length}
+          unreadChatCount={unreadCount}
+          isInVoice={isInVoice}
+          voicePeerCount={voicePeers.length}
           onOpenSettings={() => {
-            setSettingsInitialTab('preferences');
+            setSettingsModalInitialTab('ide');
             setIsProfileModalOpen(true);
           }}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenProfile={() => {
-            setSettingsInitialTab('profile');
+            setSettingsModalInitialTab('profile');
             setIsProfileModalOpen(true);
           }}
           onOpenNotifications={() => setIsNotificationsOpen(prev => !prev)}
@@ -1622,44 +1546,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
                   projectName={project.name}
                   userName={user?.full_name || 'Anonymous Peer'}
                   userEmail={user?.email}
-                  onActivityEvent={(d) => {
-                    let act: any = 'git_commit';
-                    if (d.includes('pushed')) act = 'git_push';
-                    else if (d.includes('pulled')) act = 'git_pull';
-                    else if (d.includes('branch') && d.includes('created')) act = 'git_branch_created';
-                    else if (d.includes('switched')) act = 'git_branch_switched';
-                    else if (d.includes('initialized')) act = 'git_init';
-                    logAndBroadcastActivity(act, d, 'git');
-                    appendOutputLog('git', d);
-                  }}
+                  onActivityEvent={(d) => logAndBroadcastActivity('media_uploaded', d)}
                   onDockToBottom={() => {
-                    setIsDockOpen(true);
                     setActiveDockTab('git');
-                    setIsSidebarOpen(false);
+                    setIsDockOpen(true);
                   }}
-                  isDocked={false}
                 />
               </div>
-            )}
-
-            {activeActivityView === 'collaborators' && (
-              <CollaboratorsPanel
-                members={members}
-                onlinePeers={onlinePeersList}
-                voicePeers={voicePeers}
-                isInVoice={isInVoice}
-                onInviteClick={() => setIsInviteOpen(true)}
-                onSelectMemberProfile={(uid) => {
-                  const m = members.find(x => x.user_id === uid);
-                  handleUserClick({
-                    id: uid,
-                    full_name: m?.user?.full_name || 'Collaborator',
-                    username: m?.user?.username,
-                    avatar_url: m?.user?.avatar_url,
-                  });
-                }}
-                onJumpToFile={(fid) => handleNavigateToLocation(fid)}
-              />
             )}
 
             {activeActivityView === 'chat' && (
@@ -1669,11 +1562,18 @@ export function Workspace({ projectId }: WorkspaceProps) {
                   userId={user?.id || 'guest'}
                   userName={user?.full_name || 'Anonymous Peer'}
                   userAvatar={user?.avatar_url}
-                  userColor={userColor}
-                  onNewMessageReceived={() => {}}
+                  isSidebarMode={true}
+                  onDockToBottom={() => {
+                    setActiveDockTab('chat');
+                    setIsDockOpen(true);
+                  }}
                   onOpenMediaInEditor={handleOpenMediaInEditor}
                   onNavigateToFile={handleNavigateToLocation}
-                  onUserClick={handleUserClick}
+                  onNewMessageReceived={() => {
+                    if (!isSidebarOpen || activeActivityView !== 'chat') {
+                      setUnreadCount((c) => c + 1);
+                    }
+                  }}
                 />
               </div>
             )}
@@ -1685,23 +1585,30 @@ export function Workspace({ projectId }: WorkspaceProps) {
                   isMuted={isMuted}
                   voicePeers={voicePeers}
                   connectionState={voiceConnectionState}
+                  userName={user?.full_name || 'Anonymous Peer'}
+                  userColor={userColor}
                   onJoinVoice={joinVoice}
                   onLeaveVoice={leaveVoice}
                   onToggleMute={toggleMute}
-                  userName={user?.full_name || 'Anonymous Peer'}
-                  userAvatar={user?.avatar_url}
+                  isSidebarMode={true}
+                  onDockToBottom={() => {
+                    setActiveDockTab('voice');
+                    setIsDockOpen(true);
+                  }}
                 />
               </div>
             )}
 
-            {activeActivityView === 'activity' && (
-              <div className="flex flex-col h-full overflow-hidden">
-                <ActivityFeed
-                  projectId={projectId}
-                  currentUserId={user?.id || 'guest'}
-                  onUserClick={handleUserClick}
-                />
-              </div>
+            {activeActivityView === 'collaborators' && (
+              <CollaboratorsPanel
+                members={members}
+                onlinePeers={onlinePeersList}
+                voicePeers={voicePeers}
+                isInVoice={isInVoice}
+                onInviteClick={() => setIsInviteOpen(true)}
+                onSelectMemberProfile={(uid) => setSelectedPublicUserId(uid)}
+                onJumpToFile={(fid) => handleNavigateToLocation(fid)}
+              />
             )}
           </div>
         )}
@@ -1749,6 +1656,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onTabChange={setActiveDockTab}
                 onNavigateToFile={handleNavigateToLocation}
                 theme={settings.theme}
+                onMoveTabToSidebar={(tab) => {
+                  setActiveActivityView(tab);
+                  setIsSidebarOpen(true);
+                }}
               />
             )}
 
@@ -1952,6 +1863,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onTabChange={setActiveDockTab}
                 onNavigateToFile={handleNavigateToLocation}
                 theme={settings.theme}
+                onMoveTabToSidebar={(tab) => {
+                  setActiveActivityView(tab);
+                  setIsSidebarOpen(true);
+                }}
               />
             )}
           </main>
@@ -1995,6 +1910,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
               onTabChange={setActiveDockTab}
               onNavigateToFile={handleNavigateToLocation}
               theme={settings.theme}
+              onMoveTabToSidebar={(tab) => {
+                setActiveActivityView(tab);
+                setIsSidebarOpen(true);
+              }}
             />
           )}
 
@@ -2037,6 +1956,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
               onTabChange={setActiveDockTab}
               onNavigateToFile={handleNavigateToLocation}
               theme={settings.theme}
+              onMoveTabToSidebar={(tab) => {
+                setActiveActivityView(tab);
+                setIsSidebarOpen(true);
+              }}
             />
           )}
         </div>
@@ -2118,7 +2041,29 @@ export function Workspace({ projectId }: WorkspaceProps) {
         </div>
       </footer>
 
-      {/* Slide-over Notifications Sidebar Drawer */}
+      {/* Stacked Notification Toast (Top-Right Glassmorphic Card Deck on Hover) */}
+      <StackedNotificationToast
+        notifications={notifications}
+        onAcceptPartnerRequest={async (reqId) => {
+          await DataService.respondToPartnerRequest(reqId, true);
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+        }}
+        onDeclinePartnerRequest={async (reqId) => {
+          await DataService.respondToPartnerRequest(reqId, false);
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+        }}
+        onHoldPartnerRequest={(reqId) => {
+          setNotifications(prev => prev.map(n => n.partnerRequestId === reqId ? { ...n, status: 'held' } : n));
+        }}
+        onOpenProject={(pid) => {
+          window.location.href = `/project/${pid}`;
+        }}
+        onDismissNotification={(id) => {
+          setNotifications(prev => prev.filter(n => n.id !== id));
+        }}
+      />
+
+      {/* Notifications Drawer (Slide-out sidebar drawer from Bell click) */}
       <NotificationsDrawer
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
@@ -2130,14 +2075,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
         onAcceptPartnerRequest={async (reqId) => {
           await DataService.respondToPartnerRequest(reqId, true);
           setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
-          logAndBroadcastActivity('member_joined', 'Accepted friend / collaboration request');
         }}
         onDeclinePartnerRequest={async (reqId) => {
           await DataService.respondToPartnerRequest(reqId, false);
           setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
         }}
-        onHoldPartnerRequest={async (reqId) => {
-          setNotifications(prev => prev.map(n => n.partnerRequestId === reqId ? { ...n, read: true } : n));
+        onHoldPartnerRequest={(reqId) => {
+          setNotifications(prev => prev.map(n => n.partnerRequestId === reqId ? { ...n, status: 'held' } : n));
         }}
         onOpenProject={(pid) => {
           setIsNotificationsOpen(false);
@@ -2147,50 +2091,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
           setNotifications(prev => prev.filter(n => n.id !== id));
         }}
       />
-
-      {/* Modern Floating Hover 3D Glassmorphic Toast Stack */}
-      <NotificationToastStack
-        notifications={notifications}
-        onDismissNotification={(id: string) => {
-          setNotifications(prev => prev.filter(n => n.id !== id));
-        }}
-        onOpenDrawer={() => setIsNotificationsOpen(true)}
-        onAcceptPartnerRequest={async (reqId: string) => {
-          await DataService.respondToPartnerRequest(reqId, true);
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
-          logAndBroadcastActivity('member_joined', 'Accepted friend / collaboration request');
-        }}
-        onDeclinePartnerRequest={async (reqId: string) => {
-          await DataService.respondToPartnerRequest(reqId, false);
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
-        }}
-        onHoldPartnerRequest={async (reqId: string) => {
-          setNotifications(prev => prev.map(n => n.partnerRequestId === reqId ? { ...n, read: true } : n));
-        }}
-        onOpenProject={(pid: string) => {
-          window.location.href = `/project/${pid}`;
-        }}
-      />
-
-      {/* In-IDE Vercel & Render Deployment Modal */}
-      <DeploymentModal
-        isOpen={isDeploymentModalOpen}
-        onClose={() => setIsDeploymentModalOpen(false)}
-        projectName={project.name}
-      />
-
-      {/* Universal Interactive Profile Preview Hover Card */}
-      {hoverCardUser && (
-        <ProfileHoverCard
-          user={hoverCardUser.user}
-          position={hoverCardUser.position}
-          onClose={() => setHoverCardUser(null)}
-          onOpenFullProfile={(uid: string) => {
-            setHoverCardUser(null);
-            setSelectedPublicUserId(uid);
-          }}
-        />
-      )}
 
       {/* Modals & IDE Tools */}
       <InviteMemberModal
@@ -2236,7 +2136,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
         projectName={project.name}
         currentBranch={currentGitBranch}
         onSyncComplete={() => {
-          logAndBroadcastActivity('git_commit', 'Synchronized changes with GitHub');
+          logAndBroadcastActivity('media_uploaded', 'Synchronized changes with GitHub');
           appendOutputLog('git', 'GitHub sync completed.');
         }}
       />
@@ -2248,7 +2148,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
           currentUser={user}
           settings={settings}
           onUpdateSettings={updateSettings}
-          initialTab={settingsInitialTab}
+          initialTab={settingsModalInitialTab}
         />
       )}
 

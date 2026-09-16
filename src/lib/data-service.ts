@@ -531,6 +531,10 @@ export const DataService = {
     return await res.json();
   },
 
+  async discardGitChanges(projectId: string, filePath: string): Promise<{ success: boolean; stderr?: string }> {
+    return this.discardGitFiles(projectId, [filePath]);
+  },
+
   async commitGit(
     projectId: string,
     message: string,

@@ -31,7 +31,8 @@ export interface UserProfile {
   full_name: string;
   avatar_url?: string;
   banner_url?: string;
-  status_quote?: string;
+  headline?: string;
+  status_headline?: string;
   username?: string;
   bio?: string;
   role?: string;
@@ -41,6 +42,7 @@ export interface UserProfile {
   languages?: string[];
   technologies?: string[];
   website?: string;
+  website_url?: string;
   github_username?: string;
   linkedin_url?: string;
   other_links?: CustomDeveloperLink[];
@@ -62,7 +64,6 @@ export interface DirectMessage {
   media_url?: string;
   media_type?: 'image' | 'video' | 'audio' | 'file';
   media_name?: string;
-  sender?: UserProfile;
 }
 
 export interface ContributionDay {
@@ -96,9 +97,9 @@ export interface CodingPartner {
   created_at: string;
   updated_at: string;
   profile?: UserProfile;
-  partner?: UserProfile;
-  requester?: UserProfile;
-  receiver?: UserProfile;
+  partner_name?: string;
+  partner_email?: string;
+  partner_avatar?: string;
 }
 
 export interface NotificationItem {
@@ -129,7 +130,6 @@ export interface ProjectMember {
   role: 'owner' | 'member';
   created_at: string;
   profile?: UserProfile;
-  user?: UserProfile;
 }
 
 export interface FileItem {
@@ -254,10 +254,7 @@ export type ActivityActionType =
   | 'voice_unmuted'
   // Runtime events
   | 'server_started'
-  | 'server_stopped'
-  // Chat & Terminal events
-  | 'chat_message'
-  | 'terminal_command';
+  | 'server_stopped';
 
 export interface ActivityEvent {
   id: string;

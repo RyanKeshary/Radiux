@@ -12,6 +12,8 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { CreateProjectModal } from '@/components/dashboard/CreateProjectModal';
 import { ImportProjectModal } from '@/components/dashboard/ImportProjectModal';
 import { ImportWorkspaceModal } from '@/components/dashboard/ImportWorkspaceModal';
+import { UserProfileModal } from '@/components/workspace/UserProfileModal';
+import { DeveloperDiscoveryModal } from '@/components/profile/DeveloperDiscoveryModal';
 import { 
   Code2, 
   FolderGit2, 
@@ -31,7 +33,10 @@ import {
   Layers,
   Keyboard,
   Command,
-  ExternalLink
+  ExternalLink,
+  User,
+  Users,
+  Settings
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -44,6 +49,20 @@ export default function DashboardPage() {
   const [isImportWorkspaceOpen, setIsImportWorkspaceOpen] = useState(false);
   const [exportingWorkspace, setExportingWorkspace] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'ide' | 'profile' | 'collaborators' | 'account'>('ide');
+  const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
+  const [editorSettings, setEditorSettings] = useState<any>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('codecollab_editor_settings');
+        return saved ? JSON.parse(saved) : {};
+      } catch (e) {
+        return {};
+      }
+    }
+    return {};
+  });
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -247,7 +266,21 @@ export default function DashboardPage() {
             </select>
           </div>
 
-          <UserMenu />
+          <UserMenu 
+            onOpenProfileModal={() => {
+              setSettingsTab('profile');
+              setIsProfileModalOpen(true);
+            }}
+            onOpenSettingsModal={() => {
+              setSettingsTab('ide');
+              setIsProfileModalOpen(true);
+            }}
+            onOpenDiscoveryModal={() => setIsDiscoveryOpen(true)}
+            onViewPublicProfile={() => {
+              if (user?.username) window.open(`/profile/${user.username}`, '_blank');
+              else if (user?.id) window.open(`/profile/${user.id}`, '_blank');
+            }}
+          />
         </div>
       </header>
 
@@ -314,6 +347,84 @@ export default function DashboardPage() {
                 </Link>
               </div>
             )}
+
+            {/* Direct Minimalist Quick Hub: Profile, Collaborators/Friends, IDE Settings */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                onClick={() => {
+                  setSettingsTab('profile');
+                  setIsProfileModalOpen(true);
+                }}
+                className="p-3 rounded-lg border text-left flex items-center justify-between transition-all hover:border-indigo-500/50 hover:bg-black/5 dark:hover:bg-white/5 group"
+                style={{
+                  backgroundColor: 'var(--ide-card-bg)',
+                  borderColor: 'var(--ide-border)',
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[12px] font-semibold" style={{ color: 'var(--ide-text)' }}>
+                      Profile & Banner
+                    </div>
+                    <div className="text-[10px] opacity-60">Bio, banner & tech stack</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-indigo-400" />
+              </button>
+
+              <button
+                onClick={() => {
+                  setSettingsTab('collaborators');
+                  setIsProfileModalOpen(true);
+                }}
+                className="p-3 rounded-lg border text-left flex items-center justify-between transition-all hover:border-emerald-500/50 hover:bg-black/5 dark:hover:bg-white/5 group"
+                style={{
+                  backgroundColor: 'var(--ide-card-bg)',
+                  borderColor: 'var(--ide-border)',
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[12px] font-semibold" style={{ color: 'var(--ide-text)' }}>
+                      Friends & Peers
+                    </div>
+                    <div className="text-[10px] opacity-60">Manage collaborators</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-emerald-400" />
+              </button>
+
+              <button
+                onClick={() => {
+                  setSettingsTab('ide');
+                  setIsProfileModalOpen(true);
+                }}
+                className="p-3 rounded-lg border text-left flex items-center justify-between transition-all hover:border-sky-500/50 hover:bg-black/5 dark:hover:bg-white/5 group"
+                style={{
+                  backgroundColor: 'var(--ide-card-bg)',
+                  borderColor: 'var(--ide-border)',
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform">
+                    <Settings className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[12px] font-semibold" style={{ color: 'var(--ide-text)' }}>
+                      IDE Settings
+                    </div>
+                    <div className="text-[10px] opacity-60">Themes, editor & font size</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-sky-400" />
+              </button>
+            </div>
 
             {/* 2-Column Developer Layout (Start & Recent Workspaces) */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
@@ -655,6 +766,36 @@ export default function DashboardPage() {
         onClose={() => setIsAuthModalOpen(false)}
         defaultMode="signin"
       />
+
+      {user && (
+        <>
+          <UserProfileModal
+            isOpen={isProfileModalOpen}
+            onClose={() => setIsProfileModalOpen(false)}
+            currentUser={user}
+            settings={editorSettings}
+            onUpdateSettings={(newSettings) => {
+              setEditorSettings((prev: any) => {
+                const updated = { ...prev, ...newSettings };
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('codecollab_editor_settings', JSON.stringify(updated));
+                }
+                if (updated.theme) {
+                  setCurrentTheme(updated.theme);
+                  applyThemeVariables(updated.theme);
+                }
+                return updated;
+              });
+            }}
+            initialTab={settingsTab}
+          />
+
+          <DeveloperDiscoveryModal
+            isOpen={isDiscoveryOpen}
+            onClose={() => setIsDiscoveryOpen(false)}
+          />
+        </>
+      )}
     </div>
   );
 }

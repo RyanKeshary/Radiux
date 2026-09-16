@@ -204,10 +204,10 @@ export function UserMenu({
         />
       </button>
 
-      {/* Enhanced Dropdown Menu - Sleek & Compact */}
+      {/* Enhanced Compact Dropdown Menu */}
       {isDropdownOpen && (
         <div 
-          className="absolute right-0 mt-2 w-64 rounded-xl border shadow-2xl z-50 p-1.5 text-xs backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-150 select-none"
+          className="absolute right-0 mt-1.5 w-60 rounded-xl border shadow-2xl z-50 p-1.5 text-xs backdrop-blur-md animate-in fade-in slide-in-from-top-1 duration-150 select-none"
           style={{
             backgroundColor: 'var(--ide-card-bg)',
             borderColor: 'var(--ide-border)',
@@ -223,7 +223,7 @@ export function UserMenu({
             }}
           >
             <div className="relative flex-shrink-0">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center text-xs font-bold shadow ring-1 ring-white/10 overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center text-xs font-bold shadow ring-1 ring-white/15 overflow-hidden">
                 {user.avatar_url ? (
                   <img src={user.avatar_url} alt={user.full_name || 'User'} className="w-full h-full object-cover" />
                 ) : (
@@ -240,46 +240,22 @@ export function UserMenu({
               <div className="font-semibold text-xs truncate" style={{ color: 'var(--ide-text)' }}>
                 {user.full_name || 'Anonymous Developer'}
               </div>
-              <div className="text-[10.5px] truncate opacity-70" style={{ color: 'var(--ide-text-muted)' }}>
-                {user.email}
-              </div>
-              <div className="mt-0.5 flex items-center gap-1">
-                <span 
-                  className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-medium"
-                  style={{
-                    backgroundColor: 'rgba(14, 165, 233, 0.15)',
-                    color: 'var(--ide-accent)',
-                  }}
-                >
-                  <ShieldCheck className="w-2.5 h-2.5" />
-                  Dev
-                </span>
-                {user.username && (
-                  <span className="text-[10px] opacity-60">@{user.username}</span>
-                )}
+              <div className="text-[10.5px] truncate opacity-60 font-mono" style={{ color: 'var(--ide-text-muted)' }}>
+                @{user.username || user.email.split('@')[0]}
               </div>
             </div>
           </div>
 
-          {/* Action Links */}
+          {/* Action Links - Sleek Single Line */}
           <div className="space-y-0.5">
-            {/* 1. View Public Profile */}
             <button
               onClick={handleViewPublicProfile}
-              className="w-full flex items-center justify-between p-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="p-1 rounded bg-sky-500/10 text-sky-400 group-hover:scale-105 transition-transform">
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>View Public Profile</div>
-                  <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Public developer bio</div>
-                </div>
-              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+              <span className="font-medium text-xs truncate">Public Profile</span>
             </button>
 
-            {/* Discover Developers & Peers */}
             <button
               onClick={() => {
                 setIsDropdownOpen(false);
@@ -289,89 +265,73 @@ export function UserMenu({
                   window.location.href = '/profile/' + (user.username || user.id);
                 }
               }}
-              className="w-full flex items-center justify-between p-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="p-1 rounded bg-emerald-500/10 text-emerald-400 group-hover:scale-105 transition-transform">
-                  <Users className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Discover Developers</div>
-                  <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Find peers & partners</div>
-                </div>
-              </div>
+              <Users className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <span className="font-medium text-xs truncate">Discover Developers</span>
             </button>
 
-            {/* 2. Developer Profile & Account Preferences */}
             <button
               onClick={handleOpenProfile}
-              className="w-full flex items-center justify-between p-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="p-1 rounded bg-indigo-500/10 text-indigo-400 group-hover:scale-105 transition-transform">
-                  <User className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Profile & Account</div>
-                  <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Avatar, bio & handles</div>
-                </div>
-              </div>
+              <User className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+              <span className="font-medium text-xs truncate">Profile & Banner</span>
             </button>
 
-            {/* 3. Editor & IDE Settings */}
             <button
               onClick={handleOpenSettings}
-              className="w-full flex items-center justify-between p-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="p-1 rounded bg-emerald-500/10 text-emerald-400 group-hover:scale-105 transition-transform">
-                  <Settings className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Settings</div>
-                  <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Font, theme & indent</div>
-                </div>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Settings className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+                <span className="font-medium text-xs truncate">IDE Settings</span>
               </div>
-              <span className="px-1.5 py-0.5 rounded border text-[10px] font-mono opacity-50" style={{ borderColor: 'var(--ide-border)' }}>
+              <kbd 
+                className="px-1.5 py-0.2 rounded text-[9.5px] font-mono border opacity-60"
+                style={{
+                  borderColor: 'var(--ide-border)',
+                  backgroundColor: 'var(--ide-dock-header)',
+                  color: 'var(--ide-text-muted)',
+                }}
+              >
                 Ctrl+,
-              </span>
+              </kbd>
             </button>
 
-            {/* 4. Keyboard Shortcuts */}
             <button
               onClick={handleOpenShortcuts}
-              className="w-full flex items-center justify-between p-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="p-1 rounded bg-amber-500/10 text-amber-400 group-hover:scale-105 transition-transform">
-                  <Keyboard className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Keyboard Shortcuts</div>
-                  <div className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>Keybindings guide</div>
-                </div>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Keyboard className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                <span className="font-medium text-xs truncate">Shortcuts</span>
               </div>
-              <span className="px-1.5 py-0.5 rounded border text-[10px] font-mono opacity-50" style={{ borderColor: 'var(--ide-border)' }}>
-                Alt+P
-              </span>
+              <kbd 
+                className="px-1.5 py-0.2 rounded text-[9.5px] font-mono border opacity-60"
+                style={{
+                  borderColor: 'var(--ide-border)',
+                  backgroundColor: 'var(--ide-dock-header)',
+                  color: 'var(--ide-text-muted)',
+                }}
+              >
+                Ctrl+K
+              </kbd>
             </button>
           </div>
 
-          {/* Divider */}
-          <div className="my-1.5 border-t" style={{ borderColor: 'var(--ide-border)' }} />
+          <div className="my-1 border-t" style={{ borderColor: 'var(--ide-border)' }} />
 
           {/* Sign Out */}
           <button
-            onClick={async () => {
-              await signOut();
+            onClick={() => {
               setIsDropdownOpen(false);
+              signOut();
             }}
-            className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-rose-500/10 text-rose-500 dark:text-rose-400 transition-colors text-left font-medium"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-rose-400 hover:bg-rose-500/10 transition-colors text-left font-medium text-xs"
           >
-            <div className="p-1.5 rounded-md bg-rose-500/10 text-rose-500">
-              <LogOut className="w-3.5 h-3.5" />
-            </div>
-            <span className="text-[12px]">Sign Out</span>
+            <LogOut className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>Sign Out</span>
           </button>
         </div>
       )}

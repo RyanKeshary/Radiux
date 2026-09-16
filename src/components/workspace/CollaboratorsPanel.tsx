@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
+import { ProfileHoverCard } from './ProfileHoverCard';
 
 interface CollaboratorStatus {
   id: string;
@@ -148,36 +149,44 @@ export function CollaboratorsPanel({
                       className="flex flex-col gap-1 p-2 rounded hover:bg-white/5 transition-colors border border-transparent hover:border-white/5 group"
                     >
                       <div className="flex items-center justify-between">
-                        <div 
-                          onClick={() => onSelectMemberProfile(member.user_id)}
-                          className="flex items-center gap-2 cursor-pointer min-w-0 flex-1"
-                          title="Click to view developer profile"
+                        <ProfileHoverCard
+                          userId={member.user_id}
+                          userName={member.profile?.full_name || onlineData?.name || 'Anonymous Peer'}
+                          userAvatar={member.profile?.avatar_url}
+                          userRole={member.role === 'owner' ? 'Project Owner' : 'Collaborator'}
+                          statusHeadline={member.profile?.status_headline || member.profile?.bio}
+                          onOpenFullProfile={onSelectMemberProfile}
                         >
-                          {member.profile?.avatar_url ? (
-                            <img
-                              src={member.profile.avatar_url}
-                              alt=""
-                              className="w-5 h-5 rounded-full ring-1 ring-emerald-500/50 object-cover"
-                            />
-                          ) : (
-                            <div 
-                              className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white uppercase"
-                              style={{ backgroundColor: onlineData?.color || '#38bdf8' }}
-                            >
-                              {(member.profile?.full_name || 'U').charAt(0)}
-                            </div>
-                          )}
+                          <div 
+                            className="flex items-center gap-2 cursor-pointer min-w-0 flex-1"
+                            title="Click to view developer profile preview"
+                          >
+                            {member.profile?.avatar_url ? (
+                              <img
+                                src={member.profile.avatar_url}
+                                alt=""
+                                className="w-5 h-5 rounded-full ring-1 ring-emerald-500/50 object-cover"
+                              />
+                            ) : (
+                              <div 
+                                className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white uppercase"
+                                style={{ backgroundColor: onlineData?.color || '#38bdf8' }}
+                              >
+                                {(member.profile?.full_name || 'U').charAt(0)}
+                              </div>
+                            )}
 
-                          <span className="truncate font-medium group-hover:text-sky-400 transition-colors" style={{ color: 'var(--ide-text)' }}>
-                            {member.profile?.full_name || onlineData?.name || 'Anonymous Peer'}
-                          </span>
-
-                          {member.role === 'owner' && (
-                            <span title="Project Owner">
-                              <Shield className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                            <span className="truncate font-medium group-hover:text-sky-400 transition-colors" style={{ color: 'var(--ide-text)' }}>
+                              {member.profile?.full_name || onlineData?.name || 'Anonymous Peer'}
                             </span>
-                          )}
-                        </div>
+
+                            {member.role === 'owner' && (
+                              <span title="Project Owner">
+                                <Shield className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                              </span>
+                            )}
+                          </div>
+                        </ProfileHoverCard>
 
                         {/* Voice indicator */}
                         {isUserInVoice && (
@@ -269,33 +278,45 @@ export function CollaboratorsPanel({
 
           <div className="mt-1 space-y-1">
             {offlineMembers.map((member) => (
-              <div
+              <ProfileHoverCard
                 key={member.id}
-                onClick={() => onSelectMemberProfile(member.user_id)}
-                style={{ color: 'var(--ide-text-muted)' }}
-                className="flex items-center gap-2 p-2 rounded hover:bg-white/5 cursor-pointer transition-colors"
-                title="Click to view developer profile"
+                userId={member.user_id}
+                userName={member.profile?.full_name || 'Anonymous Peer'}
+                userAvatar={member.profile?.avatar_url}
+                userRole={member.role === 'owner' ? 'Project Owner' : 'Collaborator'}
+                statusHeadline={member.profile?.status_headline || member.profile?.bio}
+                onOpenFullProfile={onSelectMemberProfile}
               >
-                {member.profile?.avatar_url ? (
-                  <img
-                    src={member.profile.avatar_url}
-                    alt=""
-                    className="w-5 h-5 rounded-full opacity-60 object-cover"
-                  />
-                ) : (
-                  <div className="w-5 h-5 rounded-full bg-neutral-700 flex items-center justify-center text-[9px] font-bold text-neutral-300 uppercase">
-                    {(member.profile?.full_name || 'U').charAt(0)}
-                  </div>
-                )}
+                <div
+                  style={{ color: 'var(--ide-text-muted)' }}
+                  className="flex items-center gap-2 p-2 rounded hover:bg-white/5 cursor-pointer transition-colors"
+                  title="Click to view developer profile preview"
+                >
+                  {member.profile?.avatar_url ? (
+                    <img
+                      src={member.profile.avatar_url}
+                      alt=""
+                      className="w-5 h-5 rounded-full grayscale opacity-60 object-cover"
+                    />
+                  ) : (
+                    <div 
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-neutral-400 bg-neutral-800 uppercase"
+                    >
+                      {(member.profile?.full_name || 'U').charAt(0)}
+                    </div>
+                  )}
 
-                <span className="truncate flex-1">{member.profile?.full_name || 'Teammate'}</span>
-
-                {member.role === 'owner' && (
-                  <span title="Project Owner">
-                    <Shield className="w-3 h-3 opacity-60" />
+                  <span className="truncate font-medium">
+                    {member.profile?.full_name || 'Anonymous Peer'}
                   </span>
-                )}
-              </div>
+
+                  {member.role === 'owner' && (
+                    <span title="Project Owner">
+                      <Shield className="w-3 h-3 text-amber-400/60 flex-shrink-0" />
+                    </span>
+                  )}
+                </div>
+              </ProfileHoverCard>
             ))}
           </div>
         </div>

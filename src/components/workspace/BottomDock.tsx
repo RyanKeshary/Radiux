@@ -76,6 +76,7 @@ interface BottomDockProps {
   activeTab?: DockTab;
   onTabChange?: (tab: DockTab) => void;
   onNavigateToFile?: (filePath: string, line?: number) => void;
+  onMoveTabToSidebar?: (tab: 'git' | 'chat' | 'voice') => void;
   theme?: string;
 }
 
@@ -111,6 +112,7 @@ export function BottomDock({
   activeTab: externalActiveTab,
   onTabChange,
   onNavigateToFile,
+  onMoveTabToSidebar,
   theme,
 }: BottomDockProps) {
   const [internalActiveTab, setInternalActiveTab] = useState<DockTab>('terminal');
@@ -568,6 +570,8 @@ export function BottomDock({
             userName={userName}
             userEmail={userEmail}
             onActivityEvent={onActivityEvent}
+            isDockedBottom={true}
+            onDockToSidebar={() => onMoveTabToSidebar?.('git')}
           />
         )}
 
@@ -580,6 +584,8 @@ export function BottomDock({
             onNewMessageReceived={onNewMessageReceived}
             onOpenMediaInEditor={onOpenMediaInEditor}
             onNavigateToFile={onNavigateToFile}
+            isSidebarMode={false}
+            onDockToSidebar={() => onMoveTabToSidebar?.('chat')}
           />
         )}
 
@@ -594,6 +600,8 @@ export function BottomDock({
             onJoinVoice={onJoinVoice}
             onLeaveVoice={onLeaveVoice}
             onToggleMute={onToggleMute}
+            isSidebarMode={false}
+            onDockToSidebar={() => onMoveTabToSidebar?.('voice')}
           />
         )}
 

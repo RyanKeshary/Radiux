@@ -75,8 +75,8 @@ export const CORE_COMMANDS: CommandItem[] = [
     id: 'workbench.action.closeActiveEditor',
     title: 'Close Active Editor Tab',
     category: 'Editor',
-    description: 'Close the file currently active in the focused split',
-    defaultShortcut: 'Ctrl+W',
+    description: 'Close the file currently active in the focused split (Chrome-safe Alt+W)',
+    defaultShortcut: 'Alt+W',
     macShortcut: 'Cmd+W',
     actionId: 'closeActiveTab',
   },
@@ -236,43 +236,6 @@ export class CommandRegistry {
     StorageMock.resetCustomShortcuts();
   }
 
-  static matchesEvent(cmdId: string, e: KeyboardEvent): boolean {
-    const cmd = CORE_COMMANDS.find(c => c.id === cmdId || c.actionId === cmdId);
-    if (!cmd) return false;
-
-    const assigned = this.getEffectiveShortcut(cmd);
-    const assignedNorm = this.normalizeShortcut(assigned);
-
-    // Build combo string from KeyboardEvent
-    const parts: string[] = [];
-    if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
-    if (e.shiftKey) parts.push('Shift');
-    if (e.altKey) parts.push('Alt');
-
-    let key = e.key;
-    if (key === ' ' || key === 'Spacebar') key = 'Space';
-    else if (key === '`' || key === '~') key = '`';
-    else if (key.length === 1) key = key.toUpperCase();
-    parts.push(key);
-
-    const eventNorm = this.normalizeShortcut(parts.join('+'));
-    if (eventNorm === assignedNorm) return true;
-
-    // Also support default Chrome-safe alternatives if custom wasn't set
-    const customMap = StorageMock.getCustomShortcuts();
-    if (!customMap[cmd.id]) {
-      // Check alternative safe chords:
-      if (cmd.actionId === 'closeActiveTab' && (eventNorm === 'ALT+W' || eventNorm === 'CTRL+Q')) return true;
-      if (cmd.actionId === 'quickOpen' && eventNorm === 'ALT+P') return true;
-      if (cmd.actionId === 'commandPalette' && eventNorm === 'ALT+SHIFT+P') return true;
-      if (cmd.actionId === 'toggleSidebar' && eventNorm === 'ALT+B') return true;
-      if (cmd.actionId === 'toggleDock' && (eventNorm === 'ALT+`' || eventNorm === 'CTRL+J')) return true;
-      if (cmd.actionId === 'globalSearch' && eventNorm === 'ALT+SHIFT+F') return true;
-    }
-
-    return false;
-  }
-
   static normalizeShortcut(shortcut: string): string {
     return shortcut
       .replace(/Cmd/i, 'Ctrl')
@@ -280,5 +243,39 @@ export class CommandRegistry {
       .map(s => s.trim().toUpperCase())
       .sort()
       .join('+');
+  }
+
+  /**
+   * Match a KeyboardEvent against a shortcut string (e.g. "Ctrl+Shift+P" or "Alt+W")
+   */
+  static matchEvent(e: KeyboardEvent, shortcutStr: string): boolean {
+    if (!shortcutStr) return false;
+    const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const parts = shortcutStr.split('+').map(p => p.trim().toLowerCase());
+    
+    const wantsCtrl = parts.includes('ctrl') || parts.includes('cmd');
+    const wantsShift = parts.includes('shift');
+    const wantsAlt = parts.includes('alt');
+    
+    const eventCtrl = isMac ? e.metaKey : (e.ctrlKey || e.metaKey);
+    if (wantsCtrl !== eventCtrl) return false;
+    if (wantsShift !== e.shiftKey) return false;
+    if (wantsAlt !== e.altKey) return false;
+
+    // Find non-modifier key
+    const keyPart = parts.find(p => !['ctrl', 'cmd', 'shift', 'alt'].includes(p));
+    if (!keyPart) return false;
+
+    const k = e.key.toLowerCase();
+    const c = e.code.toLowerCase();
+
+    if (keyPart === 'space' && (k === ' ' || c === 'space')) return true;
+    if (keyPart === '`' && (k === '`' || k === '~' || c === 'backquote')) return true;
+    if (keyPart === '\\' && (k === '\\' || c === 'backslash')) return true;
+    if (keyPart === ',' && (k === ',' || c === 'comma')) return true;
+    if (keyPart === 'tab' && (k === 'tab' || c === 'tab')) return true;
+    if (k === keyPart || c === `key${keyPart}` || c === `digit${keyPart}`) return true;
+
+    return false;
   }
 }
