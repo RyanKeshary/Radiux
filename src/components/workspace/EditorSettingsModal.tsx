@@ -271,8 +271,8 @@ export function EditorSettingsModal({
           style={{ borderColor: 'var(--ide-border)', backgroundColor: 'var(--ide-dock-header)' }}
         >
           <div className="flex items-center gap-2.5 font-semibold text-sm">
-            <Sliders className="w-4 h-4 text-sky-400" />
-            <span>CodeCollab Settings</span>
+            <img src="/logo.png" alt="Radiux" className="w-5 h-5 rounded object-contain" />
+            <span>Radiux Settings</span>
           </div>
           <button
             onClick={onClose}
@@ -716,7 +716,7 @@ export function EditorSettingsModal({
                 <div className="p-4 rounded-lg border space-y-3" style={{ borderColor: 'var(--ide-border)' }}>
                   <div>
                     <label className="block text-[11px] opacity-60">Primary Email</label>
-                    <p className="font-semibold text-xs mt-0.5">{user?.email || 'guest@codecollab.dev'}</p>
+                    <p className="font-semibold text-xs mt-0.5">{user?.email || 'guest@radiux.dev'}</p>
                   </div>
                   <div>
                     <label className="block text-[11px] opacity-60">User ID</label>
@@ -729,7 +729,7 @@ export function EditorSettingsModal({
                     onClick={() => signOut()}
                     className="px-4 py-2 bg-rose-600/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 rounded font-semibold transition-all"
                   >
-                    Sign Out of CodeCollab
+                    Sign Out of Radiux
                   </button>
                 </div>
               </div>
@@ -741,7 +741,7 @@ export function EditorSettingsModal({
                 <div>
                   <h3 className="text-sm font-semibold mb-1">Notification Preferences</h3>
                   <p className="text-[11px] opacity-70">
-                    Control how CodeCollab alerts you to incoming requests and events.
+                    Control how Radiux alerts you to incoming requests and events.
                   </p>
                 </div>
 
@@ -883,7 +883,7 @@ export function EditorSettingsModal({
                     <label className="block text-xs font-semibold mb-1">Repository Origin URL</label>
                     <input
                       type="text"
-                      placeholder="https://github.com/user/repository.git"
+                      placeholder="https://github.com/RyanKeshary/Radiux.git"
                       value={gitHubRepoUrl}
                       onChange={(e) => setGitHubRepoUrl(e.target.value)}
                       className="w-full p-2 rounded border focus:outline-none font-mono"
@@ -926,12 +926,12 @@ export function EditorSettingsModal({
                     </div>
                     <p className="text-[11px] opacity-70">Next.js UI & SSR Engine</p>
                     <a
-                      href="https://code-collab-ide.vercel.app"
+                      href="https://radiux.vercel.app"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
                     >
-                      <span>code-collab-ide.vercel.app</span>
+                      <span>radiux.vercel.app</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>
@@ -948,7 +948,7 @@ export function EditorSettingsModal({
                       rel="noopener noreferrer"
                       className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
                     >
-                      <span>codecollab-backend-isjt</span>
+                      <span>radiux-backend</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>

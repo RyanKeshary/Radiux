@@ -104,9 +104,9 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
       <div className="w-full max-w-sm bg-[#252526] border border-[#3c3c3c] rounded-xl shadow-2xl p-6 text-[#cccccc]">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#3c3c3c]">
-          <div className="flex items-center gap-2 text-white font-semibold text-base">
-            {mode === 'signin' && <><LogIn className="w-5 h-5 text-sky-400" /><span>Sign In to CodeCollab</span></>}
-            {mode === 'signup' && <><UserPlus className="w-5 h-5 text-emerald-400" /><span>Create an Account</span></>}
+          <div className="flex items-center gap-2.5 text-white font-semibold text-base">
+            {mode === 'signin' && <><img src="/logo.png" alt="Radiux" className="w-5 h-5 rounded object-contain" /><span>Sign In to Radiux</span></>}
+            {mode === 'signup' && <><img src="/logo.png" alt="Radiux" className="w-5 h-5 rounded object-contain" /><span>Create an Account</span></>}
             {mode === 'reset' && <><KeyRound className="w-5 h-5 text-amber-400" /><span>Reset Password</span></>}
           </div>
           <button onClick={onClose} className="p-1 rounded text-neutral-400 hover:text-white hover:bg-[#333333]">

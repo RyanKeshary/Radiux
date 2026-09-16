@@ -26,7 +26,7 @@ export const DEMO_USERS: UserProfile[] = [
     github_username: 'alicedev',
     linkedin_url: 'https://linkedin.com/in/alicedev',
     collaboration_interests: ['Cloud IDEs', 'Real-time CRDTs', 'Developer Experience'],
-    readme_markdown: `# Hey, I'm Alice 👋\n\nI lead cloud infrastructure and real-time collaborative protocols at CodeCollab.\n\n## 🛠️ What I'm building\n- Distributed WebAssembly execution sandboxes\n- Low-latency operational transformation & Yjs state sync\n- Multi-region peer-to-peer developer voice relays\n\n## 🚀 Tech Stack\n\`TypeScript\` · \`Go\` · \`Rust\` · \`Next.js\` · \`Docker\`\n\nFeel free to send a **Coding Partner** request or collaborate on open workspaces!`,
+    readme_markdown: `# Hey, I'm Alice 👋\n\nI lead cloud infrastructure and real-time collaborative protocols at Radiux.\n\n## 🛠️ What I'm building\n- Distributed WebAssembly execution sandboxes\n- Low-latency operational transformation & Yjs state sync\n- Multi-region peer-to-peer developer voice relays\n\n## 🚀 Tech Stack\n\`TypeScript\` · \`Go\` · \`Rust\` · \`Next.js\` · \`Docker\`\n\nFeel free to send a **Coding Partner** request or collaborate on open workspaces!`,
     pinned_project_ids: ['proj-welcome-demo'],
     avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Alice',
     privacy: {
@@ -128,7 +128,7 @@ export function initStorageMock() {
     const now = new Date().toISOString();
     const demoProject: Project = {
       id: pId,
-      name: 'Welcome to CodeCollab',
+      name: 'Welcome to Radiux',
       description: 'Collaborative starter workspace with JavaScript & Python files',
       owner_id: DEMO_USERS[0].id,
       created_at: now,
@@ -177,7 +177,7 @@ export function initStorageMock() {
         name: 'index.js',
         is_folder: false,
         language: 'javascript',
-        content: `// Welcome to CodeCollab!
+        content: `// Welcome to Radiux!
 // Multiple users can edit this code simultaneously in real-time.
 
 function greet(collaborator) {
@@ -196,7 +196,7 @@ greet("Alice & Bob");
         name: 'main.py',
         is_folder: false,
         language: 'python',
-        content: `# CodeCollab Python Workspace
+        content: `# Radiux Python Workspace
 def run_collaboration():
     peers = ["Alice", "Bob", "Charlie"]
     for peer in peers:
@@ -215,9 +215,9 @@ if __name__ == "__main__":
         name: 'README.md',
         is_folder: false,
         language: 'plaintext',
-        content: `# Welcome to CodeCollab 🚀
+        content: `# Welcome to Radiux 🚀
 
-CodeCollab allows multiple developers to work on the same coding project simultaneously from their browsers.
+Radiux allows multiple developers to work on the same coding project simultaneously from their browsers.
 
 - Real-time document sync powered by Yjs & WebSockets.
 - Professional code editor powered by Monaco Editor.

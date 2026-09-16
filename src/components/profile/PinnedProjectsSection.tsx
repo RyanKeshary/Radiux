@@ -180,7 +180,7 @@ export function PinnedProjectsSection({
                   className="text-[11.5px] mt-2 line-clamp-2 leading-relaxed"
                   style={{ color: 'var(--ide-text-muted)' }}
                 >
-                  {project.description || 'Modern collaborative cloud workspace built with CodeCollab.'}
+                  {project.description || 'Modern collaborative cloud workspace built with Radiux.'}
                 </p>
               </div>
 

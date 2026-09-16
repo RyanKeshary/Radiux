@@ -50,7 +50,7 @@ export function ImportWorkspaceModal({
     setError(null);
     try {
       const { importedCount } = await DataService.importCompleteWorkspace(selectedFile, user);
-      setResultMessage(`Successfully imported ${importedCount} project(s) into your CodeCollab workspace.`);
+      setResultMessage(`Successfully imported ${importedCount} project(s) into your Radiux workspace.`);
       setTimeout(() => {
         onSuccess();
         onClose();

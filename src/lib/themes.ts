@@ -39,7 +39,7 @@ export interface ThemeDefinition {
 export const THEMES: Record<ThemeId, ThemeDefinition> = {
   dark: {
     id: 'dark',
-    name: 'CodeCollab Dark',
+    name: 'Radiux Dark',
     description: 'Classic professional dark theme inspired by modern developer IDEs',
     type: 'dark',
     monacoTheme: 'cc-dark',
@@ -64,7 +64,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
   },
   light: {
     id: 'light',
-    name: 'CodeCollab Light',
+    name: 'Radiux Light',
     description: 'Crisp, high-readability daylight theme for well-lit environments',
     type: 'light',
     monacoTheme: 'cc-light',

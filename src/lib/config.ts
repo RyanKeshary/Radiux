@@ -1,5 +1,5 @@
 /**
- * CodeCollab Level 6 — Centralized runtime configuration
+ * Radiux — Centralized runtime configuration
  *
  * All environment-specific URLs and settings live here.
  * Never construct WebSocket or API URLs inline — always use these helpers.

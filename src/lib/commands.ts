@@ -199,7 +199,7 @@ export const CORE_COMMANDS: CommandItem[] = [
 
   // Social & Developer Identity
   {
-    id: 'codecollab.action.openProfile',
+    id: 'radiux.action.openProfile',
     title: 'Open Developer Profile',
     category: 'Developer Identity',
     description: 'View and customize your personal developer profile and README',
@@ -210,7 +210,7 @@ export const CORE_COMMANDS: CommandItem[] = [
     actionId: 'openProfile',
   },
   {
-    id: 'codecollab.action.discoverDevelopers',
+    id: 'radiux.action.discoverDevelopers',
     title: 'Discover Developers & Coding Partners',
     category: 'Developer Identity',
     description: 'Search for developers by skills, languages, and handle',
@@ -221,7 +221,7 @@ export const CORE_COMMANDS: CommandItem[] = [
     actionId: 'discoverDevelopers',
   },
   {
-    id: 'codecollab.action.switchProject',
+    id: 'radiux.action.switchProject',
     title: 'Switch Project / Workspace',
     category: 'Project',
     description: 'Quickly jump between your workspaces',

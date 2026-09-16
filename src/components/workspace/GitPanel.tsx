@@ -50,7 +50,7 @@ export function GitPanel({
   projectId,
   projectName,
   userName,
-  userEmail = 'user@codecollab.dev',
+  userEmail = 'user@radiux.dev',
   onActivityEvent,
   onLogOutput,
   onSwitchToTerminal,

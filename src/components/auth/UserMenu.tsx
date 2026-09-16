@@ -60,7 +60,7 @@ export function UserMenu({
   const [localSettings, setLocalSettings] = useState<EditorSettings>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('codecollab_editor_settings');
+        const saved = localStorage.getItem('radiux_editor_settings') || localStorage.getItem('codecollab_editor_settings');
         return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
       } catch (e) {
         return DEFAULT_SETTINGS;
@@ -74,6 +74,7 @@ export function UserMenu({
       const updated = { ...prev, ...newSettings };
       if (typeof window !== 'undefined') {
         try {
+          localStorage.setItem('radiux_editor_settings', JSON.stringify(updated));
           localStorage.setItem('codecollab_editor_settings', JSON.stringify(updated));
         } catch (e) {}
       }

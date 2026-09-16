@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: codecollab-backend
+    name: radiux-backend
     runtime: node
     plan: starter
     region: oregon

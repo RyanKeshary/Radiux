@@ -144,7 +144,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
     {
       id: 'init-log-1',
       channel: 'system',
-      message: 'CodeCollab Cloud IDE Environment initialized.',
+      message: 'Radiux Cloud IDE Environment initialized.',
       timestamp: new Date().toLocaleTimeString(),
     },
     {
@@ -420,6 +420,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
       setProject(projData);
       if (typeof window !== 'undefined' && projData) {
+        localStorage.setItem('radiux_last_project_id', projData.id);
+        localStorage.setItem('radiux_last_project_name', projData.name);
         localStorage.setItem('codecollab_last_project_id', projData.id);
         localStorage.setItem('codecollab_last_project_name', projData.name);
       }
@@ -1426,7 +1428,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
         style={{ backgroundColor: 'var(--ide-bg)', color: 'var(--ide-text)' }}
       >
         <Loader2 className="w-8 h-8 animate-spin text-sky-500" />
-        <p className="text-sm font-medium text-neutral-400">Loading CodeCollab IDE Workspace...</p>
+        <p className="text-sm font-medium text-neutral-400">Loading Radiux IDE Workspace...</p>
       </div>
     );
   }
@@ -1488,11 +1490,12 @@ export function Workspace({ projectId }: WorkspaceProps) {
             className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors group text-left"
             title="Switch Workspace (Ctrl+Alt+O)"
           >
+            <img src="/logo.png" alt="Radiux" className="w-4 h-4 rounded object-contain shadow-sm" />
             <span 
               className="font-bold tracking-wide group-hover:text-sky-400 transition-colors"
               style={{ color: 'var(--ide-text)' }}
             >
-              CodeCollab
+              Radiux
             </span>
             <span className="opacity-50">/</span>
             <span 
@@ -2241,7 +2244,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
           {activeFile && (
             <span className="uppercase font-semibold">{activeFile.language || 'TEXT'}</span>
           )}
-          <span className="font-semibold">CodeCollab IDE</span>
+          <span className="font-semibold">Radiux IDE</span>
         </div>
       </footer>
 

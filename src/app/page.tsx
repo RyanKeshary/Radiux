@@ -81,7 +81,7 @@ export default function DashboardPage() {
     };
     if (typeof window !== 'undefined') {
       try {
-        const savedSettings = localStorage.getItem('codecollab_editor_settings');
+        const savedSettings = localStorage.getItem('radiux_editor_settings') || localStorage.getItem('codecollab_editor_settings');
         if (savedSettings) return { ...defaults, ...JSON.parse(savedSettings) };
       } catch (e) {}
     }
@@ -96,7 +96,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        const savedSettings = localStorage.getItem('codecollab_editor_settings');
+        const savedSettings = localStorage.getItem('radiux_editor_settings') || localStorage.getItem('codecollab_editor_settings');
         if (savedSettings) {
           const parsed = JSON.parse(savedSettings);
           if (parsed.theme && THEMES[parsed.theme as ThemeId]) {
@@ -121,6 +121,7 @@ export default function DashboardPage() {
       const updated = { ...prev, ...newSettings };
       if (typeof window !== 'undefined') {
         try {
+          localStorage.setItem('radiux_editor_settings', JSON.stringify(updated));
           localStorage.setItem('codecollab_editor_settings', JSON.stringify(updated));
         } catch (e) {}
       }
@@ -163,8 +164,8 @@ export default function DashboardPage() {
       } catch (e) {}
 
       if (typeof window !== 'undefined') {
-        const lastId = localStorage.getItem('codecollab_last_project_id');
-        const lastName = localStorage.getItem('codecollab_last_project_name');
+        const lastId = localStorage.getItem('radiux_last_project_id') || localStorage.getItem('codecollab_last_project_id');
+        const lastName = localStorage.getItem('radiux_last_project_name') || localStorage.getItem('codecollab_last_project_name');
         if (lastId && data.some(p => p.id === lastId)) {
           setLastProject({ id: lastId, name: lastName || 'Workspace' });
         } else if (data.length > 0) {
@@ -222,6 +223,8 @@ export default function DashboardPage() {
       if (lastProject?.id === projectToDelete.id) {
         setLastProject(null);
         if (typeof window !== 'undefined') {
+          localStorage.removeItem('radiux_last_project_id');
+          localStorage.removeItem('radiux_last_project_name');
           localStorage.removeItem('codecollab_last_project_id');
           localStorage.removeItem('codecollab_last_project_name');
         }
@@ -273,12 +276,12 @@ export default function DashboardPage() {
           borderColor: 'var(--ide-border)',
         }}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-md ring-1 ring-white/15">
-            <Code2 className="w-4 h-4" />
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center shadow-md ring-1 ring-white/15 bg-black/40">
+            <img src="/logo.png" alt="Radiux" className="w-7 h-7 rounded-lg object-contain" />
           </div>
           <span className="font-bold tracking-tight text-[13px]" style={{ color: 'var(--ide-text)' }}>
-            CodeCollab
+            Radiux
           </span>
           <span className="opacity-30 text-xs">/</span>
           <span 
@@ -384,11 +387,11 @@ export default function DashboardPage() {
               borderColor: 'var(--ide-border)',
             }}
           >
-            <div className="w-10 h-10 rounded-lg bg-sky-600/10 border border-sky-500/30 flex items-center justify-center text-sky-400 mx-auto">
-              <Code2 className="w-5 h-5" />
+            <div className="w-14 h-14 rounded-xl overflow-hidden flex items-center justify-center mx-auto shadow-lg ring-1 ring-white/15 bg-black/40">
+              <img src="/logo.png" alt="Radiux" className="w-14 h-14 rounded-xl object-contain" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-white">CodeCollab IDE</h2>
+              <h2 className="text-base font-bold text-white tracking-tight">Radiux IDE</h2>
               <p className="text-[11px] mt-1 opacity-70 leading-relaxed">
                 Cloud-based collaborative web IDE with real-time editing, terminal execution, Git sync, and multi-user presence.
               </p>

@@ -225,7 +225,7 @@ export function DeploymentPanel({
                 <a 
                   href={
                     selectedProvider === 'vercel' 
-                      ? 'https://code-collab-ide.vercel.app' 
+                      ? 'https://radiux.vercel.app' 
                       : 'https://codecollab-backend-isjt.onrender.com'
                   }
                   target="_blank"
@@ -234,8 +234,8 @@ export function DeploymentPanel({
                 >
                   <span>
                     {selectedProvider === 'vercel' 
-                      ? 'code-collab-ide.vercel.app' 
-                      : 'codecollab-backend-isjt.onrender.com'}
+                      ? 'radiux.vercel.app' 
+                      : 'radiux-backend (onrender.com)'}
                   </span>
                   <ExternalLink className="w-3 h-3" />
                 </a>

@@ -67,7 +67,7 @@ export function DeveloperProfileView({
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        const settingsStr = localStorage.getItem('codecollab_editor_settings');
+        const settingsStr = localStorage.getItem('radiux_editor_settings') || localStorage.getItem('codecollab_editor_settings');
         if (settingsStr) {
           const parsed = JSON.parse(settingsStr);
           if (parsed?.theme) {
@@ -75,7 +75,7 @@ export function DeveloperProfileView({
             return;
           }
         }
-        const savedTheme = localStorage.getItem('codecollab_theme');
+        const savedTheme = localStorage.getItem('radiux_theme') || localStorage.getItem('codecollab_theme');
         if (savedTheme) applyThemeVariables(savedTheme as ThemeId);
       } catch (e) {}
     }
@@ -222,7 +222,7 @@ export function DeveloperProfileView({
                 </div>
                 <span 
                   className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 ring-4 ring-[var(--ide-card-bg)]" 
-                  title="Online on CodeCollab"
+                  title="Online on Radiux"
                 />
               </div>
 

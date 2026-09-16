@@ -3,8 +3,17 @@ import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
-  title: "CodeCollab - Real-Time Collaborative IDE",
-  description: "Browser-based collaborative code editor powered by Monaco Editor, Yjs, and Supabase",
+  title: "Radiux - Real-Time Collaborative IDE",
+  description: "High-performance collaborative web IDE powered by Monaco Editor, Yjs, and Supabase",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon.png", type: "image/png" },
+      { url: "/logo.png", type: "image/png" },
+    ],
+    apple: "/apple-icon.png",
+    shortcut: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
@@ -15,18 +24,21 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
+        <link rel="apple-touch-icon" href="/apple-icon.png" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
                 try {
-                  var settingsStr = localStorage.getItem('codecollab_editor_settings');
+                  var settingsStr = localStorage.getItem('radiux_editor_settings') || localStorage.getItem('codecollab_editor_settings');
                   var theme = 'dark';
                   if (settingsStr) {
                     var parsed = JSON.parse(settingsStr);
                     if (parsed && parsed.theme) theme = parsed.theme;
                   } else {
-                    var savedTheme = localStorage.getItem('codecollab_theme');
+                    var savedTheme = localStorage.getItem('radiux_theme') || localStorage.getItem('codecollab_theme');
                     if (savedTheme) theme = savedTheme;
                   }
                   var themes = {

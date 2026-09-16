@@ -72,9 +72,9 @@ export async function GET(request: Request) {
             return {
               id: d.uid,
               provider: 'vercel',
-              name: d.name || 'codecollab-frontend',
+              name: d.name || 'radiux-frontend',
               status,
-              url: d.url ? `https://${d.url}` : 'https://code-collab-ide.vercel.app',
+              url: d.url ? `https://${d.url}` : 'https://radiux.vercel.app',
               createdAt: new Date(d.created).toISOString(),
               commitMessage: d.meta?.githubCommitMessage,
               branch: d.meta?.githubCommitRef || 'main',
@@ -121,6 +121,7 @@ export async function GET(request: Request) {
         } else {
           const services = await srvRes.json();
           const targetService = services.find((s: any) => 
+            s.service?.name?.toLowerCase().includes('radiux') ||
             s.service?.name?.toLowerCase().includes('codecollab')
           ) || services[0];
 
@@ -149,7 +150,7 @@ export async function GET(request: Request) {
                 return {
                   id: d.id,
                   provider: 'render',
-                  name: targetService.service.name || 'codecollab-backend',
+                  name: targetService.service.name || 'radiux-backend',
                   status,
                   url: targetService.service.serviceDetails?.url || 'https://codecollab-backend-isjt.onrender.com',
                   createdAt: d.createdAt,
@@ -202,7 +203,10 @@ export async function POST(request: Request) {
         });
         if (srvRes.ok) {
           const list = await srvRes.json();
-          const found = list.find((s: any) => s.service?.name?.toLowerCase().includes('codecollab')) || list[0];
+          const found = list.find((s: any) => 
+            s.service?.name?.toLowerCase().includes('radiux') || 
+            s.service?.name?.toLowerCase().includes('codecollab')
+          ) || list[0];
           targetId = found?.service?.id;
         }
       }

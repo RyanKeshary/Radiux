@@ -70,7 +70,7 @@ export function PreviewPanel({
     }
   }, [mode, port, key]);
 
-  // Static preview URL points to CodeCollab backend file server
+  // Static preview URL points to Radiux backend file server
   const staticUrl = buildApiUrl(`/preview/${projectId}/${path.replace(/^\//, '') || 'index.html'}`);
   
   // Port preview URL points through the backend reverse proxy so remote clients can access dev servers running on Render

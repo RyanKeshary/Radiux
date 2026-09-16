@@ -1,5 +1,5 @@
 /**
- * CodeCollab Notification & Feedback Audio Synthesizer
+ * Radiux Notification & Feedback Audio Synthesizer
  * Uses Web Audio API for lightweight, high-fidelity, offline-ready micro-sound feedback.
  */
 
@@ -25,12 +25,12 @@ class SoundEffectsManager {
   public isEnabled(): boolean {
     if (typeof window === 'undefined') return false;
     try {
-      const raw = localStorage.getItem('codecollab_editor_settings');
+      const raw = localStorage.getItem('radiux_editor_settings') || localStorage.getItem('codecollab_editor_settings');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.soundEnabled === false) return false;
       }
-      const direct = localStorage.getItem('codecollab_sound_enabled');
+      const direct = localStorage.getItem('radiux_sound_enabled') || localStorage.getItem('codecollab_sound_enabled');
       if (direct === 'false') return false;
     } catch (e) {}
     return true;
@@ -39,10 +39,12 @@ class SoundEffectsManager {
   public setEnabled(enabled: boolean): void {
     if (typeof window === 'undefined') return;
     try {
+      localStorage.setItem('radiux_sound_enabled', enabled ? 'true' : 'false');
       localStorage.setItem('codecollab_sound_enabled', enabled ? 'true' : 'false');
-      const raw = localStorage.getItem('codecollab_editor_settings');
+      const raw = localStorage.getItem('radiux_editor_settings') || localStorage.getItem('codecollab_editor_settings');
       const settings = raw ? JSON.parse(raw) : {};
       settings.soundEnabled = enabled;
+      localStorage.setItem('radiux_editor_settings', JSON.stringify(settings));
       localStorage.setItem('codecollab_editor_settings', JSON.stringify(settings));
     } catch (e) {}
   }

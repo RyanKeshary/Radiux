@@ -302,8 +302,9 @@ export function MediaPreviewModal({
             color: 'var(--ide-text-muted)',
           }}
         >
-          <div className="flex items-center gap-4">
-            <span>CodeCollab In-Project Media Viewer</span>
+          <div className="flex items-center gap-2">
+            <img src="/logo.png" alt="Radiux" className="w-3.5 h-3.5 rounded object-contain" />
+            <span>Radiux In-Project Media Viewer</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>Press <kbd className="px-1.5 py-0.5 rounded border font-mono" style={{ backgroundColor: 'var(--ide-input-bg)', borderColor: 'var(--ide-border)', color: 'var(--ide-text)' }}>Esc</kbd> to close</span>

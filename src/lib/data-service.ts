@@ -165,7 +165,7 @@ export const DataService = {
           name: 'index.js',
           is_folder: false,
           language: 'javascript',
-          content: `// Project: ${name}\n// Created by ${user.full_name}\n\nconsole.log("Welcome to CodeCollab!");\n`
+          content: `// Project: ${name}\n// Created by ${user.full_name}\n\nconsole.log("Welcome to Radiux!");\n`
         });
 
         return data;
@@ -846,9 +846,9 @@ export const DataService = {
   },
 
   /**
-   * Export all user projects into a complete workspace archive codecollab-workspace.zip
+   * Export all user projects into a complete workspace archive radiux-workspace.zip
    */
-  async exportCompleteWorkspace(userId: string, workspaceName = 'codecollab-workspace'): Promise<void> {
+  async exportCompleteWorkspace(userId: string, workspaceName = 'radiux-workspace'): Promise<void> {
     const projects = await this.getProjects(userId);
     const zip = new JSZip();
 
@@ -1105,7 +1105,7 @@ export const DataService = {
 
         const project = await this.createProject(
           uniqueName,
-          projMeta.description || 'Restored from CodeCollab workspace backup',
+          projMeta.description || 'Restored from Radiux workspace backup',
           user
         );
 

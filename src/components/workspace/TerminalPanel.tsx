@@ -141,7 +141,7 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    term.writeln('\x1b[1;36m[CodeCollab Remote Terminal]\x1b[0m Connecting to workspace environment...');
+    term.writeln('\x1b[1;36m[Radiux Remote Terminal]\x1b[0m Connecting to workspace environment...');
     setConnectionStatus('connecting');
 
     const sendResize = () => {

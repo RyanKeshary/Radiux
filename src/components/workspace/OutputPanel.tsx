@@ -61,7 +61,7 @@ export function OutputPanel({ logs, onClearLogs }: OutputPanelProps) {
             }}
           >
             <option value="all">All Channels</option>
-            <option value="system">CodeCollab System</option>
+            <option value="system">Radiux System</option>
             <option value="sync">Workspace Sync</option>
             <option value="git">Git Operations</option>
             <option value="runtime">Server Runtime</option>
