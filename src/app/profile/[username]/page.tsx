@@ -39,7 +39,16 @@ export default function ProfilePage() {
       setNotFound(false);
       try {
         const cleanIdentifier = decodeURIComponent(usernameParam).replace(/^@/, '');
-        const targetProfile = await DataService.getPublicProfile(cleanIdentifier, user?.id);
+        let targetProfile = await DataService.getPublicProfile(cleanIdentifier, user?.id);
+        if (!targetProfile && user) {
+          const userMatches = 
+            user.id === cleanIdentifier ||
+            user.username?.toLowerCase() === cleanIdentifier.toLowerCase() ||
+            user.email?.split('@')[0].toLowerCase() === cleanIdentifier.toLowerCase();
+          if (userMatches) {
+            targetProfile = user;
+          }
+        }
 
         if (!targetProfile) {
           setNotFound(true);

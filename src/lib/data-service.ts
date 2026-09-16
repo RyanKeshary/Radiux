@@ -1284,11 +1284,14 @@ export const DataService = {
     const mockProfile = StorageMock.getProfileByUsername(clean);
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .or(`email.ilike.%${clean}%,id.eq.${clean}`)
-          .single();
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean);
+        let query = supabase.from('profiles').select('*');
+        if (isUuid) {
+          query = query.eq('id', clean);
+        } else {
+          query = query.or(`email.ilike.%${clean}%,full_name.ilike.%${clean}%`);
+        }
+        const { data, error } = await query.maybeSingle();
         if (!error && data) {
           // Merge Supabase base with StorageMock extended data
           const matchedMock = StorageMock.getProfile(data.id);

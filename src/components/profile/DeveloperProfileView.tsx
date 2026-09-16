@@ -29,7 +29,8 @@ import {
   ArrowLeft,
   Sparkles,
   X,
-  CheckCheck
+  CheckCheck,
+  Mail
 } from 'lucide-react';
 
 interface DeveloperProfileViewProps {
@@ -243,15 +244,24 @@ export function DeveloperProfileView({
                   </div>
                 )}
 
-                {/* Location & Education */}
+                {/* Location & Education & Email */}
                 <div className="flex items-center gap-3 text-xs flex-wrap opacity-75 pt-0.5" style={{ color: 'var(--ide-text-muted)' }}>
-                  {privacy.show_location !== false && profile.location && (
+                  {(isOwner || privacy.show_email) && profile.email && (
+                    <span className="flex items-center gap-1 text-sky-400">
+                      <Mail className="w-3 h-3" />
+                      {profile.email}
+                      {isOwner && !privacy.show_email && (
+                        <span className="text-[10px] px-1 rounded bg-neutral-800 text-neutral-400 font-mono">(hidden to visitors)</span>
+                      )}
+                    </span>
+                  )}
+                  {(isOwner || privacy.show_location !== false) && profile.location && (
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
                       {profile.location}
                     </span>
                   )}
-                  {privacy.show_education !== false && profile.education && (
+                  {(isOwner || privacy.show_education !== false) && profile.education && (
                     <span className="flex items-center gap-1">
                       <GraduationCap className="w-3.5 h-3.5" />
                       {profile.education}
@@ -410,6 +420,16 @@ export function DeveloperProfileView({
           </div>
         </div>
 
+        {/* 1. Profile README (At the top as requested) */}
+        {(isOwner || privacy.show_readme !== false) && (
+          <ProfileReadme
+            initialMarkdown={profile.readme_markdown || ''}
+            isOwner={isOwner}
+            username={profile.username || profile.email.split('@')[0]}
+            onSave={handleSaveReadme}
+          />
+        )}
+
         {/* 2. Pinned Projects Showcase (Maximum 4) */}
         <PinnedProjectsSection
           pinnedProjects={pinnedProjects}
@@ -419,22 +439,12 @@ export function DeveloperProfileView({
         />
 
         {/* 3. Developer Contribution Graph (GitHub-Style 52-week grid) */}
-        {privacy.show_activity !== false && (
+        {(isOwner || privacy.show_activity !== false) && (
           <ContributionGraph
             days={contributions.days}
             totalContributions={contributions.totalContributions}
             currentStreak={contributions.currentStreak}
             longestStreak={contributions.longestStreak}
-          />
-        )}
-
-        {/* 4. Profile README */}
-        {privacy.show_readme !== false && (
-          <ProfileReadme
-            initialMarkdown={profile.readme_markdown || ''}
-            isOwner={isOwner}
-            username={profile.username || profile.email.split('@')[0]}
-            onSave={handleSaveReadme}
           />
         )}
       </main>

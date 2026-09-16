@@ -165,6 +165,8 @@ export function UserMenu({
     setIsDropdownOpen(false);
     if (onViewPublicProfile) {
       onViewPublicProfile();
+    } else if (typeof window !== 'undefined' && user) {
+      window.location.href = `/profile/${user.username || user.id}`;
     } else {
       setIsLocalPublicProfileOpen(true);
     }

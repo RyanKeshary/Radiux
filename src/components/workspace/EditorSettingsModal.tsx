@@ -79,7 +79,7 @@ export function EditorSettingsModal({
   initialSection = 'ide',
   projectId,
 }: EditorSettingsModalProps) {
-  const { user, signOut } = useAuth();
+  const { user, signOut, updateCurrentUserProfile } = useAuth();
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [partners, setPartners] = useState<CodingPartner[]>([]);
@@ -97,6 +97,16 @@ export function EditorSettingsModal({
     github_username: '',
     skills: [] as string[],
     languages: [] as string[],
+  });
+  const [privacyForm, setPrivacyForm] = useState({
+    show_location: true,
+    show_education: true,
+    show_links: true,
+    show_skills: true,
+    show_activity: true,
+    show_readme: true,
+    show_partners: true,
+    show_email: false,
   });
   const [newSkill, setNewSkill] = useState('');
   const [newLang, setNewLang] = useState('');
@@ -131,6 +141,9 @@ export function EditorSettingsModal({
               skills: prof.skills || [],
               languages: prof.languages || [],
             });
+            if (prof.privacy) {
+              setPrivacyForm((prev) => ({ ...prev, ...prof.privacy }));
+            }
           }
           setPartners(parts);
           setLoadingProfile(false);
@@ -205,6 +218,22 @@ export function EditorSettingsModal({
       const parts = await DataService.getCodingPartners(user.id);
       setPartners(parts);
       soundManager.playSuccess();
+    }
+  };
+
+  const handleTogglePrivacy = async (key: string, value: boolean) => {
+    const updatedPrivacy = { ...privacyForm, [key]: value };
+    setPrivacyForm(updatedPrivacy);
+    if (user) {
+      try {
+        await DataService.updateProfile(user.id, { privacy: updatedPrivacy });
+        if (updateCurrentUserProfile) {
+          await updateCurrentUserProfile({ privacy: updatedPrivacy });
+        }
+        soundManager.playSuccess();
+      } catch (err) {
+        console.error('Failed to update privacy:', err);
+      }
     }
   };
 
@@ -806,15 +835,35 @@ export function EditorSettingsModal({
               <div className="space-y-5 max-w-xl">
                 <div>
                   <h3 className="text-sm font-semibold mb-1">Privacy & Profile Visibility</h3>
-                  <p className="text-[11px] opacity-70">Control which details other developers can inspect on your profile.</p>
+                  <p className="text-[11px] opacity-70">Control which details other developers can inspect on your public developer profile.</p>
                 </div>
-                <div className="space-y-2 p-3.5 rounded-lg border" style={{ borderColor: 'var(--ide-border)' }}>
-                  {['Show email address publicly', 'Show active status dot', 'Show mutual projects in profile preview'].map((opt, i) => (
-                    <label key={i} className="flex items-center justify-between py-1 cursor-pointer">
-                      <span>{opt}</span>
-                      <input type="checkbox" defaultChecked={i !== 0} className="w-4 h-4 accent-sky-500" />
-                    </label>
-                  ))}
+                <div className="space-y-2 p-3.5 rounded-lg border" style={{ borderColor: 'var(--ide-border)', backgroundColor: 'var(--ide-card-bg)' }}>
+                  {[
+                    { key: 'show_location', label: 'Show Location on Public Profile' },
+                    { key: 'show_education', label: 'Show Education on Public Profile' },
+                    { key: 'show_links', label: 'Show External Links (Website, GitHub, LinkedIn)' },
+                    { key: 'show_skills', label: 'Show Skills & Technologies' },
+                    { key: 'show_activity', label: 'Show Developer Contribution Graph' },
+                    { key: 'show_readme', label: 'Show Personal Profile README' },
+                    { key: 'show_partners', label: 'Show Mutual Coding Partners' },
+                    { key: 'show_email', label: 'Show Email Address (Publicly Visible)' },
+                  ].map(({ key, label }) => {
+                    const checked = (privacyForm as any)[key] ?? false;
+                    return (
+                      <label 
+                        key={key} 
+                        className="flex items-center justify-between p-2.5 rounded-lg hover:bg-white/5 cursor-pointer transition-colors border border-white/5"
+                      >
+                        <span className="text-xs font-medium">{label}</span>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => handleTogglePrivacy(key, e.target.checked)}
+                          className="w-4 h-4 rounded text-sky-500 accent-sky-500 cursor-pointer"
+                        />
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             )}

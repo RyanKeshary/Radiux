@@ -83,6 +83,26 @@ export function MonacoEditorWrapper({
     }
   }, [settings.theme, editorReady]);
 
+  // Dynamically update Monaco editor settings (fontSize, fontFamily, tabSize, wordWrap, minimap)
+  useEffect(() => {
+    if (editorReady && editorRef.current) {
+      editorRef.current.updateOptions({
+        fontSize: settings.fontSize,
+        fontFamily: settings.fontFamily || "'Fira Code', 'Cascadia Code', Consolas, monospace",
+        tabSize: settings.tabSize,
+        wordWrap: settings.wordWrap,
+        minimap: { enabled: settings.minimap },
+      });
+    }
+  }, [
+    settings.fontSize,
+    settings.fontFamily,
+    settings.tabSize,
+    settings.wordWrap,
+    settings.minimap,
+    editorReady,
+  ]);
+
   // Flush pending changes to Supabase storage immediately
   const flushPersist = async (targetFileId: string, text: string) => {
     try {
@@ -383,7 +403,7 @@ export function MonacoEditorWrapper({
           onMount={handleEditorDidMount}
           options={{
             fontSize: settings.fontSize,
-            fontFamily: "'Fira Code', 'Cascadia Code', Consolas, monospace",
+            fontFamily: settings.fontFamily || "'Fira Code', 'Cascadia Code', Consolas, monospace",
             minimap: { enabled: settings.minimap },
             lineNumbers: 'on',
             roundedSelection: false,
