@@ -15,7 +15,7 @@ import {
   Mic
 } from 'lucide-react';
 
-export type ActivityView = 'explorer' | 'search' | 'git' | 'chat' | 'voice' | 'collaborators' | 'preview';
+export type ActivityView = 'explorer' | 'search' | 'git' | 'chat' | 'voice' | 'preview' | 'collaborators';
 
 interface ActivityBarProps {
   activeView: ActivityView | null;
@@ -25,7 +25,6 @@ interface ActivityBarProps {
   unreadNotifications?: number;
   unreadChatCount?: number;
   isInVoice?: boolean;
-  voicePeerCount?: number;
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
   onOpenProfile: () => void;
@@ -42,7 +41,6 @@ export function ActivityBar({
   unreadNotifications = 0,
   unreadChatCount = 0,
   isInVoice = false,
-  voicePeerCount = 0,
   onOpenSettings,
   onOpenShortcuts,
   onOpenProfile,
@@ -50,7 +48,7 @@ export function ActivityBar({
   userAvatar,
   userName = 'User',
 }: ActivityBarProps) {
-  const navItems: { id: ActivityView; label: string; icon: React.ReactNode; shortcut: string; badge?: number | string; badgeColor?: string }[] = [
+  const navItems: { id: ActivityView; label: string; icon: React.ReactNode; shortcut: string; badge?: number; indicator?: boolean }[] = [
     {
       id: 'explorer',
       label: 'Explorer',
@@ -65,30 +63,28 @@ export function ActivityBar({
     },
     {
       id: 'git',
-      label: 'Source Control',
+      label: 'Source Control & GitHub',
       icon: <GitBranch className="w-5 h-5" />,
       shortcut: 'Ctrl+Shift+G',
       badge: gitChangedCount > 0 ? gitChangedCount : undefined,
     },
     {
       id: 'chat',
-      label: 'Team Chat',
+      label: 'Project Chat',
       icon: <MessageSquare className="w-5 h-5" />,
-      shortcut: 'Alt+C',
+      shortcut: 'Ctrl+Alt+C',
       badge: unreadChatCount > 0 ? unreadChatCount : undefined,
-      badgeColor: 'bg-sky-500',
     },
     {
       id: 'voice',
-      label: 'Voice Channels',
+      label: 'Voice Channel',
       icon: <Mic className={`w-5 h-5 ${isInVoice ? 'text-emerald-400 animate-pulse' : ''}`} />,
-      shortcut: 'Alt+V',
-      badge: voicePeerCount > 0 ? voicePeerCount : (isInVoice ? 'ON' : undefined),
-      badgeColor: isInVoice ? 'bg-emerald-500' : 'bg-slate-600',
+      shortcut: '',
+      indicator: isInVoice,
     },
     {
       id: 'collaborators',
-      label: 'Collaborators & Friends',
+      label: 'Collaborators & Presence',
       icon: <Users className="w-5 h-5" />,
       shortcut: 'Ctrl+Shift+C',
       badge: collaboratorCount > 1 ? collaboratorCount : undefined,
@@ -137,8 +133,8 @@ export function ActivityBar({
               {/* Badge */}
               {item.badge !== undefined && (
                 <span 
-                  className={`absolute top-1.5 right-1.5 min-w-[14px] h-[14px] px-1 text-[9px] font-bold text-white rounded-full flex items-center justify-center leading-none ${item.badgeColor || ''}`}
-                  style={{ backgroundColor: item.badgeColor ? undefined : 'var(--ide-accent)' }}
+                  className="absolute top-1.5 right-1.5 min-w-[14px] h-[14px] px-1 text-[9px] font-bold text-white rounded-full flex items-center justify-center leading-none"
+                  style={{ backgroundColor: 'var(--ide-accent)' }}
                 >
                   {item.badge}
                 </span>

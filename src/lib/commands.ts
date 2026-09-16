@@ -1,7 +1,17 @@
 'use client';
 
-import { CommandDefinition } from './types';
 import { StorageMock } from './storage-mock';
+
+export type CommandScope = 
+  | 'Global' 
+  | 'Editor' 
+  | 'Terminal' 
+  | 'File Explorer' 
+  | 'Chat' 
+  | 'Search' 
+  | 'Git' 
+  | 'Profile' 
+  | 'Modal';
 
 export interface CommandItem {
   id: string;
@@ -10,6 +20,8 @@ export interface CommandItem {
   description: string;
   defaultShortcut: string;
   macShortcut?: string;
+  scope: CommandScope;
+  enabled?: boolean;
   actionId: string;
 }
 
@@ -22,6 +34,8 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'Open the universal command palette to run actions',
     defaultShortcut: 'Ctrl+Shift+P',
     macShortcut: 'Cmd+Shift+P',
+    scope: 'Global',
+    enabled: true,
     actionId: 'commandPalette',
   },
   {
@@ -31,6 +45,8 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'Quickly find and open files by name',
     defaultShortcut: 'Ctrl+P',
     macShortcut: 'Cmd+P',
+    scope: 'Global',
+    enabled: true,
     actionId: 'quickOpen',
   },
   {
@@ -40,6 +56,8 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'Find text and symbols across all project files',
     defaultShortcut: 'Ctrl+Shift+F',
     macShortcut: 'Cmd+Shift+F',
+    scope: 'Global',
+    enabled: true,
     actionId: 'globalSearch',
   },
   {
@@ -49,6 +67,8 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'Show or hide the primary sidebar',
     defaultShortcut: 'Ctrl+B',
     macShortcut: 'Cmd+B',
+    scope: 'Global',
+    enabled: true,
     actionId: 'toggleSidebar',
   },
   {
@@ -58,16 +78,20 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'Show or hide the interactive cloud terminal dock',
     defaultShortcut: 'Ctrl+`',
     macShortcut: 'Cmd+`',
+    scope: 'Global',
+    enabled: true,
     actionId: 'toggleDock',
   },
   {
-    id: 'workbench.action.togglePanel',
-    title: 'Toggle Output Panel',
+    id: 'workbench.action.toggleNotifications',
+    title: 'Toggle Notifications Panel',
     category: 'View',
-    description: 'Toggle bottom panel view and logs',
-    defaultShortcut: 'Ctrl+J',
-    macShortcut: 'Cmd+J',
-    actionId: 'toggleDock',
+    description: 'Open or close the notifications center drawer',
+    defaultShortcut: 'Ctrl+Alt+B',
+    macShortcut: 'Cmd+Alt+B',
+    scope: 'Global',
+    enabled: true,
+    actionId: 'toggleNotifications',
   },
 
   // Editor Tabs & Splitting
@@ -75,9 +99,11 @@ export const CORE_COMMANDS: CommandItem[] = [
     id: 'workbench.action.closeActiveEditor',
     title: 'Close Active Editor Tab',
     category: 'Editor',
-    description: 'Close the file currently active in the focused split (Chrome-safe Alt+W)',
+    description: 'Close the file currently active in the focused split',
     defaultShortcut: 'Alt+W',
-    macShortcut: 'Cmd+W',
+    macShortcut: 'Option+W',
+    scope: 'Editor',
+    enabled: true,
     actionId: 'closeActiveTab',
   },
   {
@@ -87,15 +113,19 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'Split the current editor group to the right',
     defaultShortcut: 'Ctrl+\\',
     macShortcut: 'Cmd+\\',
+    scope: 'Editor',
+    enabled: true,
     actionId: 'splitRight',
   },
   {
     id: 'workbench.action.files.save',
     title: 'Save File',
     category: 'File',
-    description: 'Synchronize editor contents to workspace disk',
+    description: 'Synchronize editor contents to workspace storage',
     defaultShortcut: 'Ctrl+S',
     macShortcut: 'Cmd+S',
+    scope: 'Editor',
+    enabled: true,
     actionId: 'saveFile',
   },
   {
@@ -103,8 +133,10 @@ export const CORE_COMMANDS: CommandItem[] = [
     title: 'Cycle Through Open Tabs (Next)',
     category: 'Editor',
     description: 'Switch to the next tab in the active group',
-    defaultShortcut: 'Ctrl+Tab',
-    macShortcut: 'Ctrl+Tab',
+    defaultShortcut: 'Alt+Tab',
+    macShortcut: 'Option+Tab',
+    scope: 'Editor',
+    enabled: true,
     actionId: 'cycleTabNext',
   },
   {
@@ -112,12 +144,14 @@ export const CORE_COMMANDS: CommandItem[] = [
     title: 'Cycle Through Open Tabs (Previous)',
     category: 'Editor',
     description: 'Switch to the previous tab in the active group',
-    defaultShortcut: 'Ctrl+Shift+Tab',
-    macShortcut: 'Ctrl+Shift+Tab',
+    defaultShortcut: 'Alt+Shift+Tab',
+    macShortcut: 'Option+Shift+Tab',
+    scope: 'Editor',
+    enabled: true,
     actionId: 'cycleTabPrev',
   },
 
-  // Focus Navigation
+  // Focus Navigation & Views
   {
     id: 'workbench.view.explorer',
     title: 'Focus Files Explorer',
@@ -125,6 +159,8 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'Open files explorer in the sidebar',
     defaultShortcut: 'Ctrl+Shift+E',
     macShortcut: 'Cmd+Shift+E',
+    scope: 'Global',
+    enabled: true,
     actionId: 'focusExplorer',
   },
   {
@@ -134,6 +170,8 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'Open Git changes and commit staging',
     defaultShortcut: 'Ctrl+Shift+G',
     macShortcut: 'Cmd+Shift+G',
+    scope: 'Global',
+    enabled: true,
     actionId: 'focusGit',
   },
   {
@@ -143,7 +181,20 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'View active peers, presence, and coding partners',
     defaultShortcut: 'Ctrl+Shift+C',
     macShortcut: 'Cmd+Shift+C',
+    scope: 'Global',
+    enabled: true,
     actionId: 'focusCollaborators',
+  },
+  {
+    id: 'workbench.view.chat',
+    title: 'Focus Project Chat',
+    category: 'Collaboration',
+    description: 'Jump to project discussion and team channel',
+    defaultShortcut: 'Ctrl+Alt+C',
+    macShortcut: 'Cmd+Alt+C',
+    scope: 'Global',
+    enabled: true,
+    actionId: 'focusChat',
   },
 
   // Social & Developer Identity
@@ -154,6 +205,8 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'View and customize your personal developer profile and README',
     defaultShortcut: 'Ctrl+Shift+U',
     macShortcut: 'Cmd+Shift+U',
+    scope: 'Global',
+    enabled: true,
     actionId: 'openProfile',
   },
   {
@@ -163,6 +216,8 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'Search for developers by skills, languages, and handle',
     defaultShortcut: 'Ctrl+Shift+D',
     macShortcut: 'Cmd+Shift+D',
+    scope: 'Global',
+    enabled: true,
     actionId: 'discoverDevelopers',
   },
   {
@@ -172,15 +227,19 @@ export const CORE_COMMANDS: CommandItem[] = [
     description: 'Quickly jump between your workspaces',
     defaultShortcut: 'Ctrl+Alt+O',
     macShortcut: 'Cmd+Alt+O',
+    scope: 'Global',
+    enabled: true,
     actionId: 'switchProject',
   },
   {
     id: 'workbench.action.openSettings',
     title: 'Open Settings',
     category: 'Preferences',
-    description: 'Configure editor font, theme, and tab preferences',
+    description: 'Configure editor font, theme, and environment options',
     defaultShortcut: 'Ctrl+,',
     macShortcut: 'Cmd+,',
+    scope: 'Global',
+    enabled: true,
     actionId: 'openSettings',
   },
 ];
@@ -190,7 +249,7 @@ export class CommandRegistry {
 
   static getEffectiveShortcut(cmd: CommandItem): string {
     const customMap = StorageMock.getCustomShortcuts();
-    if (customMap[cmd.id]) {
+    if (customMap[cmd.id] !== undefined) {
       return customMap[cmd.id];
     }
     return this.isMac && cmd.macShortcut ? cmd.macShortcut : cmd.defaultShortcut;
@@ -203,25 +262,59 @@ export class CommandRegistry {
     }));
   }
 
-  static detectShortcutConflict(newShortcut: string, excludingCommandId?: string): CommandItem | null {
+  static detectShortcutConflict(
+    newShortcut: string, 
+    excludingCommandId?: string, 
+    scope?: CommandScope
+  ): CommandItem | null {
+    if (!newShortcut.trim()) return null;
     const norm = this.normalizeShortcut(newShortcut);
+
     for (const cmd of CORE_COMMANDS) {
       if (excludingCommandId && cmd.id === excludingCommandId) continue;
       const current = this.normalizeShortcut(this.getEffectiveShortcut(cmd));
       if (current === norm) {
-        return cmd;
+        // Conflicts exist if both are Global, or if either shares the same specific scope
+        if (
+          !scope || 
+          scope === 'Global' || 
+          cmd.scope === 'Global' || 
+          cmd.scope === scope
+        ) {
+          return cmd;
+        }
       }
     }
     return null;
   }
 
-  static setCustomShortcut(commandId: string, newShortcut: string): { success: boolean; conflict?: CommandItem } {
-    const conflict = this.detectShortcutConflict(newShortcut, commandId);
+  static setCustomShortcut(
+    commandId: string, 
+    newShortcut: string,
+    replaceConflict = false
+  ): { success: boolean; conflict?: CommandItem } {
+    const targetCmd = CORE_COMMANDS.find(c => c.id === commandId);
+    const conflict = this.detectShortcutConflict(newShortcut, commandId, targetCmd?.scope);
+
     if (conflict) {
-      return { success: false, conflict };
+      if (replaceConflict) {
+        // Clear conflicting command's shortcut
+        this.unassignShortcut(conflict.id);
+      } else {
+        return { success: false, conflict };
+      }
     }
+
     StorageMock.saveCustomShortcut(commandId, newShortcut);
     return { success: true };
+  }
+
+  static unassignShortcut(commandId: string): void {
+    const map = StorageMock.getCustomShortcuts();
+    map[commandId] = '';
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('codecollab_custom_shortcuts', JSON.stringify(map));
+    }
   }
 
   static resetShortcut(commandId: string): void {
@@ -237,8 +330,10 @@ export class CommandRegistry {
   }
 
   static normalizeShortcut(shortcut: string): string {
+    if (!shortcut) return '';
     return shortcut
       .replace(/Cmd/i, 'Ctrl')
+      .replace(/Option/i, 'Alt')
       .split('+')
       .map(s => s.trim().toUpperCase())
       .sort()
@@ -246,36 +341,31 @@ export class CommandRegistry {
   }
 
   /**
-   * Match a KeyboardEvent against a shortcut string (e.g. "Ctrl+Shift+P" or "Alt+W")
+   * Test if an active keyboard event matches a given shortcut string
    */
-  static matchEvent(e: KeyboardEvent, shortcutStr: string): boolean {
-    if (!shortcutStr) return false;
-    const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const parts = shortcutStr.split('+').map(p => p.trim().toLowerCase());
+  static matchesEvent(e: KeyboardEvent, shortcut: string): boolean {
+    if (!shortcut) return false;
+    const parts = shortcut.split('+').map(p => p.trim().toUpperCase());
     
-    const wantsCtrl = parts.includes('ctrl') || parts.includes('cmd');
-    const wantsShift = parts.includes('shift');
-    const wantsAlt = parts.includes('alt');
-    
-    const eventCtrl = isMac ? e.metaKey : (e.ctrlKey || e.metaKey);
-    if (wantsCtrl !== eventCtrl) return false;
-    if (wantsShift !== e.shiftKey) return false;
-    if (wantsAlt !== e.altKey) return false;
+    const wantsCtrl = parts.includes('CTRL') || parts.includes('CMD');
+    const wantsShift = parts.includes('SHIFT');
+    const wantsAlt = parts.includes('ALT') || parts.includes('OPTION');
 
-    // Find non-modifier key
-    const keyPart = parts.find(p => !['ctrl', 'cmd', 'shift', 'alt'].includes(p));
-    if (!keyPart) return false;
+    const hasCtrl = e.ctrlKey || e.metaKey;
+    const hasShift = e.shiftKey;
+    const hasAlt = e.altKey;
 
-    const k = e.key.toLowerCase();
-    const c = e.code.toLowerCase();
+    if (wantsCtrl !== hasCtrl) return false;
+    if (wantsShift !== hasShift) return false;
+    if (wantsAlt !== hasAlt) return false;
 
-    if (keyPart === 'space' && (k === ' ' || c === 'space')) return true;
-    if (keyPart === '`' && (k === '`' || k === '~' || c === 'backquote')) return true;
-    if (keyPart === '\\' && (k === '\\' || c === 'backslash')) return true;
-    if (keyPart === ',' && (k === ',' || c === 'comma')) return true;
-    if (keyPart === 'tab' && (k === 'tab' || c === 'tab')) return true;
-    if (k === keyPart || c === `key${keyPart}` || c === `digit${keyPart}`) return true;
+    // Check key
+    const nonModifier = parts.filter(p => !['CTRL', 'CMD', 'SHIFT', 'ALT', 'OPTION'].includes(p))[0];
+    if (!nonModifier) return false;
 
-    return false;
+    let eventKey = e.key.toUpperCase();
+    if (eventKey === ' ') eventKey = 'SPACE';
+
+    return eventKey === nonModifier;
   }
 }

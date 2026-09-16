@@ -511,6 +511,16 @@ export const StorageMock = {
     return notification;
   },
 
+  updateNotificationAction(id: string, actionStatus: string): void {
+    const list = getStored<any[]>('codecollab_notifications', []);
+    const target = list.find(n => n.id === id);
+    if (target) {
+      target.action_status = actionStatus;
+      target.read = true;
+      setStored('codecollab_notifications', list);
+    }
+  },
+
   markNotificationRead(id: string): void {
     const list = getStored<any[]>('codecollab_notifications', []);
     const target = list.find(n => n.id === id);
@@ -526,6 +536,16 @@ export const StorageMock = {
       if (n.user_id === userId) n.read = true;
     });
     setStored('codecollab_notifications', list);
+  },
+
+  dismissNotification(id: string): void {
+    const list = getStored<any[]>('codecollab_notifications', []);
+    setStored('codecollab_notifications', list.filter(n => n.id !== id));
+  },
+
+  clearAllNotifications(userId: string): void {
+    const list = getStored<any[]>('codecollab_notifications', []);
+    setStored('codecollab_notifications', list.filter(n => n.user_id !== userId));
   },
 
   // Level 8: Direct Developer Messaging & Profile Lookups

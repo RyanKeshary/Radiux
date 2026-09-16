@@ -12,8 +12,6 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { CreateProjectModal } from '@/components/dashboard/CreateProjectModal';
 import { ImportProjectModal } from '@/components/dashboard/ImportProjectModal';
 import { ImportWorkspaceModal } from '@/components/dashboard/ImportWorkspaceModal';
-import { UserProfileModal } from '@/components/workspace/UserProfileModal';
-import { DeveloperDiscoveryModal } from '@/components/profile/DeveloperDiscoveryModal';
 import { 
   Code2, 
   FolderGit2, 
@@ -34,10 +32,17 @@ import {
   Keyboard,
   Command,
   ExternalLink,
-  User,
+  Bell,
   Users,
-  Settings
+  Settings,
+  User,
+  Sparkles
 } from 'lucide-react';
+import { NotificationCenterPanel } from '@/components/workspace/NotificationCenterPanel';
+import { UserProfileModal } from '@/components/workspace/UserProfileModal';
+import { EditorSettingsModal, EditorSettings } from '@/components/workspace/EditorSettingsModal';
+import { DeveloperDiscoveryModal } from '@/components/profile/DeveloperDiscoveryModal';
+import { soundManager } from '@/lib/sound';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -50,19 +55,10 @@ export default function DashboardPage() {
   const [exportingWorkspace, setExportingWorkspace] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'ide' | 'profile' | 'collaborators' | 'account'>('ide');
-  const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
-  const [editorSettings, setEditorSettings] = useState<any>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('codecollab_editor_settings');
-        return saved ? JSON.parse(saved) : {};
-      } catch (e) {
-        return {};
-      }
-    }
-    return {};
-  });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isCollaboratorsOpen, setIsCollaboratorsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,6 +116,21 @@ export default function DashboardPage() {
     try {
       const data = await DataService.getProjects(user.id);
       setProjects(data);
+
+      // Load user notifications
+      try {
+        const notifs = await DataService.getNotifications(user.id);
+        setNotifications(notifs.map(n => ({
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          read: n.read,
+          createdAt: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          projectId: n.data?.project_id,
+          partnerRequestId: n.data?.partner_request_id,
+        })));
+      } catch (e) {}
 
       if (typeof window !== 'undefined') {
         const lastId = localStorage.getItem('codecollab_last_project_id');
@@ -243,7 +254,50 @@ export default function DashboardPage() {
           <span className="opacity-70 text-[11px]">Welcome</span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Direct Navigation for Signed In Users */}
+          {user && (
+            <div className="flex items-center gap-1 mr-1">
+              <button
+                onClick={() => setIsProfileModalOpen(true)}
+                className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors hover:bg-white/10 flex items-center gap-1.5 opacity-80 hover:opacity-100"
+                title="Profile & Skills"
+              >
+                <User className="w-3.5 h-3.5 text-sky-400" />
+                <span className="hidden sm:inline">Profile</span>
+              </button>
+
+              <button
+                onClick={() => setIsCollaboratorsOpen(true)}
+                className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors hover:bg-white/10 flex items-center gap-1.5 opacity-80 hover:opacity-100"
+                title="Collaborators & Developers"
+              >
+                <Users className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Collaborators</span>
+              </button>
+
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors hover:bg-white/10 flex items-center gap-1.5 opacity-80 hover:opacity-100"
+                title="IDE Settings"
+              >
+                <Settings className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Settings</span>
+              </button>
+
+              <button
+                onClick={() => setIsNotificationsOpen(true)}
+                className="p-1.5 rounded-md text-[11px] font-medium transition-colors hover:bg-white/10 relative opacity-80 hover:opacity-100 text-amber-400"
+                title="Notification Center"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                {notifications.filter(n => !n.read).length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[var(--ide-dock-header)]" />
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Theme Quick-Picker */}
           <div className="flex items-center gap-1.5 opacity-80 hover:opacity-100 transition-opacity">
             <Palette className="w-3.5 h-3.5" style={{ color: 'var(--ide-accent)' }} />
@@ -267,19 +321,9 @@ export default function DashboardPage() {
           </div>
 
           <UserMenu 
-            onOpenProfileModal={() => {
-              setSettingsTab('profile');
-              setIsProfileModalOpen(true);
-            }}
-            onOpenSettingsModal={() => {
-              setSettingsTab('ide');
-              setIsProfileModalOpen(true);
-            }}
-            onOpenDiscoveryModal={() => setIsDiscoveryOpen(true)}
-            onViewPublicProfile={() => {
-              if (user?.username) window.open(`/profile/${user.username}`, '_blank');
-              else if (user?.id) window.open(`/profile/${user.id}`, '_blank');
-            }}
+            onOpenProfileModal={() => setIsProfileModalOpen(true)}
+            onOpenSettingsModal={() => setIsSettingsOpen(true)}
+            onOpenDiscoveryModal={() => setIsCollaboratorsOpen(true)}
           />
         </div>
       </header>
@@ -348,88 +392,70 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Direct Minimalist Quick Hub: Profile, Collaborators/Friends, IDE Settings */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <button
-                onClick={() => {
-                  setSettingsTab('profile');
-                  setIsProfileModalOpen(true);
-                }}
-                className="p-3 rounded-lg border text-left flex items-center justify-between transition-all hover:border-indigo-500/50 hover:bg-black/5 dark:hover:bg-white/5 group"
-                style={{
-                  backgroundColor: 'var(--ide-card-bg)',
-                  borderColor: 'var(--ide-border)',
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] font-semibold" style={{ color: 'var(--ide-text)' }}>
-                      Profile & Banner
-                    </div>
-                    <div className="text-[10px] opacity-60">Bio, banner & tech stack</div>
-                  </div>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-indigo-400" />
-              </button>
-
-              <button
-                onClick={() => {
-                  setSettingsTab('collaborators');
-                  setIsProfileModalOpen(true);
-                }}
-                className="p-3 rounded-lg border text-left flex items-center justify-between transition-all hover:border-emerald-500/50 hover:bg-black/5 dark:hover:bg-white/5 group"
-                style={{
-                  backgroundColor: 'var(--ide-card-bg)',
-                  borderColor: 'var(--ide-border)',
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                    <Users className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] font-semibold" style={{ color: 'var(--ide-text)' }}>
-                      Friends & Peers
-                    </div>
-                    <div className="text-[10px] opacity-60">Manage collaborators</div>
-                  </div>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-emerald-400" />
-              </button>
-
-              <button
-                onClick={() => {
-                  setSettingsTab('ide');
-                  setIsProfileModalOpen(true);
-                }}
-                className="p-3 rounded-lg border text-left flex items-center justify-between transition-all hover:border-sky-500/50 hover:bg-black/5 dark:hover:bg-white/5 group"
-                style={{
-                  backgroundColor: 'var(--ide-card-bg)',
-                  borderColor: 'var(--ide-border)',
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform">
-                    <Settings className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] font-semibold" style={{ color: 'var(--ide-text)' }}>
-                      IDE Settings
-                    </div>
-                    <div className="text-[10px] opacity-60">Themes, editor & font size</div>
-                  </div>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-sky-400" />
-              </button>
-            </div>
-
             {/* 2-Column Developer Layout (Start & Recent Workspaces) */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
               {/* Left Column: Start Actions (4 cols) */}
               <div className="md:col-span-5 space-y-5">
+                {/* Compact User Panel (Requirement 26) */}
+                {user && (
+                  <div 
+                    className="p-3 rounded-xl border flex items-center justify-between gap-3 shadow-sm backdrop-blur-sm"
+                    style={{
+                      backgroundColor: 'var(--ide-card-bg)',
+                      borderColor: 'var(--ide-border)',
+                    }}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="relative">
+                        {user.avatar_url ? (
+                          <img 
+                            src={user.avatar_url} 
+                            alt={user.full_name || 'User'} 
+                            className="w-8 h-8 rounded-full object-cover border border-white/10"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-sky-500/20 text-sky-400 font-bold flex items-center justify-center text-xs">
+                            {(user.full_name || 'U')[0]}
+                          </div>
+                        )}
+                        <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-400 ring-1 ring-[var(--ide-card-bg)]" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-xs truncate" style={{ color: 'var(--ide-text)' }}>
+                          {user.full_name || 'Developer'}
+                        </div>
+                        <div className="text-[10px] opacity-60 font-mono truncate">
+                          @{user.email.split('@')[0]}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => setIsProfileModalOpen(true)}
+                        className="p-1.5 rounded-md hover:bg-white/10 opacity-70 hover:opacity-100 text-sky-400 transition-colors"
+                        title="View & Edit Profile"
+                      >
+                        <User className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setIsCollaboratorsOpen(true)}
+                        className="p-1.5 rounded-md hover:bg-white/10 opacity-70 hover:opacity-100 text-emerald-400 transition-colors"
+                        title="Discover Developers"
+                      >
+                        <Users className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="p-1.5 rounded-md hover:bg-white/10 opacity-70 hover:opacity-100 text-indigo-400 transition-colors"
+                        title="Settings"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <h3 className="text-[11px] font-bold uppercase tracking-wider opacity-60">
                     Start
@@ -767,32 +793,72 @@ export default function DashboardPage() {
         defaultMode="signin"
       />
 
+      {/* Direct Level 9 Modals for Dashboard */}
       {user && (
         <>
+          <NotificationCenterPanel
+            isOpen={isNotificationsOpen}
+            onClose={() => setIsNotificationsOpen(false)}
+            notifications={notifications}
+            onMarkAllRead={() => {
+              DataService.markAllNotificationsRead(user.id);
+              setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+            }}
+            onAcceptPartnerRequest={async (reqId) => {
+              await DataService.respondToPartnerRequest(reqId, true);
+              soundManager.playSuccess();
+              setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+            }}
+            onIgnorePartnerRequest={async (reqId) => {
+              await DataService.respondToPartnerRequest(reqId, false);
+              setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+            }}
+            onOpenProject={(pid) => {
+              setIsNotificationsOpen(false);
+              window.location.href = `/project/${pid}`;
+            }}
+            onDismissNotification={(id) => {
+              setNotifications(prev => prev.filter(n => n.id !== id));
+            }}
+          />
+
           <UserProfileModal
             isOpen={isProfileModalOpen}
             onClose={() => setIsProfileModalOpen(false)}
             currentUser={user}
-            settings={editorSettings}
-            onUpdateSettings={(newSettings) => {
-              setEditorSettings((prev: any) => {
-                const updated = { ...prev, ...newSettings };
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('codecollab_editor_settings', JSON.stringify(updated));
-                }
-                if (updated.theme) {
-                  setCurrentTheme(updated.theme);
-                  applyThemeVariables(updated.theme);
-                }
-                return updated;
-              });
+            settings={{
+              theme: currentTheme,
+              fontSize: 14,
+              tabSize: 2,
+              wordWrap: 'off',
+              minimap: true,
             }}
-            initialTab={settingsTab}
+            onUpdateSettings={(newS) => {
+              if (newS.theme) handleThemeChange(newS.theme as ThemeId);
+            }}
+            onProfileUpdated={() => {
+              soundManager.playSuccess();
+            }}
+          />
+
+          <EditorSettingsModal
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            settings={{
+              theme: currentTheme,
+              fontSize: 14,
+              tabSize: 2,
+              wordWrap: 'off',
+              minimap: true,
+            }}
+            onUpdateSettings={(newS) => {
+              if (newS.theme) handleThemeChange(newS.theme as ThemeId);
+            }}
           />
 
           <DeveloperDiscoveryModal
-            isOpen={isDiscoveryOpen}
-            onClose={() => setIsDiscoveryOpen(false)}
+            isOpen={isCollaboratorsOpen}
+            onClose={() => setIsCollaboratorsOpen(false)}
           />
         </>
       )}

@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import dynamic from 'next/dynamic';
 import { Project, FileItem, ProjectMember, getUserColor, isMediaFile, UserProfile } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
 import { config } from '@/lib/config';
@@ -16,7 +17,21 @@ import { ActivityBar, ActivityView } from './ActivityBar';
 import { FileTree } from './FileTree';
 import { OpenTabs } from './OpenTabs';
 import { Breadcrumbs } from './Breadcrumbs';
-import { MonacoEditorWrapper } from './MonacoEditorWrapper';
+const MonacoEditorWrapper = dynamic(
+  () => import('./MonacoEditorWrapper').then((mod) => mod.MonacoEditorWrapper),
+  {
+    ssr: false,
+    loading: () => (
+      <div 
+        className="flex items-center justify-center h-full gap-2 text-xs"
+        style={{ backgroundColor: 'var(--ide-bg)', color: 'var(--ide-text-muted)' }}
+      >
+        <div className="w-4 h-4 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
+        <span>Initializing Editor...</span>
+      </div>
+    ),
+  }
+);
 import { MediaViewer } from './MediaViewer';
 import { ProjectPresence } from './ProjectPresence';
 import { CollaboratorsPanel } from './CollaboratorsPanel';
@@ -38,11 +53,13 @@ import { PublicProfileModal } from './PublicProfileModal';
 import { DeveloperDiscoveryModal } from '@/components/profile/DeveloperDiscoveryModal';
 import { ProjectSwitcherModal } from './ProjectSwitcherModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
-import { NotificationsDrawer, StackedNotificationToast, AppNotification } from './NotificationsPopover';
+import { NotificationCenterPanel } from './NotificationCenterPanel';
+import { AppNotification } from './NotificationsPopover';
+import { ProfilePreviewCard } from '@/components/profile/ProfilePreviewCard';
+import { useKeyboardManager } from '@/hooks/useKeyboardManager';
+import { soundManager } from '@/lib/sound';
 import { ChatPanel } from './ChatPanel';
 import { VoicePanel } from './VoicePanel';
-import { CommandRegistry } from '@/lib/commands';
-import { Sound } from '@/lib/audio';
 
 import { 
   ChevronLeft, 
@@ -238,7 +255,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGitHubOpen, setIsGitHubOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [settingsModalInitialTab, setSettingsModalInitialTab] = useState<'ide' | 'profile' | 'collaborators' | 'account'>('ide');
   const [selectedPublicUserId, setSelectedPublicUserId] = useState<string | null>(null);
   const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
   const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(false);
@@ -246,6 +262,29 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [currentGitBranch, setCurrentGitBranch] = useState('main');
+
+  // Level 9: Profile Preview Card state & "Click again to view profile"
+  const [previewUserId, setPreviewUserId] = useState<string | null>(null);
+  const [previewAnchor, setPreviewAnchor] = useState<{ top: number; left: number } | null>(null);
+
+  const handleUserIdentityClick = useCallback((targetUserId: string, event?: React.MouseEvent) => {
+    if (user?.id === targetUserId) {
+      setIsProfileModalOpen(true);
+      return;
+    }
+    // "Click again to view profile" (Requirement 18)
+    if (previewUserId === targetUserId) {
+      setPreviewUserId(null);
+      setSelectedPublicUserId(targetUserId);
+    } else {
+      setPreviewUserId(targetUserId);
+      if (event) {
+        setPreviewAnchor({ top: event.clientY, left: event.clientX });
+      } else {
+        setPreviewAnchor(null);
+      }
+    }
+  }, [user?.id, previewUserId]);
 
   // User-specific custom resizable sidebar width
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -423,8 +462,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
       if (!restored) {
         const firstCodeFile = filesData.find((f) => !f.is_folder);
         if (firstCodeFile) {
+          const validFile: FileItem = firstCodeFile;
           setEditorGroups([
-            { id: 'group-1', openFiles: [firstCodeFile], activeFileId: firstCodeFile.id }
+            { id: 'group-1', openFiles: [validFile], activeFileId: validFile.id }
           ]);
         }
       }
@@ -432,14 +472,16 @@ export function Workspace({ projectId }: WorkspaceProps) {
       appendOutputLog('system', `Loaded workspace "${projData?.name || projectId}" with ${filesData.length} files.`);
 
       // Record workspace entry in project activity timeline
-      const sessionKey = `workspace_entered_${projectId}_${user.id}`;
-      if (typeof window !== 'undefined' && !sessionStorage.getItem(sessionKey)) {
-        sessionStorage.setItem(sessionKey, 'true');
-        logAndBroadcastActivity(
-          'member_joined',
-          `${user.full_name || 'A user'} entered the workspace`,
-          projectId
-        );
+      if (user && typeof window !== 'undefined') {
+        const sessionKey = `workspace_entered_${projectId}_${user.id}`;
+        if (!sessionStorage.getItem(sessionKey)) {
+          sessionStorage.setItem(sessionKey, 'true');
+          logAndBroadcastActivity(
+            'member_joined',
+            `${user.full_name || 'A user'} entered the workspace`,
+            projectId
+          );
+        }
       }
     } catch (err) {
       console.error('Failed to load workspace data:', err);
@@ -448,19 +490,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
     }
   }, [projectId, user, logAndBroadcastActivity, appendOutputLog]);
 
-  useEffect(() => {
-    if (user && !authLoading) {
-      loadWorkspaceData();
-    }
-  }, [user, authLoading, loadWorkspaceData]);
-
-  // Periodic Notifications Refresh with Chime Sound
+  // Background Notifications Polling with Audio Chime
   useEffect(() => {
     if (!user?.id) return;
-    const interval = setInterval(async () => {
+    const notifInterval = setInterval(async () => {
       try {
-        const notifs = await DataService.getNotifications(user.id);
-        const mapped: AppNotification[] = notifs.map(n => ({
+        const fresh = await DataService.getNotifications(user.id);
+        const mapped: AppNotification[] = fresh.map(n => ({
           id: n.id,
           type: n.type as any,
           title: n.title,
@@ -470,18 +506,26 @@ export function Workspace({ projectId }: WorkspaceProps) {
           projectId: n.data?.project_id,
           partnerRequestId: n.data?.partner_request_id,
         }));
-        setNotifications(prev => {
+
+        setNotifications((prev) => {
           const prevIds = new Set(prev.map(p => p.id));
-          const hasNew = mapped.some(m => !m.read && !prevIds.has(m.id));
-          if (hasNew) {
-            Sound.notification();
+          const hasNewUnread = mapped.some(m => !m.read && !prevIds.has(m.id));
+          if (hasNewUnread) {
+            soundManager.playNotification();
           }
           return mapped;
         });
-      } catch (e) {}
-    }, 10000);
-    return () => clearInterval(interval);
+      } catch (err) {}
+    }, 12000);
+
+    return () => clearInterval(notifInterval);
   }, [user?.id]);
+
+  useEffect(() => {
+    if (user && !authLoading) {
+      loadWorkspaceData();
+    }
+  }, [user, authLoading, loadWorkspaceData]);
 
   // Persist Workspace State (Debounced)
   useEffect(() => {
@@ -787,128 +831,80 @@ export function Workspace({ projectId }: WorkspaceProps) {
     };
   }, []);
 
-  // Global Capture-Phase Keyboard listener: catches shortcuts and custom keybindings safely
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // 0. Universal ESC handling: close whichever modal, drawer, or popover is open
-      if (e.key === 'Escape') {
-        if (isNotificationsOpen) { setIsNotificationsOpen(false); Sound.playHapticPop(); return; }
-        if (isCommandPaletteOpen) { setIsCommandPaletteOpen(false); Sound.playHapticPop(); return; }
-        if (isQuickOpen) { setIsQuickOpen(false); Sound.playHapticPop(); return; }
-        if (isGlobalSearchOpen) { setIsGlobalSearchOpen(false); Sound.playHapticPop(); return; }
-        if (isSettingsOpen) { setIsSettingsOpen(false); Sound.playHapticPop(); return; }
-        if (isProfileModalOpen) { setIsProfileModalOpen(false); Sound.playHapticPop(); return; }
-        if (selectedPublicUserId) { setSelectedPublicUserId(null); Sound.playHapticPop(); return; }
-        if (isShortcutsOpen) { setIsShortcutsOpen(false); Sound.playHapticPop(); return; }
-        if (isProjectSwitcherOpen) { setIsProjectSwitcherOpen(false); Sound.playHapticPop(); return; }
-        if (isInviteOpen) { setIsInviteOpen(false); Sound.playHapticPop(); return; }
-        if (isGitHubOpen) { setIsGitHubOpen(false); Sound.playHapticPop(); return; }
-      }
-
-      // 1. Dynamic check against registered & custom commands from CommandRegistry
-      const allCmds = CommandRegistry.getAllCommands();
-      for (const { item, shortcut } of allCmds) {
-        if (CommandRegistry.matchEvent(e, shortcut)) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-
-          switch (item.actionId) {
-            case 'closeActiveTab':
-              handleCloseActiveTab();
-              return;
-            case 'commandPalette':
-              setIsCommandPaletteOpen((prev) => !prev);
-              return;
-            case 'quickOpen':
-              setIsQuickOpen((prev) => !prev);
-              return;
-            case 'globalSearch':
-              setIsGlobalSearchOpen((prev) => !prev);
-              return;
-            case 'toggleSidebar':
-              setIsSidebarOpen((prev) => !prev);
-              return;
-            case 'toggleDock':
-              setIsDockOpen((prev) => !prev);
-              return;
-            case 'splitRight':
-              handleSplitRight();
-              return;
-            case 'cycleTabNext':
-              handleCycleTab('next');
-              return;
-            case 'cycleTabPrev':
-              handleCycleTab('prev');
-              return;
-            case 'switchProject':
-              setIsProjectSwitcherOpen(true);
-              return;
-            case 'openSettings':
-              setSettingsModalInitialTab('ide');
-              setIsProfileModalOpen(true);
-              return;
-            case 'openProfile':
-              setSettingsModalInitialTab('profile');
-              setIsProfileModalOpen(true);
-              return;
-            case 'focusExplorer':
-              setActiveActivityView('explorer');
-              setIsSidebarOpen(true);
-              return;
-            case 'focusGit':
-              setActiveActivityView('git');
-              setIsSidebarOpen(true);
-              return;
-            case 'focusCollaborators':
-              setActiveActivityView('collaborators');
-              setIsSidebarOpen(true);
-              return;
-            case 'saveFile':
-              // Handled by Yjs/Monaco auto-save
-              return;
-          }
+  // Level 9 Centralized Scoped Keyboard Manager (Requirements 8, 9, 10, 11, 12)
+  useKeyboardManager({
+    onCommandPalette: () => setIsCommandPaletteOpen((prev) => !prev),
+    onQuickOpen: () => setIsQuickOpen((prev) => !prev),
+    onGlobalSearch: () => setIsGlobalSearchOpen((prev) => !prev),
+    onToggleSidebar: () => setIsSidebarOpen((prev) => !prev),
+    onToggleDock: () => {
+      setIsDockOpen((prev) => {
+        if (!prev) {
+          setActiveDockTab('terminal');
+          return true;
         }
+        return false;
+      });
+    },
+    onToggleNotifications: () => setIsNotificationsOpen((prev) => !prev),
+    onCloseActiveTab: () => handleCloseActiveTab(),
+    onSplitRight: () => handleSplitRight(),
+    onCycleTabNext: () => handleCycleTab('next'),
+    onCycleTabPrev: () => handleCycleTab('prev'),
+    onSwitchProject: () => setIsProjectSwitcherOpen(true),
+    onOpenSettings: () => setIsSettingsOpen(true),
+    onEscape: () => {
+      if (previewUserId) {
+        setPreviewUserId(null);
+        return true;
       }
-
-      // 2. Fallbacks for Chrome-safe shortcuts
-      const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
-
-      // Tab close fallback: Alt+W or Ctrl+Q
-      if ((e.altKey && (e.key === 'w' || e.key === 'W')) || (cmdOrCtrl && (e.key === 'q' || e.key === 'Q'))) {
-        e.preventDefault();
-        e.stopPropagation();
-        handleCloseActiveTab();
-        return;
+      if (isNotificationsOpen) {
+        setIsNotificationsOpen(false);
+        return true;
       }
-
-      // Save fallback: Ctrl+S
-      if (cmdOrCtrl && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
+      if (isCommandPaletteOpen) {
+        setIsCommandPaletteOpen(false);
+        return true;
       }
-    };
-
-    window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
-  }, [
-    handleCloseActiveTab,
-    handleSplitRight,
-    handleCycleTab,
-    isNotificationsOpen,
-    isCommandPaletteOpen,
-    isQuickOpen,
-    isGlobalSearchOpen,
-    isSettingsOpen,
-    isProfileModalOpen,
-    selectedPublicUserId,
-    isShortcutsOpen,
-    isProjectSwitcherOpen,
-    isInviteOpen,
-    isGitHubOpen
-  ]);
+      if (isQuickOpen) {
+        setIsQuickOpen(false);
+        return true;
+      }
+      if (isGlobalSearchOpen) {
+        setIsGlobalSearchOpen(false);
+        return true;
+      }
+      if (isSettingsOpen) {
+        setIsSettingsOpen(false);
+        return true;
+      }
+      if (isShortcutsOpen) {
+        setIsShortcutsOpen(false);
+        return true;
+      }
+      if (isInviteOpen) {
+        setIsInviteOpen(false);
+        return true;
+      }
+      if (isDiscoveryOpen) {
+        setIsDiscoveryOpen(false);
+        return true;
+      }
+      if (isProjectSwitcherOpen) {
+        setIsProjectSwitcherOpen(false);
+        return true;
+      }
+      if (selectedPublicUserId) {
+        setSelectedPublicUserId(null);
+        return true;
+      }
+      if (isProfileModalOpen) {
+        setIsProfileModalOpen(false);
+        return true;
+      }
+      return false;
+    },
+  });
 
   // Navigate to problem or line from Problems panel or Chat
   const handleNavigateToLocation = (fileIdOrPath: string, line?: number, col?: number) => {
@@ -1444,14 +1440,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
           {/* User Account Menu */}
           <UserMenu 
-            onOpenProfileModal={() => {
-              setSettingsModalInitialTab('profile');
-              setIsProfileModalOpen(true);
-            }}
-            onOpenSettingsModal={() => {
-              setSettingsModalInitialTab('ide');
-              setIsProfileModalOpen(true);
-            }}
+            onOpenProfileModal={() => setIsProfileModalOpen(true)}
+            onOpenSettingsModal={() => setIsSettingsOpen(true)}
             onOpenShortcutsModal={() => setIsShortcutsOpen(true)}
             onOpenDiscoveryModal={() => setIsDiscoveryOpen(true)}
             onViewPublicProfile={() => {
@@ -1470,18 +1460,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
           collaboratorCount={members.length}
           gitChangedCount={0}
           unreadNotifications={notifications.filter(n => !n.read).length}
-          unreadChatCount={unreadCount}
-          isInVoice={isInVoice}
-          voicePeerCount={voicePeers.length}
-          onOpenSettings={() => {
-            setSettingsModalInitialTab('ide');
-            setIsProfileModalOpen(true);
-          }}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
-          onOpenProfile={() => {
-            setSettingsModalInitialTab('profile');
-            setIsProfileModalOpen(true);
-          }}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenNotifications={() => setIsNotificationsOpen(prev => !prev)}
           userAvatar={user?.avatar_url}
           userName={user?.full_name || 'User'}
@@ -1547,53 +1528,15 @@ export function Workspace({ projectId }: WorkspaceProps) {
                   userName={user?.full_name || 'Anonymous Peer'}
                   userEmail={user?.email}
                   onActivityEvent={(d) => logAndBroadcastActivity('media_uploaded', d)}
-                  onDockToBottom={() => {
+                  onLogOutput={(channel, text) => appendOutputLog(channel, text)}
+                  onSwitchToTerminal={(tab) => {
+                    setIsDockOpen(true);
+                    if (tab) setActiveDockTab(tab);
+                  }}
+                  onOpenInBottomPanel={() => {
+                    setIsDockOpen(true);
                     setActiveDockTab('git');
-                    setIsDockOpen(true);
-                  }}
-                />
-              </div>
-            )}
-
-            {activeActivityView === 'chat' && (
-              <div className="flex flex-col h-full overflow-hidden">
-                <ChatPanel
-                  projectId={projectId}
-                  userId={user?.id || 'guest'}
-                  userName={user?.full_name || 'Anonymous Peer'}
-                  userAvatar={user?.avatar_url}
-                  isSidebarMode={true}
-                  onDockToBottom={() => {
-                    setActiveDockTab('chat');
-                    setIsDockOpen(true);
-                  }}
-                  onOpenMediaInEditor={handleOpenMediaInEditor}
-                  onNavigateToFile={handleNavigateToLocation}
-                  onNewMessageReceived={() => {
-                    if (!isSidebarOpen || activeActivityView !== 'chat') {
-                      setUnreadCount((c) => c + 1);
-                    }
-                  }}
-                />
-              </div>
-            )}
-
-            {activeActivityView === 'voice' && (
-              <div className="flex flex-col h-full overflow-hidden">
-                <VoicePanel
-                  isInVoice={isInVoice}
-                  isMuted={isMuted}
-                  voicePeers={voicePeers}
-                  connectionState={voiceConnectionState}
-                  userName={user?.full_name || 'Anonymous Peer'}
-                  userColor={userColor}
-                  onJoinVoice={joinVoice}
-                  onLeaveVoice={leaveVoice}
-                  onToggleMute={toggleMute}
-                  isSidebarMode={true}
-                  onDockToBottom={() => {
-                    setActiveDockTab('voice');
-                    setIsDockOpen(true);
+                    setIsSidebarOpen(false);
                   }}
                 />
               </div>
@@ -1606,9 +1549,83 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 voicePeers={voicePeers}
                 isInVoice={isInVoice}
                 onInviteClick={() => setIsInviteOpen(true)}
-                onSelectMemberProfile={(uid) => setSelectedPublicUserId(uid)}
+                onSelectMemberProfile={(uid) => handleUserIdentityClick(uid)}
                 onJumpToFile={(fid) => handleNavigateToLocation(fid)}
               />
+            )}
+
+            {activeActivityView === 'chat' && (
+              <div className="flex flex-col h-full overflow-hidden">
+                <div 
+                  className="p-2.5 border-b flex items-center justify-between"
+                  style={{ borderColor: 'var(--ide-border)', backgroundColor: 'var(--ide-dock-header)' }}
+                >
+                  <span className="font-bold text-[11px] uppercase tracking-wider opacity-70">
+                    Project Chat
+                  </span>
+                  <button
+                    onClick={() => {
+                      setIsDockOpen(true);
+                      setActiveDockTab('chat');
+                      setIsSidebarOpen(false);
+                    }}
+                    className="px-2 py-0.5 rounded text-[10px] bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 font-medium transition-colors"
+                    title="Dock Chat in Bottom Panel"
+                  >
+                    Open in Bottom Panel
+                  </button>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <ChatPanel
+                    projectId={projectId}
+                    userId={user?.id || 'guest'}
+                    userName={user?.full_name || 'Developer'}
+                    userAvatar={user?.avatar_url}
+                    onNewMessageReceived={() => {
+                      setUnreadCount(prev => prev + 1);
+                      soundManager.playNotification();
+                    }}
+                    onNavigateToFile={(path) => handleNavigateToLocation(path)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {activeActivityView === 'voice' && (
+              <div className="flex flex-col h-full overflow-hidden">
+                <div 
+                  className="p-2.5 border-b flex items-center justify-between"
+                  style={{ borderColor: 'var(--ide-border)', backgroundColor: 'var(--ide-dock-header)' }}
+                >
+                  <span className="font-bold text-[11px] uppercase tracking-wider opacity-70">
+                    Live Voice
+                  </span>
+                  <button
+                    onClick={() => {
+                      setIsDockOpen(true);
+                      setActiveDockTab('voice');
+                      setIsSidebarOpen(false);
+                    }}
+                    className="px-2 py-0.5 rounded text-[10px] bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 font-medium transition-colors"
+                    title="Dock Voice in Bottom Panel"
+                  >
+                    Open in Bottom Panel
+                  </button>
+                </div>
+                <div className="flex-1 overflow-hidden p-3">
+                  <VoicePanel
+                    isInVoice={isInVoice}
+                    isMuted={isMuted}
+                    voicePeers={voicePeers}
+                    connectionState={voiceConnectionState}
+                    userName={user?.full_name || 'Developer'}
+                    userColor={userColor}
+                    onJoinVoice={joinVoice}
+                    onLeaveVoice={leaveVoice}
+                    onToggleMute={toggleMute}
+                  />
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -1656,10 +1673,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onTabChange={setActiveDockTab}
                 onNavigateToFile={handleNavigateToLocation}
                 theme={settings.theme}
-                onMoveTabToSidebar={(tab) => {
-                  setActiveActivityView(tab);
-                  setIsSidebarOpen(true);
-                }}
               />
             )}
 
@@ -1863,10 +1876,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onTabChange={setActiveDockTab}
                 onNavigateToFile={handleNavigateToLocation}
                 theme={settings.theme}
-                onMoveTabToSidebar={(tab) => {
-                  setActiveActivityView(tab);
-                  setIsSidebarOpen(true);
-                }}
               />
             )}
           </main>
@@ -1910,10 +1919,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
               onTabChange={setActiveDockTab}
               onNavigateToFile={handleNavigateToLocation}
               theme={settings.theme}
-              onMoveTabToSidebar={(tab) => {
-                setActiveActivityView(tab);
-                setIsSidebarOpen(true);
-              }}
             />
           )}
 
@@ -1956,10 +1961,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
               onTabChange={setActiveDockTab}
               onNavigateToFile={handleNavigateToLocation}
               theme={settings.theme}
-              onMoveTabToSidebar={(tab) => {
-                setActiveActivityView(tab);
-                setIsSidebarOpen(true);
-              }}
             />
           )}
         </div>
@@ -2041,30 +2042,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
         </div>
       </footer>
 
-      {/* Stacked Notification Toast (Top-Right Glassmorphic Card Deck on Hover) */}
-      <StackedNotificationToast
-        notifications={notifications}
-        onAcceptPartnerRequest={async (reqId) => {
-          await DataService.respondToPartnerRequest(reqId, true);
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
-        }}
-        onDeclinePartnerRequest={async (reqId) => {
-          await DataService.respondToPartnerRequest(reqId, false);
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
-        }}
-        onHoldPartnerRequest={(reqId) => {
-          setNotifications(prev => prev.map(n => n.partnerRequestId === reqId ? { ...n, status: 'held' } : n));
-        }}
-        onOpenProject={(pid) => {
-          window.location.href = `/project/${pid}`;
-        }}
-        onDismissNotification={(id) => {
-          setNotifications(prev => prev.filter(n => n.id !== id));
-        }}
-      />
-
-      {/* Notifications Drawer (Slide-out sidebar drawer from Bell click) */}
-      <NotificationsDrawer
+      {/* Slide-in Notification Center (Requirements 2, 3, 4, 7) */}
+      <NotificationCenterPanel
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
         notifications={notifications}
@@ -2074,14 +2053,16 @@ export function Workspace({ projectId }: WorkspaceProps) {
         }}
         onAcceptPartnerRequest={async (reqId) => {
           await DataService.respondToPartnerRequest(reqId, true);
+          soundManager.playSuccess();
           setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+          try {
+            const m = await DataService.getMembers(projectId);
+            setMembers(m);
+          } catch (e) {}
         }}
-        onDeclinePartnerRequest={async (reqId) => {
+        onIgnorePartnerRequest={async (reqId) => {
           await DataService.respondToPartnerRequest(reqId, false);
           setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
-        }}
-        onHoldPartnerRequest={(reqId) => {
-          setNotifications(prev => prev.map(n => n.partnerRequestId === reqId ? { ...n, status: 'held' } : n));
         }}
         onOpenProject={(pid) => {
           setIsNotificationsOpen(false);
@@ -2090,6 +2071,19 @@ export function Workspace({ projectId }: WorkspaceProps) {
         onDismissNotification={(id) => {
           setNotifications(prev => prev.filter(n => n.id !== id));
         }}
+      />
+
+      {/* Compact Profile Preview Card (Requirements 17, 18) */}
+      <ProfilePreviewCard
+        userId={previewUserId}
+        currentUserId={user?.id}
+        isOpen={!!previewUserId}
+        onClose={() => setPreviewUserId(null)}
+        onOpenFullProfile={(uid) => {
+          setPreviewUserId(null);
+          setSelectedPublicUserId(uid);
+        }}
+        anchorPosition={previewAnchor}
       />
 
       {/* Modals & IDE Tools */}
@@ -2148,7 +2142,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
           currentUser={user}
           settings={settings}
           onUpdateSettings={updateSettings}
-          initialTab={settingsModalInitialTab}
         />
       )}
 

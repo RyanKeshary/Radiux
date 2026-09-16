@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Mic, MicOff, PhoneCall, PhoneOff, Users, Radio, Signal, Volume2, PanelBottom, PanelLeft } from 'lucide-react';
+import { Mic, MicOff, PhoneCall, PhoneOff, Users, Radio, Signal, Volume2 } from 'lucide-react';
 import { VoicePeer } from '@/lib/types';
 
 interface VoicePanelProps {
@@ -14,9 +14,6 @@ interface VoicePanelProps {
   onJoinVoice: () => void;
   onLeaveVoice: () => void;
   onToggleMute: () => void;
-  onDockToBottom?: () => void;
-  onDockToSidebar?: () => void;
-  isSidebarMode?: boolean;
 }
 
 export function VoicePanel({
@@ -29,9 +26,6 @@ export function VoicePanel({
   onJoinVoice,
   onLeaveVoice,
   onToggleMute,
-  onDockToBottom,
-  onDockToSidebar,
-  isSidebarMode = false,
 }: VoicePanelProps) {
   return (
     <div 
@@ -41,36 +35,6 @@ export function VoicePanel({
         color: 'var(--ide-text)',
       }}
     >
-      {/* Docking Bar */}
-      {(onDockToBottom || onDockToSidebar) && (
-        <div className="flex items-center justify-between pb-2.5 mb-3 border-b text-xs flex-shrink-0" style={{ borderColor: 'var(--ide-border)' }}>
-          <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5 text-emerald-400" />
-            Voice Space
-          </span>
-          {isSidebarMode && onDockToBottom && (
-            <button
-              onClick={onDockToBottom}
-              className="p-1 px-2 rounded bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 transition-colors flex items-center gap-1 text-[11px] font-medium"
-              title="Open Voice in Bottom Terminal Dock"
-            >
-              <span>Dock to Terminal</span>
-              <PanelBottom className="w-3 h-3" />
-            </button>
-          )}
-          {!isSidebarMode && onDockToSidebar && (
-            <button
-              onClick={onDockToSidebar}
-              className="p-1 px-2 rounded bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 transition-colors flex items-center gap-1 text-[11px] font-medium"
-              title="Move Voice to Left Sidebar"
-            >
-              <span>Move to Sidebar</span>
-              <PanelLeft className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Top Banner / Controls */}
       <div 
         className="border rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg mb-4"

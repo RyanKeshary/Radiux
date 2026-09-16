@@ -79,15 +79,25 @@ export function KeyboardShortcutsModal({
     }
   };
 
-  const handleSaveCustomShortcut = () => {
+  const handleSaveCustomShortcut = (replace = false) => {
     if (!editingCommand || recordedKeys.length === 0) return;
     const combo = recordedKeys.join('+');
-    CommandRegistry.setCustomShortcut(editingCommand.id, combo);
+    const res = CommandRegistry.setCustomShortcut(editingCommand.id, combo, replace);
+    if (!res.success && res.conflict) {
+      setConflictWarning(`Conflict: Already assigned to "${res.conflict.title}"`);
+      return;
+    }
     refreshCommands();
     setEditingCommand(null);
     if (onShortcutsUpdated) onShortcutsUpdated();
     setSuccessMsg(`Shortcut for "${editingCommand.title}" updated.`);
     setTimeout(() => setSuccessMsg(null), 3000);
+  };
+
+  const handleUnassignSingle = (cmdId: string) => {
+    CommandRegistry.unassignShortcut(cmdId);
+    refreshCommands();
+    if (onShortcutsUpdated) onShortcutsUpdated();
   };
 
   const handleResetSingle = (cmdId: string) => {
@@ -160,7 +170,7 @@ export function KeyboardShortcutsModal({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search commands or shortcuts (e.g. Quick Open, Terminal, Save)..."
+              placeholder="Search commands, scope, or shortcuts (e.g. Quick Open, Terminal, Save)..."
               className="w-full bg-transparent text-xs outline-none"
               style={{ color: 'var(--ide-text)' }}
             />
@@ -209,6 +219,11 @@ export function KeyboardShortcutsModal({
                       >
                         {item.category}
                       </span>
+                      <span 
+                        className="text-[9.5px] px-1.5 py-0.2 rounded font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20"
+                      >
+                        {item.scope}
+                      </span>
                       {isCustom && (
                         <span className="text-[10px] px-1 rounded bg-sky-500/15 text-sky-400 border border-sky-500/30 font-mono">
                           custom
@@ -223,19 +238,23 @@ export function KeyboardShortcutsModal({
                   {/* Shortcut keys and Edit action */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <div className="flex items-center gap-1 font-mono">
-                      {shortcut.split('+').map((k, ki) => (
-                        <kbd
-                          key={ki}
-                          className="px-1.5 py-0.5 rounded text-[11px] font-semibold border shadow-sm"
-                          style={{
-                            backgroundColor: 'var(--ide-card-bg)',
-                            borderColor: 'var(--ide-border)',
-                            color: 'var(--ide-text)',
-                          }}
-                        >
-                          {k}
-                        </kbd>
-                      ))}
+                      {shortcut ? (
+                        shortcut.split('+').map((k, ki) => (
+                          <kbd
+                            key={ki}
+                            className="px-1.5 py-0.5 rounded text-[11px] font-semibold border shadow-sm"
+                            style={{
+                              backgroundColor: 'var(--ide-card-bg)',
+                              borderColor: 'var(--ide-border)',
+                              color: 'var(--ide-text)',
+                            }}
+                          >
+                            {k}
+                          </kbd>
+                        ))
+                      ) : (
+                        <span className="text-[10.5px] opacity-40 italic">unassigned</span>
+                      )}
                     </div>
 
                     <button
@@ -245,6 +264,16 @@ export function KeyboardShortcutsModal({
                     >
                       <Edit3 className="w-3.5 h-3.5 text-sky-400" />
                     </button>
+
+                    {shortcut && (
+                      <button
+                        onClick={() => handleUnassignSingle(item.id)}
+                        className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-opacity text-neutral-400 hover:text-amber-400"
+                        title="Unassign Shortcut"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
 
                     {isCustom && (
                       <button
@@ -328,10 +357,20 @@ export function KeyboardShortcutsModal({
                 >
                   Cancel
                 </button>
+                {conflictWarning && (
+                  <button
+                    type="button"
+                    onClick={() => handleSaveCustomShortcut(true)}
+                    disabled={recordedKeys.length === 0}
+                    className="px-3.5 py-1.5 text-xs font-medium text-white rounded bg-amber-600 hover:bg-amber-500 shadow-sm"
+                  >
+                    Replace & Reassign
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={handleSaveCustomShortcut}
-                  disabled={recordedKeys.length === 0}
+                  onClick={() => handleSaveCustomShortcut(false)}
+                  disabled={recordedKeys.length === 0 || conflictWarning !== null}
                   className="px-4 py-1.5 text-xs font-medium text-white rounded disabled:opacity-40"
                   style={{ backgroundColor: 'var(--ide-accent)' }}
                 >

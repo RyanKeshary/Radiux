@@ -30,9 +30,6 @@ export interface UserProfile {
   email: string;
   full_name: string;
   avatar_url?: string;
-  banner_url?: string;
-  headline?: string;
-  status_headline?: string;
   username?: string;
   bio?: string;
   role?: string;
@@ -42,7 +39,6 @@ export interface UserProfile {
   languages?: string[];
   technologies?: string[];
   website?: string;
-  website_url?: string;
   github_username?: string;
   linkedin_url?: string;
   other_links?: CustomDeveloperLink[];
@@ -93,21 +89,24 @@ export interface CodingPartner {
   id: string;
   requester_id: string;
   receiver_id: string;
-  status: 'pending' | 'accepted' | 'declined';
+  status: 'none' | 'pending' | 'accepted' | 'ignored' | 'rejected' | 'cancelled' | 'declined';
   created_at: string;
   updated_at: string;
   profile?: UserProfile;
-  partner_name?: string;
-  partner_email?: string;
-  partner_avatar?: string;
 }
 
 export interface NotificationItem {
   id: string;
   user_id: string;
-  type: 'partner_request' | 'partner_accepted' | 'project_invite' | 'mention' | 'member_joined';
+  type: 'partner_request' | 'partner_accepted' | 'partner_declined' | 'project_invite' | 'mention' | 'member_joined' | 'system';
   title: string;
   message: string;
+  sender_name?: string;
+  sender_avatar?: string;
+  sender_id?: string;
+  project_id?: string;
+  partner_request_id?: string;
+  action_status?: 'pending' | 'accepted' | 'ignored' | 'rejected' | 'completed';
   data?: Record<string, any>;
   read: boolean;
   created_at: string;

@@ -23,20 +23,16 @@ import {
   Clock,
   User,
   Github,
-  X,
-  Rocket,
-  Globe,
-  Server,
+  Terminal,
   PanelBottom,
-  PanelLeft,
-  Activity,
-  CheckCircle2
+  X,
+  Cloud
 } from 'lucide-react';
 import { DataService } from '@/lib/data-service';
 import { GitStatus, GitCommit, GitFileChange } from '@/lib/types';
 import { DiffViewerModal } from './DiffViewerModal';
 import { GitHubModal } from './GitHubModal';
-import { Sound } from '@/lib/audio';
+import { DeploymentPanel } from './DeploymentPanel';
 
 interface GitPanelProps {
   projectId: string;
@@ -44,9 +40,10 @@ interface GitPanelProps {
   userName: string;
   userEmail?: string;
   onActivityEvent?: (details: string) => void;
-  onDockToBottom?: () => void;
-  onDockToSidebar?: () => void;
-  isDockedBottom?: boolean;
+  onLogOutput?: (channel: 'git' | 'system' | 'sync' | 'runtime', text: string) => void;
+  onSwitchToTerminal?: (tab?: 'terminal' | 'output') => void;
+  onOpenInBottomPanel?: () => void;
+  isBottomPanel?: boolean;
 }
 
 export function GitPanel({
@@ -55,9 +52,10 @@ export function GitPanel({
   userName,
   userEmail = 'user@codecollab.dev',
   onActivityEvent,
-  onDockToBottom,
-  onDockToSidebar,
-  isDockedBottom = false,
+  onLogOutput,
+  onSwitchToTerminal,
+  onOpenInBottomPanel,
+  isBottomPanel = false,
 }: GitPanelProps) {
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [commits, setCommits] = useState<GitCommit[]>([]);
@@ -69,7 +67,7 @@ export function GitPanel({
   const [actionLoading, setActionLoading] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'changes' | 'history' | 'branches' | 'deploy'>('changes');
   
-  // Modals & deployment state
+  // Modals state
   const [selectedDiff, setSelectedDiff] = useState<{ file: string; diff: string; staged: boolean } | null>(null);
   const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
@@ -79,12 +77,7 @@ export function GitPanel({
   const [syncing, setSyncing] = useState<'push' | 'pull' | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
-  // Cloud Deployments Live Status
-  const [renderStatus, setRenderStatus] = useState<'unknown' | 'checking' | 'online' | 'waking'>('unknown');
-  const [renderLatency, setRenderLatency] = useState<number | null>(null);
-  const [vercelDeploying, setVercelDeploying] = useState(false);
-
-  // Refresh Git Status
+  // Load Git status, commits and branches
   const refreshGit = async () => {
     setLoading(true);
     try {
@@ -114,43 +107,7 @@ export function GitPanel({
     refreshGit();
   }, [projectId]);
 
-  // Ping Render Backend
-  const handlePingRender = async () => {
-    setRenderStatus('checking');
-    const start = performance.now();
-    try {
-      const res = await fetch('https://codecollab-backend-isjt.onrender.com/health', { method: 'GET' });
-      const elapsed = Math.round(performance.now() - start);
-      if (res.ok) {
-        setRenderStatus('online');
-        setRenderLatency(elapsed);
-        Sound.playNotificationChime();
-      } else {
-        setRenderStatus('waking');
-      }
-    } catch (e) {
-      setRenderStatus('waking');
-    }
-  };
-
-  // Trigger Vercel Deploy (via push or webhook simulation)
-  const handleDeployVercel = async () => {
-    setVercelDeploying(true);
-    Sound.playHapticPop();
-    try {
-      await handleDirectPush();
-      setFeedback({
-        type: 'success',
-        text: 'Pushed to main! Vercel is now building and deploying latest commit.'
-      });
-    } catch (e: any) {
-      setFeedback({ type: 'error', text: e.message || 'Deploy trigger failed' });
-    } finally {
-      setVercelDeploying(false);
-    }
-  };
-
-  // Git Actions
+  // Git Initialization
   const handleInitRepo = async () => {
     setActionLoading(true);
     try {
@@ -158,7 +115,6 @@ export function GitPanel({
       if (res.success) {
         if (onActivityEvent) onActivityEvent('initialized Git repository');
         await refreshGit();
-        Sound.playNotificationChime();
       } else {
         alert(res.stderr || 'Failed to initialize Git repository');
       }
@@ -169,12 +125,12 @@ export function GitPanel({
     }
   };
 
+  // Stage / Unstage / Discard
   const handleStageFile = async (filePath: string) => {
     setActionLoading(true);
     try {
       await DataService.stageGitFiles(projectId, [filePath]);
       await refreshGit();
-      Sound.playHapticPop();
     } finally {
       setActionLoading(false);
     }
@@ -185,7 +141,6 @@ export function GitPanel({
     try {
       await DataService.stageGitFiles(projectId, 'all');
       await refreshGit();
-      Sound.playHapticPop();
     } finally {
       setActionLoading(false);
     }
@@ -196,7 +151,6 @@ export function GitPanel({
     try {
       await DataService.unstageGitFiles(projectId, [filePath]);
       await refreshGit();
-      Sound.playHapticPop();
     } finally {
       setActionLoading(false);
     }
@@ -207,24 +161,23 @@ export function GitPanel({
     try {
       await DataService.unstageGitFiles(projectId, 'all');
       await refreshGit();
-      Sound.playHapticPop();
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleDiscardChanges = async (filePath: string) => {
-    if (!confirm(`Discard changes to "${filePath}"? This cannot be undone.`)) return;
+  const handleDiscardFile = async (filePath: string) => {
+    if (!confirm(`Discard all changes in "${filePath}"? This cannot be undone.`)) return;
     setActionLoading(true);
     try {
-      await DataService.discardGitChanges(projectId, filePath);
+      await DataService.discardGitFiles(projectId, [filePath]);
       await refreshGit();
-      Sound.playHapticPop();
     } finally {
       setActionLoading(false);
     }
   };
 
+  // Commit
   const handleCommit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!commitMessage.trim()) return;
@@ -233,18 +186,22 @@ export function GitPanel({
     try {
       const res = await DataService.commitGit(projectId, commitMessage.trim(), userName, userEmail);
       if (res.success) {
+        if (onLogOutput) onLogOutput('git', `[git commit -m "${commitMessage.trim()}"] Changes committed successfully.`);
         setCommitMessage('');
-        if (onActivityEvent) onActivityEvent(`committed: ${commitMessage.trim()}`);
-        Sound.playNotificationChime();
+        if (onActivityEvent) onActivityEvent(`committed "${commitMessage.trim().substring(0, 40)}"`);
         await refreshGit();
       } else {
-        alert(res.stderr || 'Failed to commit changes. Make sure changes are staged.');
+        if (onLogOutput) onLogOutput('git', `[git commit error] ${res.stderr || 'Commit failed.'}`);
+        alert(res.stderr || 'Failed to commit. Ensure changes are staged first.');
       }
+    } catch (err: any) {
+      alert(err.message);
     } finally {
       setActionLoading(false);
     }
   };
 
+  // Inspect Diff
   const handleInspectDiff = async (file: string, staged: boolean) => {
     try {
       const res = await DataService.getGitDiff(projectId, { file, staged });
@@ -258,19 +215,19 @@ export function GitPanel({
     }
   };
 
+  // Inspect Commit Diff
   const handleInspectCommitDiff = async (commit: GitCommit) => {
     try {
       const res = await DataService.getGitDiff(projectId, { commit: commit.hash });
       if (res.success) {
         setSelectedDiff({ file: `Commit ${commit.hash}: ${commit.message}`, diff: res.diff, staged: false });
-      } else {
-        alert(res.error || 'No diff available');
       }
     } catch (e: any) {
       alert(e.message);
     }
   };
 
+  // Branch operations
   const handleCreateBranch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBranchName.trim()) return;
@@ -283,7 +240,6 @@ export function GitPanel({
         setShowNewBranchInput(false);
         if (onActivityEvent) onActivityEvent(`created branch ${newBranchName.trim()}`);
         await refreshGit();
-        Sound.playHapticPop();
       } else {
         alert(res.stderr || 'Failed to create branch');
       }
@@ -300,7 +256,6 @@ export function GitPanel({
       if (res.success) {
         if (onActivityEvent) onActivityEvent(`switched to branch ${branchName}`);
         await refreshGit();
-        Sound.playHapticPop();
       } else {
         alert(res.stderr || 'Failed to switch branch. Check if you have uncommitted changes.');
       }
@@ -310,16 +265,19 @@ export function GitPanel({
   };
 
   const handleDeleteBranch = async (branchName: string) => {
+    if (branchName === currentBranch) {
+      alert('Cannot delete currently checked out branch');
+      return;
+    }
     if (!confirm(`Delete branch "${branchName}"?`)) return;
+
     setActionLoading(true);
     try {
       const res = await DataService.deleteGitBranch(projectId, branchName);
       if (res.success) {
-        if (onActivityEvent) onActivityEvent(`deleted branch ${branchName}`);
         await refreshGit();
-        Sound.playHapticPop();
       } else {
-        alert(res.stderr || 'Failed to delete branch');
+        alert(res.stderr || 'Failed to delete branch. Ensure it is merged first.');
       }
     } finally {
       setActionLoading(false);
@@ -327,23 +285,26 @@ export function GitPanel({
   };
 
   const handleMergeBranch = async () => {
-    if (!selectedMergeBranch || selectedMergeBranch === currentBranch) return;
+    if (!selectedMergeBranch) return;
+    if (!confirm(`Merge branch "${selectedMergeBranch}" into "${currentBranch}"?`)) return;
+
     setActionLoading(true);
     try {
       const res = await DataService.mergeGitBranch(projectId, selectedMergeBranch);
       if (res.success) {
         setShowMergeDropdown(false);
-        if (onActivityEvent) onActivityEvent(`merged ${selectedMergeBranch} into ${currentBranch}`);
+        setSelectedMergeBranch('');
+        if (onActivityEvent) onActivityEvent(`merged branch ${selectedMergeBranch} into ${currentBranch}`);
         await refreshGit();
-        Sound.playNotificationChime();
       } else {
-        alert(res.stderr || 'Merge failed. Check for git conflicts.');
+        alert(res.stderr || 'Merge failed. Resolve any conflicts in the editor.');
       }
     } finally {
       setActionLoading(false);
     }
   };
 
+  // Direct Push & Pull operations
   const handleDirectPush = async () => {
     setSyncing('push');
     setFeedback(null);
@@ -353,7 +314,7 @@ export function GitPanel({
         setIsGitHubModalOpen(true);
         setFeedback({
           type: 'info',
-          text: 'No GitHub remote connected. Connect your repository URL first.'
+          text: 'No GitHub remote repository connected. Please connect your GitHub repository URL first.'
         });
         return;
       }
@@ -362,20 +323,31 @@ export function GitPanel({
       if (res.success) {
         setFeedback({
           type: 'success',
-          text: `Pushed commits on branch '${currentBranch}' to remote!`
+          text: `Successfully pushed commits on branch '${currentBranch}' to remote!`
         });
-        if (onActivityEvent) onActivityEvent(`pushed commits on branch ${currentBranch}`);
-        Sound.playNotificationChime();
+        if (onActivityEvent) onActivityEvent(`pushed commits on branch ${currentBranch} to remote`);
         await refreshGit();
       } else {
-        setIsGitHubModalOpen(true);
-        setFeedback({
-          type: 'error',
-          text: res.stderr || 'Push failed. Please check your GitHub credentials in the modal.'
-        });
+        // If push requires authentication or token
+        if (res.stderr?.toLowerCase().includes('authentication') ||
+            res.stderr?.toLowerCase().includes('permission') ||
+            res.stderr?.toLowerCase().includes('password') ||
+            res.stderr?.toLowerCase().includes('support for password') ||
+            res.stderr?.toLowerCase().includes('token')) {
+          setIsGitHubModalOpen(true);
+          setFeedback({
+            type: 'error',
+            text: 'GitHub authentication required. Please enter your Personal Access Token in the GitHub modal.'
+          });
+        } else {
+          setFeedback({
+            type: 'error',
+            text: res.stderr || 'Push failed. Ensure remote exists and branch is up to date.'
+          });
+        }
       }
     } catch (e: any) {
-      setFeedback({ type: 'error', text: e.message || 'Push failed.' });
+      setFeedback({ type: 'error', text: e.message || 'Push failed due to network error.' });
     } finally {
       setSyncing(null);
     }
@@ -388,18 +360,39 @@ export function GitPanel({
       const remotes = await DataService.getGitHubRemotes(projectId);
       if (!remotes || remotes.length === 0) {
         setIsGitHubModalOpen(true);
+        setFeedback({
+          type: 'info',
+          text: 'No GitHub remote repository connected. Please connect your GitHub repository URL first.'
+        });
         return;
       }
+
       const res = await DataService.pullFromGitHub(projectId, currentBranch);
       if (res.success) {
-        setFeedback({ type: 'success', text: `Pulled latest changes on '${currentBranch}'!` });
+        setFeedback({
+          type: 'success',
+          text: `Successfully pulled latest changes on branch '${currentBranch}'!`
+        });
+        if (onActivityEvent) onActivityEvent(`pulled changes on branch ${currentBranch} from remote`);
         await refreshGit();
-        Sound.playNotificationChime();
       } else {
-        setFeedback({ type: 'error', text: res.stderr || 'Pull failed.' });
+        if (res.stderr?.toLowerCase().includes('authentication') ||
+            res.stderr?.toLowerCase().includes('permission') ||
+            res.stderr?.toLowerCase().includes('token')) {
+          setIsGitHubModalOpen(true);
+          setFeedback({
+            type: 'error',
+            text: 'GitHub authentication required. Please enter your Personal Access Token in the GitHub modal.'
+          });
+        } else {
+          setFeedback({
+            type: 'error',
+            text: res.stderr || 'Pull failed. Check credentials or git conflicts.'
+          });
+        }
       }
     } catch (e: any) {
-      setFeedback({ type: 'error', text: e.message || 'Pull failed.' });
+      setFeedback({ type: 'error', text: e.message || 'Pull failed due to network error.' });
     } finally {
       setSyncing(null);
     }
@@ -408,15 +401,18 @@ export function GitPanel({
   if (status && !status.isRepo) {
     return (
       <div 
-        className="h-full flex flex-col items-center justify-center p-6 text-center select-none"
-        style={{ backgroundColor: 'var(--ide-dock)', color: 'var(--ide-text)' }}
+        className="h-full flex flex-col items-center justify-center p-6 text-center"
+        style={{
+          backgroundColor: 'var(--ide-dock)',
+          color: 'var(--ide-text)',
+        }}
       >
         <div className="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 mb-3">
           <FolderGit2 className="w-6 h-6" />
         </div>
-        <h3 className="text-sm font-semibold mb-1">No Git Repository</h3>
-        <p className="text-xs max-w-xs mb-4 opacity-70" style={{ color: 'var(--ide-text-muted)' }}>
-          Initialize Git for <strong>{projectName}</strong> to stage changes, track commits, and sync with GitHub, Vercel & Render.
+        <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--ide-text)' }}>No Git Repository Found</h3>
+        <p className="text-xs max-w-sm mb-4" style={{ color: 'var(--ide-text-muted)' }}>
+          Initialize a Git repository for <strong>{projectName}</strong> to enable staging, commits, branch management, and GitHub synchronization.
         </p>
         <button
           onClick={handleInitRepo}
@@ -424,7 +420,7 @@ export function GitPanel({
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs shadow-lg shadow-sky-600/20 transition-all disabled:opacity-50"
         >
           {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          <span>Initialize Git</span>
+          <span>Initialize Git Repository</span>
         </button>
       </div>
     );
@@ -435,572 +431,807 @@ export function GitPanel({
 
   return (
     <div 
-      className="h-full flex flex-col overflow-hidden select-none text-xs"
-      style={{ backgroundColor: 'var(--ide-dock)', color: 'var(--ide-text)' }}
+      className="h-full flex flex-col overflow-hidden select-none"
+      style={{
+        backgroundColor: 'var(--ide-dock)',
+        color: 'var(--ide-text)',
+      }}
     >
-      {/* Sleek Compact Header */}
+      {/* Top Action Bar */}
       <div 
-        className="px-3 py-2 border-b flex items-center justify-between gap-2 flex-shrink-0"
-        style={{ backgroundColor: 'var(--ide-dock-header)', borderColor: 'var(--ide-border)' }}
+        className="px-4 py-2.5 border-b flex items-center justify-between"
+        style={{
+          backgroundColor: 'var(--ide-dock-header)',
+          borderColor: 'var(--ide-border)',
+        }}
       >
-        {/* Left: Branch Badge & Sync State */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          <button
-            onClick={() => setActiveSubTab('branches')}
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono hover:bg-white/10 transition-colors truncate"
-            style={{ backgroundColor: 'var(--ide-input-bg)', color: 'var(--ide-text)' }}
-            title="Switch branch"
+        {/* Left: Branch & Status */}
+        <div className="flex items-center gap-2">
+          <div 
+            className="flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono"
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text)',
+            }}
           >
-            <GitBranch className="w-3 h-3 text-sky-400 flex-shrink-0" />
-            <span className="font-semibold truncate max-w-[90px]">{currentBranch}</span>
-          </button>
+            <GitBranch className="w-3.5 h-3.5 text-sky-400" />
+            <span className="font-semibold">{currentBranch}</span>
+          </div>
 
           {status && (
-            <div className="flex items-center gap-0.5 text-[10px]">
+            <div className="flex items-center gap-1 text-[11px]">
               <button
                 onClick={handleDirectPush}
                 disabled={syncing !== null || status.ahead === 0}
-                className={`flex items-center px-1 py-0.5 rounded transition-colors ${
-                  status.ahead > 0 ? 'text-emerald-400 font-bold bg-emerald-500/10' : 'opacity-40'
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
+                  status.ahead > 0
+                    ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 font-semibold cursor-pointer border border-emerald-500/30'
+                    : 'text-neutral-500 cursor-default opacity-60'
                 }`}
-                title={`${status.ahead} commit(s) ahead`}
+                title={status.ahead > 0 ? `Click to push ${status.ahead} commit(s) to remote` : 'No outgoing commits'}
               >
-                <ArrowUp className="w-2.5 h-2.5" />
+                <ArrowUp className={`w-3 h-3 ${syncing === 'push' ? 'animate-bounce' : ''}`} />
                 <span>{status.ahead}</span>
               </button>
+
               <button
                 onClick={handleDirectPull}
                 disabled={syncing !== null || status.behind === 0}
-                className={`flex items-center px-1 py-0.5 rounded transition-colors ${
-                  status.behind > 0 ? 'text-sky-400 font-bold bg-sky-500/10' : 'opacity-40'
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
+                  status.behind > 0
+                    ? 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 font-semibold cursor-pointer border border-sky-500/30'
+                    : 'text-neutral-500 cursor-default opacity-60'
                 }`}
-                title={`${status.behind} commit(s) behind`}
+                title={status.behind > 0 ? `Click to pull ${status.behind} commit(s) from remote` : 'No incoming commits'}
               >
-                <ArrowDown className="w-2.5 h-2.5" />
+                <ArrowDown className={`w-3 h-3 ${syncing === 'pull' ? 'animate-bounce' : ''}`} />
                 <span>{status.behind}</span>
               </button>
             </div>
           )}
         </div>
 
-        {/* Right Tools: Refresh, Deploy, Dock Toggle, GitHub */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Center Subtabs */}
+        <div 
+          className="flex items-center gap-1 p-0.5 rounded-lg border text-xs"
+          style={{
+            backgroundColor: 'var(--ide-card-bg)',
+            borderColor: 'var(--ide-border)',
+          }}
+        >
           <button
-            onClick={refreshGit}
-            disabled={loading}
-            className="p-1 rounded hover:bg-white/10 transition-colors opacity-70 hover:opacity-100"
-            title="Refresh Git Status"
+            onClick={() => setActiveSubTab('changes')}
+            className={`px-3 py-1 rounded-md transition-colors font-medium ${
+              activeSubTab === 'changes'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'hover:opacity-80'
+            }`}
+            style={{
+              color: activeSubTab === 'changes' ? '#ffffff' : 'var(--ide-text-muted)',
+            }}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Changes {(stagedCount + changesCount) > 0 && `(${stagedCount + changesCount})`}
+          </button>
+          <button
+            onClick={() => setActiveSubTab('history')}
+            className={`px-3 py-1 rounded-md transition-colors font-medium ${
+              activeSubTab === 'history'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'hover:opacity-80'
+            }`}
+            style={{
+              color: activeSubTab === 'history' ? '#ffffff' : 'var(--ide-text-muted)',
+            }}
+          >
+            History {commits.length > 0 && `(${commits.length})`}
+          </button>
+          <button
+            onClick={() => setActiveSubTab('branches')}
+            className={`px-3 py-1 rounded-md transition-colors font-medium ${
+              activeSubTab === 'branches'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'hover:opacity-80'
+            }`}
+            style={{
+              color: activeSubTab === 'branches' ? '#ffffff' : 'var(--ide-text-muted)',
+            }}
+          >
+            Branches
+          </button>
+          <button
+            onClick={() => setActiveSubTab('deploy')}
+            className={`px-3 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5 ${
+              activeSubTab === 'deploy'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'hover:opacity-80'
+            }`}
+            style={{
+              color: activeSubTab === 'deploy' ? '#ffffff' : 'var(--ide-text-muted)',
+            }}
+          >
+            <Cloud className="w-3.5 h-3.5" />
+            <span>Deploy</span>
+          </button>
+        </div>
+
+        {/* Right Tools: Push, Pull, Refresh & GitHub */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={handleDirectPush}
+            disabled={syncing !== null}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors border ${
+              status && status.ahead > 0
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-sm font-semibold'
+                : 'hover:opacity-80'
+            }`}
+            style={{
+              backgroundColor: status && status.ahead > 0 ? undefined : 'var(--ide-input-bg)',
+              borderColor: status && status.ahead > 0 ? undefined : 'var(--ide-border)',
+              color: status && status.ahead > 0 ? undefined : 'var(--ide-text)',
+            }}
+            title="Push commits to GitHub remote"
+          >
+            {syncing === 'push' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span className="hidden sm:inline">Push</span>
+            {status && status.ahead > 0 && <span className="text-[10px]">({status.ahead})</span>}
+          </button>
+
+          <button
+            onClick={handleDirectPull}
+            disabled={syncing !== null}
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors hover:opacity-80"
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text)',
+            }}
+            title="Pull changes from GitHub remote"
+          >
+            {syncing === 'pull' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <ArrowDown className="w-3.5 h-3.5 text-sky-400" />
+            )}
+            <span className="hidden sm:inline">Pull</span>
           </button>
 
           <button
             onClick={() => setIsGitHubModalOpen(true)}
-            className="p-1 rounded hover:bg-white/10 transition-colors opacity-70 hover:opacity-100"
-            title="GitHub Remote Configuration"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors hover:opacity-80"
+            style={{
+              backgroundColor: 'var(--ide-input-bg)',
+              borderColor: 'var(--ide-border)',
+              color: 'var(--ide-text)',
+            }}
+            title="GitHub Remote & Sync"
           >
-            <Github className="w-3.5 h-3.5" />
+            <Github className="w-3.5 h-3.5" style={{ color: 'var(--ide-text-muted)' }} />
+            <span className="hidden sm:inline">GitHub</span>
           </button>
 
-          {/* Docking Button (Toggle between Sidebar and Bottom Terminal) */}
-          {isDockedBottom ? (
+          {onSwitchToTerminal && (
             <button
-              onClick={onDockToSidebar}
-              className="p-1 rounded text-sky-400 hover:bg-white/10 transition-colors"
-              title="Move Git to Left Sidebar"
+              onClick={() => onSwitchToTerminal('output')}
+              className="p-1 rounded hover:opacity-80 transition-colors text-neutral-400 hover:text-sky-400"
+              title="Inspect Git logs in output dock"
             >
-              <PanelLeft className="w-3.5 h-3.5" />
+              <Terminal className="w-3.5 h-3.5" />
             </button>
-          ) : (
+          )}
+
+          {onOpenInBottomPanel && !isBottomPanel && (
             <button
-              onClick={onDockToBottom}
-              className="p-1 rounded text-sky-400 hover:bg-white/10 transition-colors"
-              title="Open Git in Bottom Terminal Dock"
+              onClick={onOpenInBottomPanel}
+              className="p-1 rounded hover:opacity-80 transition-colors text-neutral-400 hover:text-sky-400"
+              title="Open Git in Bottom Dock"
             >
               <PanelBottom className="w-3.5 h-3.5" />
             </button>
           )}
+
+          <button
+            onClick={refreshGit}
+            disabled={loading}
+            className="p-1 rounded hover:opacity-80 transition-colors"
+            style={{ color: 'var(--ide-text-muted)' }}
+            title="Refresh Git Status"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-400' : ''}`} />
+          </button>
         </div>
       </div>
 
-      {/* Modern Minimalist Subtabs */}
-      <div 
-        className="px-3 py-1.5 border-b flex items-center gap-1 text-[11px] overflow-x-auto flex-shrink-0"
-        style={{ borderColor: 'var(--ide-border)' }}
-      >
-        <button
-          onClick={() => setActiveSubTab('changes')}
-          className={`px-2.5 py-0.5 rounded-full font-medium transition-all ${
-            activeSubTab === 'changes'
-              ? 'bg-sky-500 text-white shadow-xs'
-              : 'opacity-60 hover:opacity-100 hover:bg-white/5'
-          }`}
-        >
-          Changes {(stagedCount + changesCount) > 0 && `(${stagedCount + changesCount})`}
-        </button>
-        <button
-          onClick={() => setActiveSubTab('history')}
-          className={`px-2.5 py-0.5 rounded-full font-medium transition-all ${
-            activeSubTab === 'history'
-              ? 'bg-sky-500 text-white shadow-xs'
-              : 'opacity-60 hover:opacity-100 hover:bg-white/5'
-          }`}
-        >
-          History
-        </button>
-        <button
-          onClick={() => setActiveSubTab('branches')}
-          className={`px-2.5 py-0.5 rounded-full font-medium transition-all ${
-            activeSubTab === 'branches'
-              ? 'bg-sky-500 text-white shadow-xs'
-              : 'opacity-60 hover:opacity-100 hover:bg-white/5'
-          }`}
-        >
-          Branches
-        </button>
-        <button
-          onClick={() => setActiveSubTab('deploy')}
-          className={`px-2.5 py-0.5 rounded-full font-medium transition-all flex items-center gap-1 ${
-            activeSubTab === 'deploy'
-              ? 'bg-purple-600 text-white shadow-xs'
-              : 'text-purple-400 hover:bg-purple-500/10'
-          }`}
-        >
-          <Rocket className="w-3 h-3" />
-          <span>Deploy</span>
-        </button>
-      </div>
-
-      {/* Sync Feedback Banner */}
+      {/* Sync Feedback Alert Banner */}
       {feedback && (
-        <div className={`px-3 py-1.5 text-[11px] flex items-center justify-between border-b ${
+        <div className={`px-4 py-2 text-xs flex items-center justify-between border-b ${
           feedback.type === 'success'
             ? 'bg-emerald-950/80 border-emerald-800 text-emerald-300'
             : feedback.type === 'error'
             ? 'bg-rose-950/80 border-rose-800 text-rose-300'
             : 'bg-sky-950/80 border-sky-800 text-sky-300'
         }`}>
-          <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             {feedback.type === 'success' ? (
-              <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+              <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
             ) : (
-              <AlertCircle className="w-3 h-3 flex-shrink-0" />
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
             )}
             <span className="truncate">{feedback.text}</span>
           </div>
-          <button onClick={() => setFeedback(null)} className="p-0.5 opacity-60 hover:opacity-100">
-            <X className="w-3 h-3" />
+          <button
+            onClick={() => setFeedback(null)}
+            className="p-0.5 hover:opacity-75 text-neutral-400 hover:text-white"
+          >
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Tab 1: Changes (VS Code / Linear Minimalist View) */}
-      {activeSubTab === 'changes' && (
-        <div className="flex-1 flex flex-col overflow-y-auto">
-          {/* Commit Input Box */}
-          <div className="p-3 border-b space-y-2 flex-shrink-0" style={{ borderColor: 'var(--ide-border)' }}>
-            <textarea
-              value={commitMessage}
-              onChange={(e) => setCommitMessage(e.target.value)}
-              placeholder="Commit message (Ctrl+Enter to commit)..."
-              rows={2}
-              className="w-full p-2 text-xs border rounded-lg focus:outline-none focus:border-sky-500 font-sans resize-none transition-all"
+      {/* Body Subtab Views */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {/* Subtab 1: Changes & Commit */}
+        {activeSubTab === 'changes' && (
+          <div className="flex-1 flex flex-col overflow-y-auto">
+            {/* Top: Commit Box */}
+            <div 
+              className="p-3 border-b flex-shrink-0"
               style={{
-                backgroundColor: 'var(--ide-input-bg)',
+                backgroundColor: 'var(--ide-card-bg)',
                 borderColor: 'var(--ide-border)',
-                color: 'var(--ide-text)',
               }}
-              onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                  handleCommit();
-                }
-              }}
-            />
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleCommit()}
-                disabled={actionLoading || !commitMessage.trim() || stagedCount === 0}
-                className="flex-1 py-1.5 px-3 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-medium rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
-              >
-                {actionLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <GitCommitIcon className="w-3.5 h-3.5" />
-                )}
-                <span>Commit ({stagedCount})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleDirectPush}
-                disabled={syncing !== null}
-                className="py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium rounded-lg text-xs transition-all flex items-center justify-center gap-1 active:scale-95 shadow-sm"
-                title="Push to Remote"
-              >
-                {syncing === 'push' ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <ArrowUp className="w-3.5 h-3.5" />
-                )}
-                <span>Push</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Minimalist File Tree / List */}
-          <div className="flex-1 p-2 space-y-3 overflow-y-auto">
-            {/* Staged Section */}
-            <div>
-              <div className="flex items-center justify-between px-1 mb-1 text-[10.5px] font-bold uppercase tracking-wider opacity-60">
-                <span>Staged Changes ({stagedCount})</span>
-                {stagedCount > 0 && (
-                  <button
-                    onClick={handleUnstageAll}
-                    className="lowercase hover:underline text-sky-400 font-normal"
-                  >
-                    unstage all
-                  </button>
-                )}
-              </div>
-
-              {stagedCount === 0 ? (
-                <div className="px-2 py-1 text-[11px] opacity-40 italic">
-                  No staged changes
-                </div>
-              ) : (
-                <div className="space-y-0.5">
-                  {status?.staged.map((f) => (
-                    <div
-                      key={f.path}
-                      className="group flex items-center justify-between px-2 py-1 rounded-md hover:bg-white/5 transition-colors text-xs font-mono"
-                    >
-                      <div 
-                        onClick={() => handleInspectDiff(f.path, true)}
-                        className="flex items-center gap-2 min-w-0 cursor-pointer flex-1"
-                      >
-                        <span className={`w-3.5 text-center font-bold text-[10px] ${
-                          f.status === 'A' ? 'text-emerald-400' : f.status === 'D' ? 'text-rose-400' : 'text-amber-400'
-                        }`}>
-                          {f.status}
-                        </span>
-                        <span className="truncate text-slate-200">{f.path}</span>
-                      </div>
-
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleInspectDiff(f.path, true)}
-                          className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white"
-                          title="Inspect Diff"
-                        >
-                          <FileText className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => handleUnstageFile(f.path)}
-                          className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-amber-400"
-                          title="Unstage"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Changes Section */}
-            <div>
-              <div className="flex items-center justify-between px-1 mb-1 text-[10.5px] font-bold uppercase tracking-wider opacity-60">
-                <span>Changes ({changesCount})</span>
-                {changesCount > 0 && (
-                  <button
-                    onClick={handleStageAll}
-                    className="lowercase hover:underline text-sky-400 font-normal"
-                  >
-                    stage all
-                  </button>
-                )}
-              </div>
-
-              {changesCount === 0 ? (
-                <div className="px-2 py-1 text-[11px] opacity-40 italic">
-                  Working tree clean
-                </div>
-              ) : (
-                <div className="space-y-0.5">
-                  {/* Unstaged files */}
-                  {status?.unstaged.map((f) => (
-                    <div
-                      key={f.path}
-                      className="group flex items-center justify-between px-2 py-1 rounded-md hover:bg-white/5 transition-colors text-xs font-mono"
-                    >
-                      <div 
-                        onClick={() => handleInspectDiff(f.path, false)}
-                        className="flex items-center gap-2 min-w-0 cursor-pointer flex-1"
-                      >
-                        <span className={`w-3.5 text-center font-bold text-[10px] ${
-                          f.status === 'D' ? 'text-rose-400' : 'text-amber-400'
-                        }`}>
-                          {f.status}
-                        </span>
-                        <span className="truncate text-slate-200">{f.path}</span>
-                      </div>
-
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleInspectDiff(f.path, false)}
-                          className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white"
-                          title="Inspect Diff"
-                        >
-                          <FileText className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => handleStageFile(f.path)}
-                          className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-emerald-400"
-                          title="Stage"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => handleDiscardChanges(f.path)}
-                          className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-rose-400"
-                          title="Discard changes"
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Untracked files */}
-                  {status?.untracked.map((f) => (
-                    <div
-                      key={f.path}
-                      className="group flex items-center justify-between px-2 py-1 rounded-md hover:bg-white/5 transition-colors text-xs font-mono"
-                    >
-                      <div 
-                        onClick={() => handleStageFile(f.path)}
-                        className="flex items-center gap-2 min-w-0 cursor-pointer flex-1"
-                      >
-                        <span className="w-3.5 text-center font-bold text-[10px] text-emerald-400">
-                          U
-                        </span>
-                        <span className="truncate text-slate-200">{f.path}</span>
-                      </div>
-
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleStageFile(f.path)}
-                          className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-emerald-400"
-                          title="Stage file"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 2: Commit History */}
-      {activeSubTab === 'history' && (
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {commits.length === 0 ? (
-            <div className="p-8 text-center opacity-40">No commits found.</div>
-          ) : (
-            commits.map((c) => (
-              <div
-                key={c.hash}
-                onClick={() => handleInspectCommitDiff(c)}
-                className="p-2 rounded-lg hover:bg-white/5 border border-transparent hover:border-white/10 cursor-pointer transition-colors"
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span className="font-mono text-[11px] text-sky-400 font-semibold">{c.hash}</span>
-                  <span className="text-[10px] opacity-50">{c.date}</span>
-                </div>
-                <p className="text-xs text-slate-200 font-medium truncate mt-0.5">{c.message}</p>
-                <span className="text-[10px] opacity-60 truncate block">{c.author}</span>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* Tab 3: Branches */}
-      {activeSubTab === 'branches' && (
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {/* Create Branch */}
-          <form onSubmit={handleCreateBranch} className="flex items-center gap-1.5">
-            <input
-              type="text"
-              value={newBranchName}
-              onChange={(e) => setNewBranchName(e.target.value)}
-              placeholder="New branch name..."
-              className="flex-1 px-2.5 py-1.5 rounded-lg border text-xs focus:outline-none focus:border-sky-500 font-mono"
-              style={{ backgroundColor: 'var(--ide-input-bg)', borderColor: 'var(--ide-border)', color: 'var(--ide-text)' }}
-            />
-            <button
-              type="submit"
-              disabled={!newBranchName.trim() || actionLoading}
-              className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-medium rounded-lg text-xs"
             >
-              Create
-            </button>
-          </form>
-
-          {/* Branch List */}
-          <div className="space-y-1">
-            {branches.map((b) => (
-              <div
-                key={b.name}
-                className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs transition-colors ${
-                  b.isCurrent ? 'bg-sky-500/10 border-sky-500/30 text-sky-400 font-semibold' : 'border-white/5 hover:bg-white/5'
-                }`}
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <GitBranch className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="font-mono truncate">{b.name}</span>
-                  {b.isCurrent && <span className="text-[9px] px-1.5 py-0.2 bg-sky-500/20 rounded-full">Current</span>}
+              <form onSubmit={handleCommit} className="space-y-2.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-semibold" style={{ color: 'var(--ide-text)' }}>
+                      Commit Message
+                    </label>
+                    <span className="text-[10px] font-mono text-sky-400">
+                      {currentBranch}
+                    </span>
+                  </div>
+                  <textarea
+                    value={commitMessage}
+                    onChange={(e) => setCommitMessage(e.target.value)}
+                    placeholder="Enter commit message (e.g. Add collaborative editor sync)..."
+                    rows={2}
+                    className="w-full p-2 text-xs border rounded-lg focus:outline-none focus:border-sky-500 font-sans resize-none"
+                    style={{
+                      backgroundColor: 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: 'var(--ide-text)',
+                    }}
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        handleCommit();
+                      }
+                    }}
+                  />
+                  <div className="flex items-center justify-between text-[10px] mt-0.5" style={{ color: 'var(--ide-text-muted)' }}>
+                    <span>Press Ctrl+Enter to commit</span>
+                    {status && status.ahead > 0 && (
+                      <span className="text-emerald-400 font-medium">({status.ahead} ahead)</span>
+                    )}
+                  </div>
                 </div>
 
-                {!b.isCurrent && (
-                  <div className="flex items-center gap-1">
+                <div className="space-y-1.5">
+                  <button
+                    type="submit"
+                    disabled={actionLoading || !commitMessage.trim() || stagedCount === 0}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs shadow-sm transition-all disabled:opacity-50"
+                  >
+                    {actionLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <GitCommitIcon className="w-3.5 h-3.5" />
+                    )}
+                    <span>Commit ({stagedCount} staged)</span>
+                  </button>
+
+                  {stagedCount === 0 && changesCount > 0 && (
                     <button
-                      onClick={() => handleSwitchBranch(b.name)}
-                      className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[11px]"
+                      type="button"
+                      onClick={async () => {
+                        await handleStageAll();
+                        if (commitMessage.trim()) {
+                          await handleCommit();
+                        }
+                      }}
+                      className="w-full text-center text-[11px] text-neutral-400 hover:text-white hover:underline py-0.5"
                     >
-                      Switch
+                      Stage all changes & commit
                     </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleDirectPush}
+                    disabled={syncing !== null}
+                    style={{
+                      backgroundColor: status && status.ahead > 0 ? undefined : 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: status && status.ahead > 0 ? '#ffffff' : 'var(--ide-text)',
+                    }}
+                    className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
+                      status && status.ahead > 0
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                        : 'hover:opacity-90 border'
+                    }`}
+                  >
+                    {syncing === 'push' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    <span>
+                      {status && status.ahead > 0
+                        ? `Push ${status.ahead} commit${status.ahead > 1 ? 's' : ''} to Remote`
+                        : 'Push to Remote'}
+                    </span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Middle: Changed Files Lists */}
+            <div className="flex-1 p-3 space-y-4">
+              {/* Staged Changes Section */}
+              <div className="space-y-1.5">
+                <div 
+                  className="flex items-center justify-between text-xs font-semibold tracking-wider uppercase"
+                  style={{ color: 'var(--ide-text-muted)' }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    Staged Changes ({stagedCount})
+                  </span>
+                  {stagedCount > 0 && (
                     <button
-                      onClick={() => handleDeleteBranch(b.name)}
-                      className="p-1 text-slate-400 hover:text-rose-400"
-                      title="Delete"
+                      onClick={handleUnstageAll}
+                      disabled={actionLoading}
+                      className="text-[11px] hover:underline flex items-center gap-1 lowercase"
+                      style={{ color: 'var(--ide-text-muted)' }}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Minus className="w-3 h-3" /> unstage all
                     </button>
+                  )}
+                </div>
+
+                {stagedCount === 0 ? (
+                  <div className="text-[11px] text-neutral-500 italic py-1">
+                    No changes staged for commit
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {status?.staged.map((f) => (
+                      <div
+                        key={f.path}
+                        className="group flex items-center justify-between px-2.5 py-1.5 rounded border transition-colors text-xs"
+                        style={{
+                          backgroundColor: 'var(--ide-card-bg)',
+                          borderColor: 'var(--ide-border)',
+                        }}
+                      >
+                        <div 
+                          onClick={() => handleInspectDiff(f.path, true)}
+                          className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+                        >
+                          <span className={`w-4 text-center font-mono font-bold text-[10px] ${
+                            f.status === 'A' ? 'text-emerald-400' : f.status === 'D' ? 'text-red-400' : 'text-amber-400'
+                          }`}>
+                            {f.status}
+                          </span>
+                          <span className="font-mono truncate" style={{ color: 'var(--ide-text)' }}>{f.path}</span>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleInspectDiff(f.path, true)}
+                            className="p-1 rounded hover:opacity-80"
+                            style={{ color: 'var(--ide-text-muted)' }}
+                            title="View Diff"
+                          >
+                            <FileText className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleUnstageFile(f.path)}
+                            disabled={actionLoading}
+                            className="p-1 rounded hover:text-amber-400"
+                            style={{ color: 'var(--ide-text-muted)' }}
+                            title="Unstage File"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* Tab 4: Cloud Deployments (Vercel & Render) */}
-      {activeSubTab === 'deploy' && (
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {/* Vercel Card */}
-          <div 
-            className="p-3.5 rounded-xl border space-y-2.5 backdrop-blur-md"
-            style={{ backgroundColor: 'var(--ide-card-bg)', borderColor: 'var(--ide-border)' }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-black text-white flex items-center justify-center font-bold text-xs ring-1 ring-white/20">
-                  ▲
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs" style={{ color: 'var(--ide-text)' }}>Vercel Frontend</h4>
-                  <p className="text-[10px] text-emerald-400 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live Production
-                  </p>
-                </div>
-              </div>
-
-              <a
-                href="https://code-collab-ide.vercel.app"
-                target="_blank"
-                rel="noreferrer"
-                className="p-1 rounded text-sky-400 hover:bg-white/10"
-                title="Open Live App"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-
-            <div className="p-2 rounded-lg bg-black/20 text-[11px] font-mono text-slate-300 truncate">
-              https://code-collab-ide.vercel.app
-            </div>
-
-            <button
-              onClick={handleDeployVercel}
-              disabled={vercelDeploying}
-              className="w-full py-1.5 px-3 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-semibold rounded-lg text-xs shadow-md transition-all flex items-center justify-center gap-1.5"
-            >
-              {vercelDeploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
-              <span>Deploy to Vercel (Push Main)</span>
-            </button>
-          </div>
-
-          {/* Render Backend Card */}
-          <div 
-            className="p-3.5 rounded-xl border space-y-2.5 backdrop-blur-md"
-            style={{ backgroundColor: 'var(--ide-card-bg)', borderColor: 'var(--ide-border)' }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-indigo-900/60 border border-indigo-500/30 text-indigo-300 flex items-center justify-center font-bold text-xs">
-                  <Server className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs" style={{ color: 'var(--ide-text)' }}>Render Backend</h4>
-                  <p className="text-[10px] text-slate-400">
-                    WebSocket + Node.js Service
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1">
-                {renderStatus === 'online' && (
-                  <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" />
-                    {renderLatency ? `${renderLatency}ms` : 'Active'}
+              {/* Working Tree Changes Section */}
+              <div className="space-y-1.5 pt-2">
+                <div 
+                  className="flex items-center justify-between text-xs font-semibold tracking-wider uppercase"
+                  style={{ color: 'var(--ide-text-muted)' }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    Changes ({changesCount})
                   </span>
-                )}
-                {renderStatus === 'waking' && (
-                  <span className="text-[10px] text-amber-400">Waking up...</span>
+                  {changesCount > 0 && (
+                    <button
+                      onClick={handleStageAll}
+                      disabled={actionLoading}
+                      className="text-[11px] text-sky-400 hover:underline flex items-center gap-1 lowercase"
+                    >
+                      <Plus className="w-3 h-3" /> stage all
+                    </button>
+                  )}
+                </div>
+
+                {changesCount === 0 ? (
+                  <div className="text-[11px] italic py-1" style={{ color: 'var(--ide-text-muted)' }}>
+                    Working tree clean (no uncommitted changes)
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {/* Unstaged tracked files */}
+                    {status?.unstaged.map((f) => (
+                      <div
+                        key={f.path}
+                        className="group flex items-center justify-between px-2.5 py-1.5 rounded border transition-colors text-xs"
+                        style={{
+                          backgroundColor: 'var(--ide-card-bg)',
+                          borderColor: 'var(--ide-border)',
+                        }}
+                      >
+                        <div 
+                          onClick={() => handleInspectDiff(f.path, false)}
+                          className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+                        >
+                          <span className={`w-4 text-center font-mono font-bold text-[10px] ${
+                            f.status === 'D' ? 'text-red-400' : 'text-amber-400'
+                          }`}>
+                            {f.status}
+                          </span>
+                          <span className="font-mono truncate" style={{ color: 'var(--ide-text)' }}>{f.path}</span>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleInspectDiff(f.path, false)}
+                            className="p-1 rounded hover:opacity-80"
+                            style={{ color: 'var(--ide-text-muted)' }}
+                            title="View Diff"
+                          >
+                            <FileText className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleDiscardFile(f.path)}
+                            disabled={actionLoading}
+                            className="p-1 rounded hover:text-red-400"
+                            style={{ color: 'var(--ide-text-muted)' }}
+                            title="Discard Changes"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleStageFile(f.path)}
+                            disabled={actionLoading}
+                            className="p-1 rounded hover:text-emerald-400"
+                            style={{ color: 'var(--ide-text-muted)' }}
+                            title="Stage File"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Untracked files */}
+                    {status?.untracked.map((f) => (
+                      <div
+                        key={f.path}
+                        className="group flex items-center justify-between px-2.5 py-1.5 rounded border transition-colors text-xs"
+                        style={{
+                          backgroundColor: 'var(--ide-card-bg)',
+                          borderColor: 'var(--ide-border)',
+                        }}
+                      >
+                        <div 
+                          onClick={() => handleInspectDiff(f.path, false)}
+                          className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+                        >
+                          <span className="w-4 text-center font-mono font-bold text-[10px] text-emerald-400">
+                            U
+                          </span>
+                          <span className="font-mono truncate" style={{ color: 'var(--ide-text)' }}>{f.path}</span>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleStageFile(f.path)}
+                            disabled={actionLoading}
+                            className="p-1 rounded hover:text-emerald-400"
+                            style={{ color: 'var(--ide-text-muted)' }}
+                            title="Stage Untracked File"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
 
-            <div className="p-2 rounded-lg bg-black/20 text-[11px] font-mono text-slate-300 truncate">
-              https://codecollab-backend-isjt.onrender.com
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handlePingRender}
-                disabled={renderStatus === 'checking'}
-                className="flex-1 py-1.5 px-3 bg-white/10 hover:bg-white/15 text-slate-200 font-medium rounded-lg text-xs transition-all flex items-center justify-center gap-1.5"
-              >
-                {renderStatus === 'checking' ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Activity className="w-3.5 h-3.5 text-sky-400" />
-                )}
-                <span>Ping /health</span>
-              </button>
-
-              <a
-                href="https://dashboard.render.com"
-                target="_blank"
-                rel="noreferrer"
-                className="py-1.5 px-3 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs font-medium flex items-center gap-1"
-              >
-                <span>Dashboard</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+            {/* Bottom: Working Tree Summary */}
+            <div
+              className="p-3 border-t text-[11px] space-y-1 flex-shrink-0"
+              style={{
+                backgroundColor: 'var(--ide-card-bg)',
+                borderColor: 'var(--ide-border)',
+                color: 'var(--ide-text-muted)',
+              }}
+            >
+              <div className="flex justify-between">
+                <span>Author:</span>
+                <span className="font-medium" style={{ color: 'var(--ide-text)' }}>{userName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Current Branch:</span>
+                <span className="text-sky-400 font-mono font-medium">{currentBranch}</span>
+              </div>
+              {status?.lastCommit && (
+                <div className="border-t pt-1 mt-1" style={{ borderColor: 'var(--ide-border)' }}>
+                  <span className="block" style={{ color: 'var(--ide-text-muted)' }}>Last Commit:</span>
+                  <span className="truncate block font-medium" style={{ color: 'var(--ide-text)' }}>
+                    {status.lastCommit.message}
+                  </span>
+                  <span className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>
+                    {status.lastCommit.author} • {status.lastCommit.relativeDate}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Subtab 2: Commit History */}
+        {activeSubTab === 'history' && (
+          <div className="flex-1 overflow-y-auto p-4">
+            {commits.length === 0 ? (
+              <div className="p-8 text-center text-xs" style={{ color: 'var(--ide-text-muted)' }}>
+                No commits found in this repository yet. Stage changes and make your first commit!
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {commits.map((c) => (
+                  <div
+                    key={c.fullHash}
+                    onClick={() => handleInspectCommitDiff(c)}
+                    style={{
+                      backgroundColor: 'var(--ide-card-bg)',
+                      borderColor: 'var(--ide-border)',
+                    }}
+                    className="p-3 rounded-xl border hover:border-sky-500/50 transition-all cursor-pointer flex items-center justify-between group"
+                  >
+                    <div className="space-y-1 min-w-0 flex-1 pr-4">
+                      <div className="flex items-center gap-2">
+                        <GitCommitIcon className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+                        <span className="font-semibold text-xs truncate" style={{ color: 'var(--ide-text)' }}>{c.message}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>
+                        <span className="flex items-center gap-1">
+                          <User className="w-3 h-3" style={{ color: 'var(--ide-text-muted)' }} />
+                          {c.author}
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" style={{ color: 'var(--ide-text-muted)' }} />
+                          {c.relativeDate}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="font-mono text-xs px-2 py-1 rounded border"
+                        style={{
+                          backgroundColor: 'var(--ide-input-bg)',
+                          borderColor: 'var(--ide-border)',
+                          color: 'var(--ide-text-muted)',
+                        }}
+                      >
+                        {c.hash}
+                      </span>
+                      <ChevronRight className="w-4 h-4 transition-colors" style={{ color: 'var(--ide-text-muted)' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Subtab 3: Branches Management */}
+        {activeSubTab === 'branches' && (
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 max-w-2xl mx-auto w-full">
+            {/* Branch Header & Create */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--ide-text)' }}>Repository Branches</h3>
+                <p className="text-xs" style={{ color: 'var(--ide-text-muted)' }}>Create, switch, merge and manage your workspace branches</p>
+              </div>
+
+              <button
+                onClick={() => setShowNewBranchInput(!showNewBranchInput)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New Branch</span>
+              </button>
+            </div>
+
+            {/* Create Branch Form */}
+            {showNewBranchInput && (
+              <form
+                onSubmit={handleCreateBranch}
+                style={{
+                  backgroundColor: 'var(--ide-card-bg)',
+                  borderColor: 'var(--ide-border)',
+                }}
+                className="p-3.5 rounded-xl border flex items-center gap-2"
+              >
+                <GitBranch className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="e.g. feature/authentication or bugfix/header"
+                  value={newBranchName}
+                  onChange={(e) => setNewBranchName(e.target.value)}
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    borderColor: 'var(--ide-border)',
+                    color: 'var(--ide-text)',
+                  }}
+                  className="flex-1 px-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-sky-500 font-mono"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={actionLoading || !newBranchName.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold disabled:opacity-50"
+                >
+                  Create & Switch
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowNewBranchInput(false)}
+                  style={{ color: 'var(--ide-text-muted)' }}
+                  className="px-2 py-1.5 text-xs hover:opacity-80"
+                >
+                  Cancel
+                </button>
+              </form>
+            )}
+
+            {/* Merge Branch Bar */}
+            <div
+              style={{
+                backgroundColor: 'var(--ide-card-bg)',
+                borderColor: 'var(--ide-border)',
+              }}
+              className="p-4 rounded-xl border space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--ide-text)' }}>
+                  <GitMerge className="w-4 h-4 text-emerald-400" />
+                  <span>Merge into {currentBranch}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedMergeBranch}
+                  onChange={(e) => setSelectedMergeBranch(e.target.value)}
+                  style={{
+                    backgroundColor: 'var(--ide-input-bg)',
+                    borderColor: 'var(--ide-border)',
+                    color: 'var(--ide-text)',
+                  }}
+                  className="flex-1 px-3 py-1.5 text-xs border rounded-lg focus:outline-none font-mono"
+                >
+                  <option value="">Select branch to merge into {currentBranch}...</option>
+                  {branches.filter(b => b.name !== currentBranch).map(b => (
+                    <option key={b.name} value={b.name}>{b.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleMergeBranch}
+                  disabled={actionLoading || !selectedMergeBranch}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold disabled:opacity-50 transition-colors"
+                >
+                  Merge
+                </button>
+              </div>
+            </div>
+
+            {/* Branch List */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--ide-text-muted)' }}>All Branches</h4>
+              <div className="space-y-1.5">
+                {branches.map((b) => (
+                  <div
+                    key={b.name}
+                    style={{
+                      backgroundColor: b.isCurrent ? undefined : 'var(--ide-card-bg)',
+                      borderColor: b.isCurrent ? undefined : 'var(--ide-border)',
+                      color: b.isCurrent ? undefined : 'var(--ide-text)',
+                    }}
+                    className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs transition-colors ${
+                      b.isCurrent
+                        ? 'bg-sky-950/30 border-sky-500/40 text-sky-400 font-semibold'
+                        : 'hover:opacity-90'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <GitBranch className={`w-4 h-4 ${b.isCurrent ? 'text-sky-400' : 'opacity-60'}`} />
+                      <span className="font-mono">{b.name}</span>
+                      {b.isCurrent && (
+                        <span className="text-[10px] px-2 py-0.2 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                          Current
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {!b.isCurrent && (
+                        <>
+                          <button
+                            onClick={() => handleSwitchBranch(b.name)}
+                            disabled={actionLoading}
+                            style={{
+                              backgroundColor: 'var(--ide-input-bg)',
+                              borderColor: 'var(--ide-border)',
+                              color: 'var(--ide-text)',
+                            }}
+                            className="px-2.5 py-1 rounded border text-[11px] transition-colors hover:opacity-80"
+                          >
+                            Switch
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBranch(b.name)}
+                            disabled={actionLoading}
+                            style={{ color: 'var(--ide-text-muted)' }}
+                            className="p-1 rounded hover:text-red-400 transition-colors"
+                            title="Delete Branch"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Subtab 4: Deployment Controls */}
+        {activeSubTab === 'deploy' && (
+          <div className="flex-1 overflow-y-auto">
+            <DeploymentPanel
+              projectId={projectId}
+              projectName={projectName}
+              onOpenInBottomPanel={onOpenInBottomPanel}
+              isBottomPanel={isBottomPanel}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Diff Viewer Modal */}
       {selectedDiff && (

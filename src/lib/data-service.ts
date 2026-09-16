@@ -531,10 +531,6 @@ export const DataService = {
     return await res.json();
   },
 
-  async discardGitChanges(projectId: string, filePath: string): Promise<{ success: boolean; stderr?: string }> {
-    return this.discardGitFiles(projectId, [filePath]);
-  },
-
   async commitGit(
     projectId: string,
     message: string,
@@ -1466,40 +1462,32 @@ export const DataService = {
     targetIdentifier: string
   ): Promise<{ success: boolean; message: string; partner?: CodingPartner }> {
     const targetUser = await this.findUserByEmail(targetIdentifier);
-    if (!targetUser) {
-      // Check mock users
-      const mockTarget = StorageMock.getProfile(targetIdentifier) || 
-        StorageMock.getProfile('user-bob-2222');
-      if (mockTarget) {
-        const newPartner: CodingPartner = {
-          id: `partner-${Date.now()}`,
-          requester_id: requester.id,
-          receiver_id: mockTarget.id,
-          status: 'pending',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          profile: mockTarget,
-        };
-        StorageMock.saveCodingPartner(newPartner);
-        // Create notification for target
-        StorageMock.saveNotification({
-          id: `notif-${Date.now()}`,
-          user_id: mockTarget.id,
-          type: 'partner_request',
-          title: 'New Coding Partner Request',
-          message: `${requester.full_name || 'A developer'} sent you a coding partner request.`,
-          partnerRequestId: newPartner.id,
-          read: false,
-          created_at: new Date().toISOString(),
-        });
-        return { success: true, message: 'Request sent successfully!', partner: newPartner };
-      }
-      return { success: false, message: `No user found matching "${targetIdentifier}".` };
+    const target = targetUser || StorageMock.getProfile(targetIdentifier) || StorageMock.getProfile('user-bob-2222');
+
+    if (!target) {
+      return { success: false, message: `No developer found matching "${targetIdentifier}".` };
     }
 
-    if (targetUser.id === requester.id) {
-      return { success: false, message: 'You cannot add yourself as a coding partner.' };
+    if (target.id === requester.id) {
+      return { success: false, message: 'You cannot send a partner request to yourself.' };
     }
+
+    // 1. Duplicate request check
+    const existingList = await this.getCodingPartners(requester.id);
+    const duplicate = existingList.find(
+      (p) => (p.requester_id === target.id || p.receiver_id === target.id)
+    );
+
+    if (duplicate) {
+      if (duplicate.status === 'accepted') {
+        return { success: false, message: 'You are already coding partners!' };
+      }
+      if (duplicate.status === 'pending') {
+        return { success: false, message: 'A partner request is already pending between you two.' };
+      }
+    }
+
+    let createdPartner: CodingPartner;
 
     if (isSupabaseConfigured && supabase) {
       try {
@@ -1507,43 +1495,128 @@ export const DataService = {
           .from('coding_partners')
           .insert({
             requester_id: requester.id,
-            receiver_id: targetUser.id,
+            receiver_id: target.id,
             status: 'pending',
           })
           .select()
           .single();
         if (!error && data) {
-          return { success: true, message: 'Request sent successfully!', partner: { ...data, profile: targetUser } };
+          createdPartner = { ...data, profile: target };
+        } else {
+          throw new Error('Supabase insert failed');
         }
-      } catch (err) {}
+      } catch (err) {
+        createdPartner = {
+          id: `partner-${Date.now()}`,
+          requester_id: requester.id,
+          receiver_id: target.id,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          profile: target,
+        };
+        StorageMock.saveCodingPartner(createdPartner);
+      }
+    } else {
+      createdPartner = {
+        id: `partner-${Date.now()}`,
+        requester_id: requester.id,
+        receiver_id: target.id,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        profile: target,
+      };
+      StorageMock.saveCodingPartner(createdPartner);
     }
 
-    // StorageMock fallback
-    const newPartner: CodingPartner = {
-      id: `partner-${Date.now()}`,
-      requester_id: requester.id,
-      receiver_id: targetUser.id,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      profile: targetUser,
+    // Real persistent notification for recipient
+    await this.createNotification(target.id, {
+      type: 'partner_request',
+      title: 'New Coding Partner Request',
+      message: `${requester.full_name || requester.username || 'A developer'} sent you a coding partner request.`,
+      sender_id: requester.id,
+      sender_name: requester.full_name || requester.username || 'Developer',
+      sender_avatar: requester.avatar_url || '',
+      partner_request_id: createdPartner.id,
+      action_status: 'pending',
+    });
+
+    return { 
+      success: true, 
+      message: `Partner request sent to ${target.full_name || target.username || 'developer'}!`,
+      partner: createdPartner 
     };
-    StorageMock.saveCodingPartner(newPartner);
-    return { success: true, message: 'Request sent successfully!', partner: newPartner };
   },
 
-  async respondToPartnerRequest(requestId: string, accept: boolean): Promise<void> {
-    const status = accept ? 'accepted' : 'declined';
+  async respondToPartnerRequest(
+    requestId: string, 
+    action: 'accept' | 'ignore' | 'reject' | 'cancel' | boolean,
+    notificationId?: string
+  ): Promise<void> {
+    let status: 'accepted' | 'ignored' | 'rejected' | 'cancelled' | 'declined';
+    if (typeof action === 'boolean') {
+      status = action ? 'accepted' : 'declined';
+    } else if (action === 'accept') {
+      status = 'accepted';
+    } else if (action === 'ignore') {
+      status = 'ignored';
+    } else if (action === 'reject') {
+      status = 'rejected';
+    } else {
+      status = 'cancelled';
+    }
+
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase
           .from('coding_partners')
           .update({ status, updated_at: new Date().toISOString() })
           .eq('id', requestId);
-        return;
       } catch (err) {}
     }
     StorageMock.updateCodingPartner(requestId, status);
+
+    if (notificationId) {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase
+            .from('notifications')
+            .update({ action_status: status, read: true })
+            .eq('id', notificationId);
+        } catch (err) {}
+      }
+      StorageMock.updateNotificationAction(notificationId, status);
+    }
+
+    // If accepted, notify the original requester
+    if (status === 'accepted') {
+      try {
+        let partnerData: any = null;
+        if (isSupabaseConfigured && supabase) {
+          const { data } = await supabase.from('coding_partners').select('*').eq('id', requestId).single();
+          partnerData = data;
+        }
+        if (!partnerData) {
+          const all = StorageMock.getCodingPartners('');
+          partnerData = all.find((p: any) => p.id === requestId);
+        }
+
+        if (partnerData) {
+          const receiver = await this.getProfile(partnerData.receiver_id);
+          await this.createNotification(partnerData.requester_id, {
+            type: 'partner_accepted',
+            title: 'Partner Request Accepted!',
+            message: `${receiver?.full_name || receiver?.username || 'Your peer'} accepted your coding partner request.`,
+            sender_id: receiver?.id,
+            sender_name: receiver?.full_name || receiver?.username || 'Developer',
+            sender_avatar: receiver?.avatar_url || '',
+            partner_request_id: requestId,
+            action_status: 'completed',
+          });
+        }
+      } catch (e) {}
+    }
   },
 
   async removePartner(partnerId: string): Promise<void> {
@@ -1589,6 +1662,26 @@ export const DataService = {
       } catch (err) {}
     }
     StorageMock.markAllNotificationsRead(userId);
+  },
+
+  async dismissNotification(notificationId: string): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('notifications').delete().eq('id', notificationId);
+        return;
+      } catch (err) {}
+    }
+    StorageMock.dismissNotification(notificationId);
+  },
+
+  async clearAllNotifications(userId: string): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('notifications').delete().eq('user_id', userId);
+        return;
+      } catch (err) {}
+    }
+    StorageMock.clearAllNotifications(userId);
   },
 
   async createNotification(
