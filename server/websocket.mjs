@@ -58,16 +58,27 @@ async function verifyToken(token) {
 
 /**
  * Check if the request origin is allowed.
- * In production, restrict to ALLOWED_ORIGIN env var.
+ * In production, allows configured ALLOWED_ORIGIN env var, any official Radiux Vercel domain, or local dev.
  */
 function isOriginAllowed(requestOrigin) {
-  if (!ALLOWED_ORIGIN || ALLOWED_ORIGIN === '*') return true; // dev mode — allow all
-  if (!requestOrigin) return false;
+  if (!ALLOWED_ORIGIN || ALLOWED_ORIGIN === '*') return true; // allow all
+  if (!requestOrigin) return true; // direct non-browser tool / CLI connection
+
+  // Built-in allowance for official Radiux Vercel deployments & localhost
+  const cleanReq = requestOrigin.replace(/^https?:\/\//, '').toLowerCase();
+  if (
+    cleanReq.startsWith('localhost') ||
+    cleanReq.startsWith('127.0.0.1') ||
+    cleanReq.includes('radiux') && cleanReq.endsWith('.vercel.app') ||
+    cleanReq.endsWith('code-collab-ide.vercel.app')
+  ) {
+    return true;
+  }
+
   const origins = ALLOWED_ORIGIN.split(',').map(o => o.trim()).filter(Boolean);
   return origins.some(o => {
     if (o === '*' || requestOrigin === o) return true;
-    const cleanO = o.replace(/^https?:\/\//, '');
-    const cleanReq = requestOrigin.replace(/^https?:\/\//, '');
+    const cleanO = o.replace(/^https?:\/\//, '').toLowerCase();
     return cleanReq === cleanO || cleanReq.endsWith('.' + cleanO);
   });
 }
