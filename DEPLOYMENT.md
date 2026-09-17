@@ -75,7 +75,7 @@ Set these environment variables in your Vercel Project Settings (**Settings** ->
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL | `https://rdhwzezrmgkgsbpwznrz.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public Supabase client anon key | `sb_publishable_...` |
-| `NEXT_PUBLIC_APP_URL` | Public production frontend URL | `https://code-collab-ide.vercel.app` |
+| `NEXT_PUBLIC_APP_URL` | Public production frontend URL | `https://radiux-ryankeshary-3251s-projects.vercel.app` |
 | `NEXT_PUBLIC_WS_URL` | Public WSS URL of Render backend | `wss://codecollab-backend-isjt.onrender.com` |
 | `NEXT_PUBLIC_API_URL` | Public HTTPS URL of Render backend | `https://codecollab-backend-isjt.onrender.com` |
 
@@ -90,7 +90,7 @@ Set these environment variables in your Render Web Service dashboard (**Environm
 |---|---|---|
 | `PORT` | Dynamically assigned port (or defaults to 10000) | `10000` |
 | `NODE_ENV` | Node production environment flag | `production` |
-| `ALLOWED_ORIGIN` | Allowed CORS origins (comma-separated if multiple) | `https://code-collab-ide.vercel.app,https://codecollab-ide-kappa.vercel.app,http://localhost:3000` |
+| `ALLOWED_ORIGIN` | Allowed CORS origins (comma-separated if multiple) | `https://radiux-ryankeshary-3251s-projects.vercel.app,https://radiux-git-main-ryankeshary-3251s-projects.vercel.app,http://localhost:3000` |
 | `SUPABASE_URL` | Your Supabase project URL | `https://rdhwzezrmgkgsbpwznrz.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase Service Role Secret | `<your-supabase-service-role-secret>` |
 
@@ -102,10 +102,10 @@ Set these environment variables in your Render Web Service dashboard (**Environm
 
 1. Sign in to [Render Dashboard](https://dashboard.render.com).
 2. Click **New +** -> **Web Service** (or use Blueprint with `render.yaml`).
-3. Connect your GitHub repository (`https://github.com/RyanKeshary/web-ide.git`).
+3. Connect your GitHub repository (`https://github.com/RyanKeshary/Radiux.git`).
 4. Configure service settings:
-   - **Name**: `codecollab-backend`
-   - **Region**: Oregon (or your preferred region)
+   - **Name**: `radiux-backend`
+   - **Region**: Oregon
    - **Branch**: `main`
    - **Runtime**: `Node`
    - **Build Command**: `npm install`
@@ -114,14 +114,14 @@ Set these environment variables in your Render Web Service dashboard (**Environm
 5. Add the Environment Variables listed in Section 2 under **Environment**.
 6. Click **Create Web Service**.
 7. Once deployment succeeds, note your Render URL:
-   - HTTPS: `https://codecollab-backend.onrender.com`
-   - WSS: `wss://codecollab-backend.onrender.com`
+   - HTTPS: `https://codecollab-backend-isjt.onrender.com`
+   - WSS: `wss://codecollab-backend-isjt.onrender.com`
 
 ### Step 2: Vercel Setup (Frontend)
 
 1. Sign in to [Vercel Dashboard](https://vercel.com).
 2. Click **Add New...** -> **Project**.
-3. Import your GitHub repository (`https://github.com/RyanKeshary/web-ide.git`).
+3. Import your GitHub repository (`https://github.com/RyanKeshary/Radiux.git`).
 4. In the **Configure Project** screen:
    - **Framework Preset**: Next.js
    - **Root Directory**: `./`
@@ -130,11 +130,11 @@ Set these environment variables in your Render Web Service dashboard (**Environm
 5. Expand **Environment Variables** and add:
    - `NEXT_PUBLIC_SUPABASE_URL`: `https://rdhwzezrmgkgsbpwznrz.supabase.co`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: `sb_publishable_LJNOLmfuxnsbaxnRBcbQNg_TLDDbUfL`
-   - `NEXT_PUBLIC_APP_URL`: `https://code-collab-ide.vercel.app`
+   - `NEXT_PUBLIC_APP_URL`: `https://radiux-ryankeshary-3251s-projects.vercel.app`
    - `NEXT_PUBLIC_WS_URL`: `wss://codecollab-backend-isjt.onrender.com`
    - `NEXT_PUBLIC_API_URL`: `https://codecollab-backend-isjt.onrender.com`
 6. Click **Deploy**.
-7. Production URL: `https://code-collab-ide.vercel.app`.
+7. Production URL: `https://radiux-ryankeshary-3251s-projects.vercel.app`.
 
 ### Step 3: Update CORS on Render
 
@@ -142,18 +142,19 @@ Once your Vercel URL is generated:
 1. Return to the Render Web Service -> **Environment**.
 2. Set `ALLOWED_ORIGIN` to your Vercel domain:
    ```text
-   ALLOWED_ORIGIN=https://code-collab-ide.vercel.app,https://codecollab-ide-kappa.vercel.app,http://localhost:3000
+   ALLOWED_ORIGIN=https://radiux-ryankeshary-3251s-projects.vercel.app,https://radiux-git-main-ryankeshary-3251s-projects.vercel.app,http://localhost:3000
    ```
 3. Save changes; Render will redeploy automatically.
 
 ### Step 4: Supabase Authentication Configuration
 
 1. In the [Supabase Dashboard](https://supabase.com/dashboard) -> Select your project -> **Authentication** -> **URL Configuration**:
-   - **Site URL**: `https://code-collab-ide.vercel.app`
+   - **Site URL**: `https://radiux-ryankeshary-3251s-projects.vercel.app`
    - **Redirect URLs**:
      ```text
-     https://code-collab-ide.vercel.app/**
-     https://code-collab-ide.vercel.app/auth/callback
+     https://radiux-ryankeshary-3251s-projects.vercel.app/**
+     https://radiux-ryankeshary-3251s-projects.vercel.app/auth/callback
+     https://radiux-git-main-ryankeshary-3251s-projects.vercel.app/**
      http://localhost:3000/**
      ```
 2. **Google OAuth** (if enabled):
@@ -161,7 +162,7 @@ Once your Vercel URL is generated:
      Add: `https://rdhwzezrmgkgsbpwznrz.supabase.co/auth/v1/callback`
 3. **GitHub OAuth** (if enabled):
    - In GitHub Settings -> Developer settings -> OAuth Apps:
-     - Homepage URL: `https://code-collab-ide.vercel.app`
+     - Homepage URL: `https://radiux-ryankeshary-3251s-projects.vercel.app`
      - Authorization callback URL: `https://rdhwzezrmgkgsbpwznrz.supabase.co/auth/v1/callback`
 
 ---
@@ -177,12 +178,13 @@ Response:
 ```json
 {
   "status": "ok",
-  "service": "codecollab-backend"
+  "product": "radiux",
+  "service": "radiux-backend"
 }
 ```
 
 ### Dynamic Dev Server Reverse Proxy
-Because Render containers do not expose internal ports (e.g., `3000`, `5000`, `8080`) directly to client browsers over the internet, CodeCollab includes a streaming reverse proxy on the backend:
+Because Render containers do not expose internal ports (e.g., `3000`, `5000`, `8080`) directly to client browsers over the internet, Radiux includes a streaming reverse proxy on the backend:
 ```http
 GET /proxy/:port/:path*
 ```
