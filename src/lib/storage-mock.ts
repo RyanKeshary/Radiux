@@ -9,96 +9,7 @@ const STORAGE_KEY_ACTIVITIES = 'codecollab_activities';
 const STORAGE_KEY_DIRECT_MESSAGES = 'codecollab_direct_messages';
 const STORAGE_KEY_SHORTCUTS = 'codecollab_custom_shortcuts';
 
-export const DEMO_USERS: UserProfile[] = [
-  {
-    id: 'user-alice-1111',
-    email: 'alice@codecollab.io',
-    full_name: 'Alice Dev',
-    username: 'alice',
-    role: 'Lead Cloud Architect',
-    location: 'San Francisco, CA',
-    education: 'M.S. Computer Science, Stanford',
-    bio: 'Building high-concurrency real-time systems, collaborative developer tools, and distributed cloud runtimes.',
-    skills: ['TypeScript', 'Next.js', 'Go', 'Rust', 'Docker', 'WebSockets', 'Yjs'],
-    languages: ['TypeScript', 'Go', 'Python'],
-    technologies: ['React', 'TailwindCSS', 'Node.js', 'PostgreSQL', 'Redis'],
-    website: 'https://alicedev.io',
-    github_username: 'alicedev',
-    linkedin_url: 'https://linkedin.com/in/alicedev',
-    collaboration_interests: ['Cloud IDEs', 'Real-time CRDTs', 'Developer Experience'],
-    readme_markdown: `# Hey, I'm Alice 👋\n\nI lead cloud infrastructure and real-time collaborative protocols at Radiux.\n\n## 🛠️ What I'm building\n- Distributed WebAssembly execution sandboxes\n- Low-latency operational transformation & Yjs state sync\n- Multi-region peer-to-peer developer voice relays\n\n## 🚀 Tech Stack\n\`TypeScript\` · \`Go\` · \`Rust\` · \`Next.js\` · \`Docker\`\n\nFeel free to send a **Coding Partner** request or collaborate on open workspaces!`,
-    pinned_project_ids: ['proj-welcome-demo'],
-    avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Alice',
-    privacy: {
-      show_location: true,
-      show_education: true,
-      show_links: true,
-      show_skills: true,
-      show_activity: true,
-      show_readme: true,
-      show_partners: true,
-      show_email: true,
-    },
-  },
-  {
-    id: 'user-bob-2222',
-    email: 'bob@codecollab.io',
-    full_name: 'Bob Coder',
-    username: 'bob',
-    role: 'Full Stack Engineer',
-    location: 'Berlin, Germany',
-    education: 'B.Sc. Software Engineering, TU Berlin',
-    bio: 'Passionate frontend engineer obsessed with typography, micro-animations, and responsive developer workflows.',
-    skills: ['React', 'TypeScript', 'TailwindCSS', 'CSS Animations', 'Vite', 'GraphQL'],
-    languages: ['TypeScript', 'JavaScript', 'HTML/CSS'],
-    technologies: ['Next.js', 'Monaco Editor', 'Node.js'],
-    website: 'https://bobcodes.dev',
-    github_username: 'bobcoder',
-    linkedin_url: 'https://linkedin.com/in/bobcoder',
-    collaboration_interests: ['UI Design Systems', 'Web Performance', 'Interactive Canvas'],
-    readme_markdown: `# Hi there! I'm Bob 👨‍💻\n\nPassionate about creating fluid, beautiful, and tactile web interfaces that feel like native desktop software.\n\n### Current Focus\n- Monaco editor customizations & custom language grammars\n- Accessible dark mode palette architectures\n- Minimalist design aesthetics`,
-    pinned_project_ids: ['proj-welcome-demo'],
-    avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Bob',
-    privacy: {
-      show_location: true,
-      show_education: true,
-      show_links: true,
-      show_skills: true,
-      show_activity: true,
-      show_readme: true,
-      show_partners: true,
-      show_email: false,
-    },
-  },
-  {
-    id: 'user-charlie-3333',
-    email: 'charlie@codecollab.io',
-    full_name: 'Charlie Eng',
-    username: 'charlie',
-    role: 'Systems & Runtime Engineer',
-    location: 'London, UK',
-    education: 'Imperial College London',
-    bio: 'Linux kernel hacker, container runtime developer, and terminal enthusiast.',
-    skills: ['Python', 'Rust', 'C++', 'Linux', 'Containers', 'WebAssembly'],
-    languages: ['Python', 'Rust', 'C++'],
-    technologies: ['PTY Terminal', 'Docker', 'SQLite'],
-    github_username: 'charlie-eng',
-    collaboration_interests: ['Server-side PTYs', 'Container security', 'Compiler optimizations'],
-    readme_markdown: `# Charlie Eng\n\nSystems programming, PTY bridges, and container orchestration.\n\n*Building the engine underneath your code.*`,
-    pinned_project_ids: [],
-    avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Charlie',
-    privacy: {
-      show_location: true,
-      show_education: true,
-      show_links: true,
-      show_skills: true,
-      show_activity: true,
-      show_readme: true,
-      show_partners: true,
-      show_email: false,
-    },
-  }
-];
+export const DEMO_USERS: UserProfile[] = [];
 
 function getStored<T>(key: string, defaultVal: T): T {
   if (typeof window === 'undefined') return defaultVal;
@@ -120,117 +31,9 @@ function setStored<T>(key: string, val: T) {
 }
 
 export function initStorageMock() {
-  if (typeof window === 'undefined') return;
-  const existingProjects = getStored<Project[]>(STORAGE_KEY_PROJECTS, []);
-  if (existingProjects.length === 0) {
-    // Seed initial project
-    const pId = 'proj-welcome-demo';
-    const now = new Date().toISOString();
-    const demoProject: Project = {
-      id: pId,
-      name: 'Welcome to Radiux',
-      description: 'Collaborative starter workspace with JavaScript & Python files',
-      owner_id: DEMO_USERS[0].id,
-      created_at: now,
-      updated_at: now,
-      role: 'owner',
-    };
-    setStored(STORAGE_KEY_PROJECTS, [demoProject]);
-
-    // Members
-    const members: ProjectMember[] = [
-      {
-        id: 'mem-1',
-        project_id: pId,
-        user_id: DEMO_USERS[0].id,
-        role: 'owner',
-        created_at: now,
-        profile: DEMO_USERS[0],
-      },
-      {
-        id: 'mem-2',
-        project_id: pId,
-        user_id: DEMO_USERS[1].id,
-        role: 'member',
-        created_at: now,
-        profile: DEMO_USERS[1],
-      }
-    ];
-    setStored(STORAGE_KEY_MEMBERS, members);
-
-    // Initial files
-    const folderSrcId = 'folder-src';
-    const initialFiles: FileItem[] = [
-      {
-        id: folderSrcId,
-        project_id: pId,
-        parent_id: null,
-        name: 'src',
-        is_folder: true,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'file-index-js',
-        project_id: pId,
-        parent_id: folderSrcId,
-        name: 'index.js',
-        is_folder: false,
-        language: 'javascript',
-        content: `// Welcome to Radiux!
-// Multiple users can edit this code simultaneously in real-time.
-
-function greet(collaborator) {
-  console.log(\`Hello \${collaborator}! Real-time coding active.\`);
+  // Only maintain real user created data - no dummy project or demo user seeding
 }
 
-greet("Alice & Bob");
-`,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'file-main-py',
-        project_id: pId,
-        parent_id: folderSrcId,
-        name: 'main.py',
-        is_folder: false,
-        language: 'python',
-        content: `# Radiux Python Workspace
-def run_collaboration():
-    peers = ["Alice", "Bob", "Charlie"]
-    for peer in peers:
-        print(f"Connecting peer: {peer} to shared session...")
-
-if __name__ == "__main__":
-    run_collaboration()
-`,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'file-readme',
-        project_id: pId,
-        parent_id: null,
-        name: 'README.md',
-        is_folder: false,
-        language: 'plaintext',
-        content: `# Welcome to Radiux 🚀
-
-Radiux allows multiple developers to work on the same coding project simultaneously from their browsers.
-
-- Real-time document sync powered by Yjs & WebSockets.
-- Professional code editor powered by Monaco Editor.
-- File explorer with multi-level nested folders.
-- Automatic online persistence.
-`,
-        created_at: now,
-        updated_at: now,
-      }
-    ];
-    setStored(STORAGE_KEY_FILES, initialFiles);
-  }
-}
 
 export const StorageMock = {
   getProjects(userId: string): Project[] {
@@ -449,12 +252,12 @@ export const StorageMock = {
 
   // Level 7: Profiles, Coding Partners & Notifications
   getProfile(userId: string): UserProfile | null {
-    const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, DEMO_USERS);
+    const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, []);
     return users.find(u => u.id === userId) || null;
   },
 
   updateProfile(userId: string, updates: Partial<UserProfile>): UserProfile {
-    const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, DEMO_USERS);
+    const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, []);
     const idx = users.findIndex(u => u.id === userId);
     if (idx !== -1) {
       users[idx] = { ...users[idx], ...updates };
@@ -479,17 +282,27 @@ export const StorageMock = {
 
   saveCodingPartner(partner: any): any {
     const partners = getStored<any[]>('codecollab_coding_partners', []);
-    partners.push(partner);
+    const idx = partners.findIndex(item => item.id === partner.id);
+    if (idx !== -1) {
+      partners[idx] = { ...partners[idx], ...partner };
+    } else {
+      partners.push(partner);
+    }
     setStored('codecollab_coding_partners', partners);
     return partner;
   },
 
   updateCodingPartner(id: string, status: string): void {
     const partners = getStored<any[]>('codecollab_coding_partners', []);
-    const p = partners.find(item => item.id === id);
-    if (p) {
-      p.status = status;
-      p.updated_at = new Date().toISOString();
+    let changed = false;
+    partners.forEach(p => {
+      if (p.id === id) {
+        p.status = status;
+        p.updated_at = new Date().toISOString();
+        changed = true;
+      }
+    });
+    if (changed) {
       setStored('codecollab_coding_partners', partners);
     }
   },
@@ -497,6 +310,7 @@ export const StorageMock = {
   removeCodingPartner(id: string): void {
     const partners = getStored<any[]>('codecollab_coding_partners', []);
     setStored('codecollab_coding_partners', partners.filter(p => p.id !== id));
+    this.removeNotificationByPartnerRequestId(id);
   },
 
   removeNotificationByPartnerRequestId(partnerRequestId: string): void {
@@ -511,24 +325,34 @@ export const StorageMock = {
 
   saveNotification(notification: any): any {
     const list = getStored<any[]>('codecollab_notifications', []);
-    list.unshift(notification);
+    const idx = list.findIndex(n => n.id === notification.id);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...notification };
+    } else {
+      list.unshift(notification);
+    }
     setStored('codecollab_notifications', list.slice(0, 50));
     return notification;
   },
 
-  updateNotificationAction(id: string, actionStatus: string): void {
+  updateNotificationAction(idOrPartnerRequestId: string, actionStatus: string): void {
     const list = getStored<any[]>('codecollab_notifications', []);
-    const target = list.find(n => n.id === id);
-    if (target) {
-      target.action_status = actionStatus;
-      target.read = true;
+    let changed = false;
+    list.forEach(n => {
+      if (n.id === idOrPartnerRequestId || n.partner_request_id === idOrPartnerRequestId || n.data?.partner_request_id === idOrPartnerRequestId) {
+        n.action_status = actionStatus;
+        n.read = true;
+        changed = true;
+      }
+    });
+    if (changed) {
       setStored('codecollab_notifications', list);
     }
   },
 
   markNotificationRead(id: string): void {
     const list = getStored<any[]>('codecollab_notifications', []);
-    const target = list.find(n => n.id === id);
+    const target = list.find(n => n.id === id || n.partner_request_id === id);
     if (target) {
       target.read = true;
       setStored('codecollab_notifications', list);
@@ -556,12 +380,12 @@ export const StorageMock = {
   // Level 8: Direct Developer Messaging & Profile Lookups
   getProfileByUsername(username: string): UserProfile | null {
     const clean = username.replace(/^@/, '').toLowerCase().trim();
-    const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, DEMO_USERS);
+    const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, []);
     return users.find(u => (u.username?.toLowerCase() === clean) || (u.id === clean)) || null;
   },
 
   getAllProfiles(): UserProfile[] {
-    return getStored<UserProfile[]>(STORAGE_KEY_USERS, DEMO_USERS);
+    return getStored<UserProfile[]>(STORAGE_KEY_USERS, []);
   },
 
   getDirectMessages(user1Id: string, user2Id: string): DirectMessage[] {

@@ -12,7 +12,8 @@ import {
   ExternalLink,
   ShieldCheck,
   Code2,
-  Users
+  Users,
+  Compass
 } from 'lucide-react';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { EditorSettingsModal, EditorSettings } from '@/components/workspace/EditorSettingsModal';
@@ -22,7 +23,8 @@ import { KeyboardShortcutsModal } from '@/components/workspace/KeyboardShortcuts
 import { applyThemeVariables, ThemeId } from '@/lib/themes';
 
 export interface UserMenuProps {
-  onOpenProfileModal?: () => void;
+  onOpenProfileModal?: (tab?: 'profile' | 'preferences' | 'partners' | 'account') => void;
+  onOpenPartnersModal?: () => void;
   onOpenSettingsModal?: () => void;
   onOpenShortcutsModal?: () => void;
   onViewPublicProfile?: () => void;
@@ -39,6 +41,7 @@ const DEFAULT_SETTINGS: EditorSettings = {
 
 export function UserMenu({ 
   onOpenProfileModal, 
+  onOpenPartnersModal,
   onOpenSettingsModal, 
   onOpenShortcutsModal, 
   onViewPublicProfile,
@@ -52,6 +55,7 @@ export function UserMenu({
 
   // Self-contained fallback modals if parent doesn't provide handlers
   const [isLocalProfileOpen, setIsLocalProfileOpen] = useState(false);
+  const [localProfileTab, setLocalProfileTab] = useState<'profile' | 'preferences' | 'partners' | 'account'>('profile');
   const [isLocalSettingsOpen, setIsLocalSettingsOpen] = useState(false);
   const [isLocalShortcutsOpen, setIsLocalShortcutsOpen] = useState(false);
   const [isLocalPublicProfileOpen, setIsLocalPublicProfileOpen] = useState(false);
@@ -61,41 +65,40 @@ export function UserMenu({
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('radiux_editor_settings') || localStorage.getItem('codecollab_editor_settings');
-        return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
-      } catch (e) {
-        return DEFAULT_SETTINGS;
-      }
+        if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+      } catch (e) {}
     }
     return DEFAULT_SETTINGS;
   });
 
   const updateLocalSettings = (newSettings: Partial<EditorSettings>) => {
     setLocalSettings((prev) => {
-      const updated = { ...prev, ...newSettings };
+      const next = { ...prev, ...newSettings };
       if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('radiux_editor_settings', JSON.stringify(updated));
-          localStorage.setItem('codecollab_editor_settings', JSON.stringify(updated));
-        } catch (e) {}
+        localStorage.setItem('radiux_editor_settings', JSON.stringify(next));
+        if (next.theme) {
+          localStorage.setItem('radiux_theme', next.theme);
+          applyThemeVariables(next.theme as ThemeId);
+        }
       }
-      if (newSettings.theme) {
-        applyThemeVariables(newSettings.theme as ThemeId);
-      }
-      return updated;
+      return next;
     });
   };
 
-  useClickOutside(menuRef, () => setIsDropdownOpen(false), isDropdownOpen);
+  useEffect(() => {
+    if (user && isAuthModalOpen) {
+      setIsAuthModalOpen(false);
+    }
+  }, [user, isAuthModalOpen]);
+
+  useClickOutside(menuRef, () => setIsDropdownOpen(false));
 
   if (loading) {
     return (
-      <div 
-        className="w-28 h-7 animate-pulse rounded border"
-        style={{
-          backgroundColor: 'var(--ide-card-bg)',
-          borderColor: 'var(--ide-border)',
-        }}
-      />
+      <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-neutral-400">
+        <div className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
+        <span className="hidden sm:inline">Loading...</span>
+      </div>
     );
   }
 
@@ -107,12 +110,7 @@ export function UserMenu({
             setAuthMode('signin');
             setIsAuthModalOpen(true);
           }}
-          className="px-2.5 py-1 text-xs font-medium rounded border transition-all hover:opacity-85 shadow-sm"
-          style={{
-            backgroundColor: 'var(--ide-card-bg)',
-            borderColor: 'var(--ide-border)',
-            color: 'var(--ide-text)',
-          }}
+          className="px-2.5 py-1 text-xs font-medium text-neutral-300 hover:text-white transition-colors"
         >
           Sign In
         </button>
@@ -138,8 +136,21 @@ export function UserMenu({
   const handleOpenProfile = () => {
     setIsDropdownOpen(false);
     if (onOpenProfileModal) {
-      onOpenProfileModal();
+      onOpenProfileModal('profile');
     } else {
+      setLocalProfileTab('profile');
+      setIsLocalProfileOpen(true);
+    }
+  };
+
+  const handleOpenPartners = () => {
+    setIsDropdownOpen(false);
+    if (onOpenPartnersModal) {
+      onOpenPartnersModal();
+    } else if (onOpenProfileModal) {
+      onOpenProfileModal('partners');
+    } else {
+      setLocalProfileTab('partners');
       setIsLocalProfileOpen(true);
     }
   };
@@ -207,10 +218,10 @@ export function UserMenu({
         />
       </button>
 
-      {/* Enhanced Dropdown Menu */}
+      {/* Compact Elegant Dropdown Menu */}
       {isDropdownOpen && (
         <div 
-          className="absolute right-0 mt-2 w-72 rounded-xl border shadow-2xl z-50 p-2 text-xs backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-150 select-none"
+          className="absolute right-0 mt-1.5 w-60 rounded-xl border shadow-2xl z-50 p-1.5 text-xs backdrop-blur-md animate-in fade-in slide-in-from-top-1 duration-100 select-none"
           style={{
             backgroundColor: 'var(--ide-card-bg)',
             borderColor: 'var(--ide-border)',
@@ -219,14 +230,14 @@ export function UserMenu({
         >
           {/* User Header Profile Card */}
           <div 
-            className="p-3 rounded-lg border mb-2 flex items-center gap-3"
+            className="p-2 rounded-lg border mb-1.5 flex items-center gap-2.5"
             style={{
               backgroundColor: 'var(--ide-dock-header)',
               borderColor: 'var(--ide-border)',
             }}
           >
             <div className="relative flex-shrink-0">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow ring-2 ring-white/10 overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center text-xs font-bold shadow ring-1 ring-white/10 overflow-hidden">
                 {user.avatar_url ? (
                   <img src={user.avatar_url} alt={user.full_name || 'User'} className="w-full h-full object-cover" />
                 ) : (
@@ -234,55 +245,42 @@ export function UserMenu({
                 )}
               </div>
               <span 
-                className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-[var(--ide-dock-header)]" 
+                className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-[var(--ide-dock-header)]" 
                 title="Online" 
               />
             </div>
 
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-[13px] truncate" style={{ color: 'var(--ide-text)' }}>
+              <div className="font-semibold text-xs truncate" style={{ color: 'var(--ide-text)' }}>
                 {user.full_name || 'Anonymous Developer'}
               </div>
-              <div className="text-[11px] truncate opacity-75" style={{ color: 'var(--ide-text-muted)' }}>
+              <div className="text-[10px] truncate opacity-70" style={{ color: 'var(--ide-text-muted)' }}>
                 {user.email}
-              </div>
-              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                <span 
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium"
-                  style={{
-                    backgroundColor: 'rgba(14, 165, 233, 0.15)',
-                    color: 'var(--ide-accent)',
-                  }}
-                >
-                  <ShieldCheck className="w-2.5 h-2.5" />
-                  Developer
-                </span>
-                {user.username && (
-                  <span className="text-[10.5px] opacity-60">@{user.username}</span>
-                )}
               </div>
             </div>
           </div>
 
           {/* Action Links */}
           <div className="space-y-0.5">
-            {/* 1. View Public Profile */}
+            {/* 1. Public Profile */}
             <button
               onClick={handleViewPublicProfile}
-              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-md bg-sky-500/10 text-sky-400 group-hover:scale-105 transition-transform">
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>View Public Profile</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Public developer bio & activity</div>
-                </div>
-              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+              <span className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Public Profile</span>
             </button>
 
-            {/* Discover Developers & Peers */}
+            {/* 2. Coding Partners */}
+            <button
+              onClick={handleOpenPartners}
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+            >
+              <Users className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <span className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Coding Partners</span>
+            </button>
+
+            {/* 3. Discover Developers */}
             <button
               onClick={() => {
                 setIsDropdownOpen(false);
@@ -292,51 +290,31 @@ export function UserMenu({
                   window.location.href = '/profile/' + (user.username || user.id);
                 }
               }}
-              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400 group-hover:scale-105 transition-transform">
-                  <Users className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>Discover Developers</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Find peers & coding partners</div>
-                </div>
-              </div>
+              <Compass className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+              <span className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Discover Developers</span>
             </button>
 
-            {/* 2. Developer Profile & Account Preferences */}
+            {/* 4. Profile & Account */}
             <button
               onClick={handleOpenProfile}
-              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-md bg-indigo-500/10 text-indigo-400 group-hover:scale-105 transition-transform">
-                  <User className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>Profile & Account</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Avatar, bio, skills & handles</div>
-                </div>
-              </div>
+              <User className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+              <span className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Profile & Account</span>
             </button>
 
-            {/* 3. Editor & IDE Settings */}
             <button
               onClick={handleOpenSettings}
-              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400 group-hover:scale-105 transition-transform">
-                  <Settings className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>Settings</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Font size, theme & indentation</div>
-                </div>
+              <div className="flex items-center gap-2.5">
+                <Settings className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" />
+                <span className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Settings</span>
               </div>
               <kbd 
-                className="px-1.5 py-0.5 rounded text-[10px] font-mono border"
+                className="px-1.5 py-0.2 rounded text-[9.5px] font-mono border"
                 style={{
                   borderColor: 'var(--ide-border)',
                   backgroundColor: 'var(--ide-dock-header)',
@@ -347,29 +325,23 @@ export function UserMenu({
               </kbd>
             </button>
 
-            {/* 4. Keyboard Shortcuts */}
             <button
               onClick={handleOpenShortcuts}
-              className="w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-400 group-hover:scale-105 transition-transform">
-                  <Keyboard className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-medium text-[12px]" style={{ color: 'var(--ide-text)' }}>Keyboard Shortcuts</div>
-                  <div className="text-[10.5px]" style={{ color: 'var(--ide-text-muted)' }}>Shortcuts & keybindings guide</div>
-                </div>
+              <div className="flex items-center gap-2.5">
+                <Keyboard className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                <span className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Shortcuts</span>
               </div>
               <kbd 
-                className="px-1.5 py-0.5 rounded text-[10px] font-mono border"
+                className="px-1.5 py-0.2 rounded text-[9.5px] font-mono border"
                 style={{
                   borderColor: 'var(--ide-border)',
                   backgroundColor: 'var(--ide-dock-header)',
                   color: 'var(--ide-text-muted)',
                 }}
               >
-                Ctrl+Shift+P
+                Ctrl+K
               </kbd>
             </button>
           </div>
@@ -379,16 +351,14 @@ export function UserMenu({
 
           {/* Sign Out */}
           <button
-            onClick={async () => {
-              await signOut();
+            onClick={() => {
               setIsDropdownOpen(false);
+              signOut();
             }}
-            className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-rose-500/10 text-rose-500 dark:text-rose-400 transition-colors text-left font-medium"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-colors text-left text-rose-400 hover:bg-rose-500/10 font-medium text-[11.5px]"
           >
-            <div className="p-1.5 rounded-md bg-rose-500/10 text-rose-500">
-              <LogOut className="w-3.5 h-3.5" />
-            </div>
-            <span className="text-[12px]">Sign Out</span>
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
           </button>
         </div>
       )}
@@ -397,6 +367,7 @@ export function UserMenu({
       {isLocalProfileOpen && user && (
         <UserProfileModal
           isOpen={isLocalProfileOpen}
+          initialTab={localProfileTab}
           onClose={() => setIsLocalProfileOpen(false)}
           currentUser={user}
           settings={localSettings}

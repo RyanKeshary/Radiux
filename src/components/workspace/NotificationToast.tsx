@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { 
   Bell, 
   UserPlus, 
@@ -8,11 +8,9 @@ import {
   AtSign, 
   Check, 
   X, 
-  ExternalLink, 
   Sparkles,
   Users,
   FileCode,
-  Info
 } from 'lucide-react';
 
 export interface NotificationToastItem {
@@ -48,9 +46,10 @@ export function NotificationToastContainer({
   if (!toasts || toasts.length === 0) return null;
 
   return (
-    <aside 
+    <aside
       aria-label="Notification Toasts"
-      className="fixed bottom-6 right-6 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-auto select-none"
+      className="fixed bottom-6 right-6 z-50 flex flex-col gap-2.5 items-end pointer-events-none"
+      style={{ maxWidth: '360px', width: '100%' }}
     >
       {toasts.map((toast) => (
         <SingleNotificationToast
@@ -67,6 +66,15 @@ export function NotificationToastContainer({
   );
 }
 
+// ─── Phase types ────────────────────────────────────────────────────────────
+type ToastPhase = 'entering' | 'full' | 'bubble' | 'exiting';
+
+// ─── Timing ─────────────────────────────────────────────────────────────────
+const ENTER_MS = 350;
+const FULL_MS  = 3000;
+const BUBBLE_MS = 2000;
+const EXIT_MS  = 300;
+
 function SingleNotificationToast({
   toast,
   onDismiss,
@@ -82,93 +90,298 @@ function SingleNotificationToast({
   onOpenCenter?: () => void;
   onOpenTimeline?: () => void;
 }) {
-  const [progress, setProgress] = useState(100);
+  const [phase, setPhase] = useState<ToastPhase>('entering');
   const [isPaused, setIsPaused] = useState(false);
-  const duration = toast.durationMs || 6500;
+  const pausedRef = useRef(false);
+  const dismissed = useRef(false);
+
+  // Drag-to-dismiss state
+  const dragStartX = useRef<number | null>(null);
+  const dragStartY = useRef<number | null>(null);
+  const dragDeltaX = useRef(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDismiss = useCallback(() => {
+    if (dismissed.current) return;
+    dismissed.current = true;
+    setPhase('exiting');
+    setTimeout(onDismiss, EXIT_MS);
+  }, [onDismiss]);
+
+  const handleOpenCenter = useCallback(() => {
+    if (onOpenCenter) onOpenCenter();
+    handleDismiss();
+  }, [onOpenCenter, handleDismiss]);
+
+  // Phase progression timers
+  useEffect(() => {
+    let enterTimer: ReturnType<typeof setTimeout>;
+    let fullTimer: ReturnType<typeof setTimeout>;
+    let bubbleTimer: ReturnType<typeof setTimeout>;
+
+    enterTimer = setTimeout(() => {
+      setPhase('full');
+
+      // Poll for pause
+      let elapsed = 0;
+      const pollInterval = 50;
+      fullTimer = setInterval(() => {
+        if (!pausedRef.current) {
+          elapsed += pollInterval;
+        }
+        if (elapsed >= FULL_MS) {
+          clearInterval(fullTimer);
+          if (!dismissed.current) setPhase('bubble');
+
+          let bElapsed = 0;
+          bubbleTimer = setInterval(() => {
+            if (!pausedRef.current) {
+              bElapsed += pollInterval;
+            }
+            if (bElapsed >= BUBBLE_MS) {
+              clearInterval(bubbleTimer);
+              handleDismiss();
+            }
+          }, pollInterval) as unknown as ReturnType<typeof setTimeout>;
+        }
+      }, pollInterval) as unknown as ReturnType<typeof setTimeout>;
+    }, ENTER_MS);
+
+    return () => {
+      clearTimeout(enterTimer);
+      clearInterval(fullTimer);
+      clearInterval(bubbleTimer);
+    };
+  }, [handleDismiss]);
 
   useEffect(() => {
-    if (isPaused) return;
-    const intervalTime = 50;
-    const step = (intervalTime / duration) * 100;
+    pausedRef.current = isPaused;
+  }, [isPaused]);
 
-    const timer = setInterval(() => {
-      setProgress((prev) => {
-        if (prev <= step) {
-          clearInterval(timer);
-          onDismiss();
-          return 0;
-        }
-        return prev - step;
-      });
-    }, intervalTime);
+  // ── Drag handling ─────────────────────────────────────────────────────────
+  const onPointerDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return; // don't intercept button clicks
+    dragStartX.current = e.clientX;
+    dragStartY.current = e.clientY;
+    dragDeltaX.current = 0;
+    setIsDragging(true);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
 
-    return () => clearInterval(timer);
-  }, [isPaused, duration, onDismiss]);
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (dragStartX.current === null) return;
+    const dx = e.clientX - dragStartX.current;
+    dragDeltaX.current = dx;
+    setDragOffset(dx);
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    setIsDragging(false);
+    const dx = dragDeltaX.current;
+    dragStartX.current = null;
+    dragDeltaX.current = 0;
+
+    if (Math.abs(dx) > 80) {
+      // Swiped enough — dismiss
+      setDragOffset(dx > 0 ? 400 : -400);
+      setTimeout(handleDismiss, 180);
+    } else {
+      // Snap back
+      setDragOffset(0);
+    }
+  };
 
   const getIcon = () => {
     switch (toast.type) {
-      case 'partner_request':
-        return <UserPlus className="w-4 h-4 text-purple-400" />;
-      case 'project_invite':
-        return <FolderGit2 className="w-4 h-4 text-sky-400" />;
-      case 'mention':
-        return <AtSign className="w-4 h-4 text-cyan-400" />;
-      case 'member_event':
-        return <Users className="w-4 h-4 text-amber-400" />;
-      case 'file_event':
-        return <FileCode className="w-4 h-4 text-emerald-400" />;
-      default:
-        return <Bell className="w-4 h-4 text-sky-400" />;
+      case 'partner_request': return <UserPlus className="w-4 h-4 text-purple-400" />;
+      case 'project_invite': return <FolderGit2 className="w-4 h-4 text-sky-400" />;
+      case 'mention': return <AtSign className="w-4 h-4 text-cyan-400" />;
+      case 'member_event': return <Users className="w-4 h-4 text-amber-400" />;
+      case 'file_event': return <FileCode className="w-4 h-4 text-emerald-400" />;
+      default: return <Bell className="w-4 h-4 text-sky-400" />;
     }
   };
 
-  const getBorderColor = () => {
+  const getAccentColor = () => {
     switch (toast.type) {
-      case 'partner_request':
-        return 'rgba(168, 85, 247, 0.4)';
-      case 'project_invite':
-        return 'rgba(56, 189, 248, 0.4)';
-      case 'member_event':
-        return 'rgba(251, 191, 36, 0.4)';
-      case 'file_event':
-        return 'rgba(52, 211, 153, 0.4)';
-      default:
-        return 'rgba(255, 255, 255, 0.15)';
+      case 'partner_request': return 'rgba(168,85,247,0.5)';
+      case 'project_invite': return 'rgba(56,189,248,0.5)';
+      case 'member_event': return 'rgba(251,191,36,0.5)';
+      case 'file_event': return 'rgba(52,211,153,0.5)';
+      default: return 'rgba(99,102,241,0.4)';
     }
   };
 
+  const getGlowColor = () => {
+    switch (toast.type) {
+      case 'partner_request': return 'rgba(168,85,247,0.2)';
+      case 'project_invite': return 'rgba(56,189,248,0.2)';
+      case 'member_event': return 'rgba(251,191,36,0.2)';
+      case 'file_event': return 'rgba(52,211,153,0.2)';
+      default: return 'rgba(99,102,241,0.15)';
+    }
+  };
+
+  const isBubble = phase === 'bubble';
+  const isExiting = phase === 'exiting';
+  const isEntering = phase === 'entering';
+
+  // ── Shared styles ─────────────────────────────────────────────────────────
+  const baseStyle: React.CSSProperties = {
+    transition: isDragging
+      ? 'box-shadow 0.1s'
+      : 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease, width 0.4s cubic-bezier(0.34,1.56,0.64,1), height 0.4s cubic-bezier(0.34,1.56,0.64,1), border-radius 0.4s ease, box-shadow 0.3s ease',
+    transform: `translateX(${dragOffset}px) translateY(${isEntering ? '30px' : '0px'}) scale(${isExiting ? 0.85 : isEntering ? 0.9 : 1})`,
+    opacity: isExiting ? 0 : isEntering ? 0 : 1,
+    pointerEvents: isExiting ? 'none' : 'auto',
+    cursor: isBubble ? 'pointer' : 'grab',
+  };
+
+  // ── BUBBLE phase ──────────────────────────────────────────────────────────
+  if (isBubble) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        onClick={handleOpenCenter}
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        style={{
+          ...baseStyle,
+          width: '52px',
+          height: '52px',
+          borderRadius: '50%',
+          backgroundColor: 'var(--ide-card-bg)',
+          border: `2px solid ${getAccentColor()}`,
+          boxShadow: `0 0 18px 4px ${getGlowColor()}, 0 8px 32px rgba(0,0,0,0.5)`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+          flexShrink: 0,
+        }}
+        title={`${toast.title} — ${toast.message} (click to open)`}
+      >
+        {/* Pulse ring */}
+        <span
+          style={{
+            position: 'absolute',
+            inset: '-4px',
+            borderRadius: '50%',
+            border: `2px solid ${getAccentColor()}`,
+            animation: 'radiux-toast-pulse 1.8s ease-out infinite',
+            pointerEvents: 'none',
+          }}
+        />
+        {toast.senderAvatar ? (
+          <img src={toast.senderAvatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+        ) : (
+          <span>{getIcon()}</span>
+        )}
+        {/* Tiny unread dot */}
+        <span
+          style={{
+            position: 'absolute',
+            top: '2px',
+            right: '2px',
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
+            border: '2px solid var(--ide-card-bg)',
+          }}
+        />
+        <style>{`
+          @keyframes radiux-toast-pulse {
+            0% { opacity: 0.8; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.6); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // ── FULL card phase ───────────────────────────────────────────────────────
   return (
     <div
+      role="alert"
+      aria-live="assertive"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      className="relative overflow-hidden rounded-xl border p-3.5 shadow-2xl backdrop-blur-xl transition-all duration-200 animate-in slide-in-from-bottom-3 fade-in group"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
       style={{
+        ...baseStyle,
+        width: '100%',
+        maxWidth: '340px',
+        borderRadius: '14px',
         backgroundColor: 'var(--ide-card-bg)',
-        borderColor: getBorderColor(),
-        color: 'var(--ide-text)',
+        border: `1px solid ${getAccentColor()}`,
+        boxShadow: `0 0 24px 2px ${getGlowColor()}, 0 12px 40px rgba(0,0,0,0.55)`,
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        overflow: 'hidden',
+        flexShrink: 0,
       }}
     >
-      {/* Progress Bar */}
-      <div 
-        className="absolute top-0 left-0 h-0.5 bg-gradient-to-r from-sky-400 via-indigo-400 to-purple-400 transition-all duration-75"
-        style={{ width: `${progress}%` }}
+      {/* Top gradient bar */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0,
+          height: '2px',
+          background: `linear-gradient(90deg, transparent, ${getAccentColor()}, transparent)`,
+        }}
       />
 
-      <div className="flex items-start gap-3">
-        {/* Type / Avatar Icon */}
+      {/* Shrink progress bar at bottom */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 0, left: 0,
+          height: '2px',
+          width: '100%',
+          background: 'rgba(255,255,255,0.06)',
+        }}
+      >
+        <div
+          style={{
+            height: '100%',
+            background: `linear-gradient(90deg, ${getAccentColor()}, rgba(56,189,248,0.6))`,
+            animation: `radiux-shrink ${FULL_MS}ms linear forwards`,
+            animationPlayState: isPaused ? 'paused' : 'running',
+          }}
+        />
+      </div>
+
+      <style>{`
+        @keyframes radiux-shrink {
+          from { width: 100%; }
+          to { width: 0%; }
+        }
+      `}</style>
+
+      <div className="p-3.5 flex items-start gap-3">
+        {/* Avatar / Icon */}
         <div className="flex-shrink-0 mt-0.5">
           {toast.senderAvatar ? (
-            <img 
-              src={toast.senderAvatar} 
-              alt="" 
-              className="w-8 h-8 rounded-full object-cover ring-2 ring-purple-500/30" 
+            <img
+              src={toast.senderAvatar}
+              alt=""
+              className="w-9 h-9 rounded-full object-cover ring-2"
+              style={{ ringColor: getAccentColor() } as any}
             />
           ) : (
-            <div 
-              className="w-8 h-8 rounded-lg flex items-center justify-center border shadow-inner"
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center"
               style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                borderColor: 'var(--ide-border)',
+                background: `linear-gradient(135deg, ${getGlowColor()}, rgba(255,255,255,0.04))`,
+                border: `1px solid ${getAccentColor()}`,
               }}
             >
               {getIcon()}
@@ -177,8 +390,8 @@ function SingleNotificationToast({
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0 pr-4">
-          <div className="flex items-center gap-1.5">
+        <div className="flex-1 min-w-0 pr-5">
+          <div className="flex items-center gap-1.5 mb-0.5">
             <span className="font-semibold text-xs truncate" style={{ color: 'var(--ide-text)' }}>
               {toast.title}
             </span>
@@ -186,74 +399,54 @@ function SingleNotificationToast({
               {toast.createdAt || 'Just now'}
             </span>
           </div>
-
-          <p className="text-[11.5px] opacity-80 mt-1 line-clamp-2 leading-relaxed">
+          <p className="text-[11.5px] leading-relaxed line-clamp-2" style={{ color: 'var(--ide-text-muted)' }}>
             {toast.message}
           </p>
 
-          {/* Action Buttons */}
-          <div className="mt-2.5 flex items-center gap-2">
-            {toast.type === 'partner_request' && toast.partnerRequestId ? (
-              <>
-                <button
-                  onClick={() => {
-                    onAccept();
-                    onDismiss();
-                  }}
-                  className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-[11px] flex items-center gap-1 shadow-sm transition-colors"
-                >
-                  <Check className="w-3 h-3" />
-                  <span>Accept</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onDecline();
-                    onDismiss();
-                  }}
-                  className="px-2.5 py-1 rounded border hover:bg-white/10 text-[11px] font-medium transition-colors"
-                  style={{ borderColor: 'var(--ide-border)' }}
-                >
-                  <span>Decline</span>
-                </button>
-              </>
-            ) : toast.type === 'member_event' || toast.type === 'file_event' ? (
-              onOpenTimeline && (
-                <button
-                  onClick={() => {
-                    onOpenTimeline();
-                    onDismiss();
-                  }}
-                  className="px-2 py-0.5 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 border border-sky-500/30 text-[10.5px] font-medium transition-colors flex items-center gap-1"
-                >
-                  <ExternalLink className="w-2.5 h-2.5" />
-                  <span>View Timeline</span>
-                </button>
-              )
-            ) : (
-              onOpenCenter && (
-                <button
-                  onClick={() => {
-                    onOpenCenter();
-                    onDismiss();
-                  }}
-                  className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/15 text-[10.5px] font-medium transition-colors flex items-center gap-1"
-                >
-                  <ExternalLink className="w-2.5 h-2.5" />
-                  <span>Open Center</span>
-                </button>
-              )
-            )}
-          </div>
+          {/* Action buttons — only in full phase, only for interactive types */}
+          {toast.type === 'partner_request' && toast.partnerRequestId && (
+            <div className="mt-2.5 flex items-center gap-2">
+              <button
+                onClick={(e) => { e.stopPropagation(); onAccept(); onDismiss(); }}
+                className="px-2.5 py-1 rounded-md font-medium text-[11px] flex items-center gap-1 transition-colors"
+                style={{
+                  background: 'rgba(52,211,153,0.2)',
+                  border: '1px solid rgba(52,211,153,0.4)',
+                  color: '#4ade80',
+                }}
+              >
+                <Check className="w-3 h-3" />
+                Accept
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDecline(); onDismiss(); }}
+                className="px-2.5 py-1 rounded-md font-medium text-[11px] flex items-center gap-1 transition-colors"
+                style={{
+                  border: '1px solid var(--ide-border)',
+                  color: 'var(--ide-text-muted)',
+                }}
+              >
+                Decline
+              </button>
+              <span className="text-[10px] opacity-40 ml-auto">drag to dismiss</span>
+            </div>
+          )}
+
+          {toast.type !== 'partner_request' && (
+            <div className="mt-1.5">
+              <span className="text-[10px] opacity-30">tap to view · swipe to dismiss</span>
+            </div>
+          )}
         </div>
 
-        {/* Close Button */}
+        {/* Close button */}
         <button
-          onClick={onDismiss}
-          className="absolute top-2.5 right-2.5 p-1 rounded-md opacity-40 hover:opacity-100 hover:bg-white/10 transition-all text-neutral-400 hover:text-white"
-          title="Dismiss notification"
-          aria-label="Dismiss notification"
+          onClick={(e) => { e.stopPropagation(); handleDismiss(); }}
+          className="absolute top-2.5 right-2.5 p-1 rounded-lg opacity-30 hover:opacity-100 transition-all"
+          style={{ background: 'rgba(255,255,255,0.06)' }}
+          aria-label="Dismiss"
         >
-          <X className="w-3.5 h-3.5" />
+          <X className="w-3 h-3" style={{ color: 'var(--ide-text)' }} />
         </button>
       </div>
     </div>

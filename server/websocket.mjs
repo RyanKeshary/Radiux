@@ -197,22 +197,69 @@ function getGlobalNotifications(userId) {
   return all.filter(n => n.user_id === userId);
 }
 
+// Project Inline Comments
+function getProjectComments(projectId) {
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'comments.json');
+  return loadJsonFile(file, []);
+}
+
+function saveProjectComments(projectId, threads) {
+  if (!Array.isArray(threads)) return threads;
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'comments.json');
+  saveJsonFile(file, threads);
+  return threads;
+}
+
+// Project Code Reviews (Pull Requests)
+function getProjectReviews(projectId) {
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'reviews.json');
+  return loadJsonFile(file, []);
+}
+
+function saveProjectReviews(projectId, reviews) {
+  if (!Array.isArray(reviews)) return reviews;
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'reviews.json');
+  saveJsonFile(file, reviews);
+  return reviews;
+}
+
 function saveGlobalNotification(item) {
   if (!item || !item.id) return item;
   const file = path.join(DATA_ROOT, 'notifications.json');
   const all = loadJsonFile(file, []);
-  const idx = all.findIndex(n => n.id === item.id);
+
+  // Strict idempotency check: deduplicate identical events (e.g. repeated partner requests, invites)
+  const itemKey = item.idempotency_key ||
+    (item.partner_request_id ? `${item.type}_${item.user_id}_${item.partner_request_id}` :
+     item.project_id ? `${item.type}_${item.user_id}_${item.project_id}` :
+     null);
+
+  const idx = all.findIndex(n => {
+    if (n.id === item.id) return true;
+    if (itemKey) {
+      const nKey = n.idempotency_key ||
+        (n.partner_request_id ? `${n.type}_${n.user_id}_${n.partner_request_id}` :
+         n.project_id ? `${n.type}_${n.user_id}_${n.project_id}` :
+         null);
+      if (nKey && nKey === itemKey) return true;
+    }
+    return false;
+  });
+
   if (idx !== -1) {
-    all[idx] = { ...all[idx], ...item };
+    // Update existing record rather than inserting a duplicate
+    all[idx] = { ...all[idx], ...item, id: all[idx].id };
+    saveJsonFile(file, all);
+    return all[idx];
   } else {
     all.unshift(item);
+    if (all.length > 1000) all.length = 1000;
+    saveJsonFile(file, all);
+    return item;
   }
-  if (all.length > 1000) all.length = 1000;
-  saveJsonFile(file, all);
-  return item;
 }
 
-function markGlobalNotificationRead({ id, userId, all: markAll }) {
+function markGlobalNotificationRead({ id, userId, all: markAll, partnerRequestId, actionStatus }) {
   const file = path.join(DATA_ROOT, 'notifications.json');
   const items = loadJsonFile(file, []);
   items.forEach(n => {
@@ -220,6 +267,10 @@ function markGlobalNotificationRead({ id, userId, all: markAll }) {
       n.read = true;
     } else if (id && n.id === id) {
       n.read = true;
+      if (actionStatus) n.action_status = actionStatus;
+    } else if (partnerRequestId && (n.partner_request_id === partnerRequestId || n.data?.partner_request_id === partnerRequestId)) {
+      n.read = true;
+      if (actionStatus) n.action_status = actionStatus;
     }
   });
   saveJsonFile(file, items);
@@ -229,7 +280,7 @@ function deleteGlobalNotification({ id, userId, all: deleteAll, partnerRequestId
   const file = path.join(DATA_ROOT, 'notifications.json');
   let items = loadJsonFile(file, []);
   if (partnerRequestId) {
-    items = items.filter(n => n.partner_request_id !== partnerRequestId);
+    items = items.filter(n => n.partner_request_id !== partnerRequestId && n.data?.partner_request_id !== partnerRequestId);
   } else if (deleteAll && userId) {
     items = items.filter(n => n.user_id !== userId);
   } else if (id) {
@@ -268,6 +319,10 @@ function updateCodingPartnerStatus(requestId, status) {
     p.status = status;
     p.updated_at = new Date().toISOString();
     saveJsonFile(file, all);
+
+    // Synchronize notification status immediately
+    markGlobalNotificationRead({ partnerRequestId: requestId, actionStatus: status });
+
     return p;
   }
   return null;
@@ -279,7 +334,35 @@ function removeCodingPartner(partnerRequestId) {
   const match = all.find(p => p.id === partnerRequestId);
   const filtered = all.filter(p => p.id !== partnerRequestId);
   saveJsonFile(file, filtered);
+  deleteGlobalNotification({ partnerRequestId });
   return match;
+}
+
+// Multi-User Persistent Developer Profiles
+function getProfiles() {
+  const file = path.join(DATA_ROOT, 'profiles.json');
+  return loadJsonFile(file, []);
+}
+
+function getProfile(userIdOrUsername) {
+  if (!userIdOrUsername) return null;
+  const clean = userIdOrUsername.replace(/^@/, '').toLowerCase().trim();
+  const all = getProfiles();
+  return all.find(p => p.id === userIdOrUsername || (p.username && p.username.toLowerCase() === clean) || (p.email && p.email.toLowerCase() === clean)) || null;
+}
+
+function saveProfile(profile) {
+  if (!profile || !profile.id) return profile;
+  const file = path.join(DATA_ROOT, 'profiles.json');
+  const all = loadJsonFile(file, []);
+  const idx = all.findIndex(p => p.id === profile.id);
+  if (idx !== -1) {
+    all[idx] = { ...all[idx], ...profile, updated_at: new Date().toISOString() };
+  } else {
+    all.push({ ...profile, updated_at: new Date().toISOString() });
+  }
+  saveJsonFile(file, all);
+  return idx !== -1 ? all[idx] : profile;
 }
 
 function readJsonBody(request) {
@@ -333,9 +416,66 @@ const server = http.createServer(async (request, response) => {
     response.writeHead(200, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({
       status: 'ok',
-      service: 'codecollab-backend',
+      product: 'radiux',
+      service: 'radiux-backend',
     }));
     return;
+  }
+
+  // Terminal API: Detected Profiles & Dynamic Sessions
+  if (parsedUrl.pathname === '/api/terminal/profiles') {
+    const profiles = WorkspaceManager.getAvailableProfiles();
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ profiles }));
+    return;
+  }
+
+  if (parsedUrl.pathname === '/api/terminal/sessions') {
+    const projectId = parsedUrl.searchParams.get('projectId') || 'default';
+    if (request.method === 'GET') {
+      const sessions = WorkspaceManager.listSessions(projectId);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ sessions }));
+      return;
+    }
+    if (request.method === 'POST') {
+      try {
+        const body = await readJsonBody(request);
+        const session = WorkspaceManager.getOrCreateSession(projectId, body);
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({
+          session: {
+            id: session.id,
+            title: session.title,
+            profileId: session.profileId,
+            status: session.status,
+            pid: session.ptyProcess?.pid || null,
+            createdAt: session.createdAt,
+            detectedPorts: Array.from(session.detectedPorts),
+          }
+        }));
+        return;
+      } catch (err) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+    }
+    if (request.method === 'DELETE') {
+      try {
+        const sessionId = parsedUrl.searchParams.get('sessionId');
+        if (sessionId) {
+          WorkspaceManager.killSession(sessionId);
+        }
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: true }));
+        return;
+      } catch (err) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+    }
   }
 
   // Dev Server Reverse Proxy for running dynamic ports on Render (e.g. /proxy/5000/*)
@@ -942,6 +1082,32 @@ const server = http.createServer(async (request, response) => {
             type: 'partner_request_updated',
             partner: updated,
           });
+          sendToUser(updated.receiver_id, {
+            type: 'partner_request_updated',
+            partner: updated,
+          });
+
+          if (status === 'accepted') {
+            const acceptNotif = {
+              id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+              user_id: updated.requester_id,
+              type: 'partner_accepted',
+              title: 'Partner Request Accepted!',
+              message: `${updated.profile?.full_name || 'Your peer'} accepted your coding partner request.`,
+              sender_id: updated.receiver_id,
+              sender_name: updated.profile?.full_name || 'Developer',
+              sender_avatar: updated.profile?.avatar_url || '',
+              partner_request_id: requestId,
+              action_status: 'completed',
+              read: false,
+              created_at: new Date().toISOString(),
+            };
+            saveGlobalNotification(acceptNotif);
+            sendToUser(updated.requester_id, {
+              type: 'notification',
+              notification: acceptNotif,
+            });
+          }
         }
         response.writeHead(200, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({ success: true, partner: updated }));
@@ -966,6 +1132,125 @@ const server = http.createServer(async (request, response) => {
         }
         response.writeHead(200, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({ success: true }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+  }
+
+  // 11. Developer Profiles API (Cross-browser / cross-account identity persistence)
+  if (parsedUrl.pathname === '/api/profiles') {
+    if (request.method === 'GET') {
+      const userId = parsedUrl.searchParams.get('userId');
+      const username = parsedUrl.searchParams.get('username');
+      if (userId || username) {
+        const prof = getProfile(userId || username);
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ profile: prof }));
+        return;
+      }
+      const profiles = getProfiles();
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ profiles }));
+      return;
+    }
+    if (request.method === 'POST' || request.method === 'PATCH') {
+      try {
+        const body = await readJsonBody(request);
+        const saved = saveProfile(body.profile || body);
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: true, profile: saved }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+  }
+
+  // 12. Inline Code Comments API (Real-time multi-user synchronization)
+  if (parsedUrl.pathname === '/api/comments') {
+    const projectId = parsedUrl.searchParams.get('projectId') || 'default';
+    if (request.method === 'GET') {
+      const threads = getProjectComments(projectId);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ threads }));
+      return;
+    }
+    if (request.method === 'POST') {
+      try {
+        const body = await readJsonBody(request);
+        const pId = body.projectId || projectId;
+        const threads = body.threads;
+        if (Array.isArray(threads)) {
+          saveProjectComments(pId, threads);
+          // Broadcast over /comm to active clients in the project room
+          const room = commRooms.get(pId);
+          if (room) {
+            const payload = JSON.stringify({ type: 'comments_update', projectId: pId, threads });
+            room.forEach(c => {
+              if (c.ws.readyState === 1) c.ws.send(payload);
+            });
+          }
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ success: true, threads }));
+          return;
+        }
+        response.writeHead(400, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: 'Missing threads array' }));
+        return;
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+    }
+  }
+
+  // 13. Code Review Requests (Pull Requests) API (Real-time multi-user synchronization)
+  if (parsedUrl.pathname === '/api/reviews') {
+    const projectId = parsedUrl.searchParams.get('projectId') || 'default';
+    if (request.method === 'GET') {
+      const reviews = getProjectReviews(projectId);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ reviews }));
+      return;
+    }
+    if (request.method === 'POST') {
+      try {
+        const body = await readJsonBody(request);
+        const pId = body.projectId || projectId;
+        const reviews = body.reviews;
+        if (Array.isArray(reviews)) {
+          saveProjectReviews(pId, reviews);
+
+          // If a new review or update notification was provided
+          if (body.notification && body.notification.user_id) {
+            saveGlobalNotification(body.notification);
+            sendToUser(body.notification.user_id, {
+              type: 'notification',
+              notification: body.notification,
+            });
+          }
+
+          // Broadcast over /comm to active clients in the project room
+          const room = commRooms.get(pId);
+          if (room) {
+            const payload = JSON.stringify({ type: 'reviews_update', projectId: pId, reviews });
+            room.forEach(c => {
+              if (c.ws.readyState === 1) c.ws.send(payload);
+            });
+          }
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ success: true, reviews }));
+          return;
+        }
+        response.writeHead(400, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: 'Missing reviews array' }));
         return;
       } catch (e) {
         response.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1084,6 +1369,38 @@ function handleCommConnection(ws, projectId, verifiedUser, queryUserId) {
             notification: msg.notification,
           });
         }
+        return;
+      }
+
+      // 3c. Inline Comments live broadcast
+      if (msg.type === 'comments_update') {
+        if (msg.threads) saveProjectComments(projectId, msg.threads);
+        const payload = JSON.stringify({
+          type: 'comments_update',
+          projectId,
+          threads: msg.threads,
+        });
+        room.forEach((client) => {
+          if (client.ws.readyState === 1 && client.ws !== ws) {
+            client.ws.send(payload);
+          }
+        });
+        return;
+      }
+
+      // 3d. Code Review Requests (Pull Requests) live broadcast
+      if (msg.type === 'reviews_update') {
+        if (msg.reviews) saveProjectReviews(projectId, msg.reviews);
+        const payload = JSON.stringify({
+          type: 'reviews_update',
+          projectId,
+          reviews: msg.reviews,
+        });
+        room.forEach((client) => {
+          if (client.ws.readyState === 1 && client.ws !== ws) {
+            client.ws.send(payload);
+          }
+        });
         return;
       }
 
@@ -1217,10 +1534,15 @@ server.on('upgrade', async (request, socket, head) => {
     return;
   }
 
-  // Route 1: Terminal stream WebSocket (/terminal?projectId=...)
+  // Route 1: Terminal stream WebSocket (/terminal?projectId=...&sessionId=...&profileId=...)
   if (parsedUrl.pathname === '/terminal') {
     const projectId = parsedUrl.searchParams.get('projectId') || 'default';
     const token = parsedUrl.searchParams.get('token') || '';
+    const sessionId = parsedUrl.searchParams.get('sessionId') || '';
+    const profileId = parsedUrl.searchParams.get('profileId') || '';
+    const title = parsedUrl.searchParams.get('title') || '';
+    const cols = parseInt(parsedUrl.searchParams.get('cols') || '80', 10);
+    const rows = parseInt(parsedUrl.searchParams.get('rows') || '24', 10);
 
     // Level 6: Verify token for terminal access
     let verifiedUser = null;
@@ -1237,7 +1559,13 @@ server.on('upgrade', async (request, socket, head) => {
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
-      WorkspaceManager.connectTerminal(projectId, ws);
+      WorkspaceManager.connectTerminal(projectId, ws, {
+        sessionId,
+        profileId,
+        title,
+        cols,
+        rows,
+      });
     });
     return;
   }

@@ -77,6 +77,7 @@ interface BottomDockProps {
   onTabChange?: (tab: DockTab) => void;
   onNavigateToFile?: (filePath: string, line?: number) => void;
   theme?: string;
+  onMoveToSidebar?: (tab: 'chat' | 'voice' | 'git') => void;
 }
 
 export function BottomDock({
@@ -112,6 +113,7 @@ export function BottomDock({
   onTabChange,
   onNavigateToFile,
   theme,
+  onMoveToSidebar,
 }: BottomDockProps) {
   const [internalActiveTab, setInternalActiveTab] = useState<DockTab>('terminal');
   const activeTab = externalActiveTab || internalActiveTab;
@@ -515,6 +517,17 @@ export function BottomDock({
               )}
             </button>
           </div>
+
+          {onMoveToSidebar && (activeTab === 'chat' || activeTab === 'voice' || activeTab === 'git') && (
+            <button
+              onClick={() => onMoveToSidebar(activeTab as 'chat' | 'voice' | 'git')}
+              className="px-2 py-0.5 rounded text-[10.5px] bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white border border-white/10 flex items-center gap-1 transition-colors mr-1"
+              title="Move this tool to the left sidebar"
+            >
+              <PanelLeft className="w-3 h-3" />
+              <span>Move to Sidebar</span>
+            </button>
+          )}
 
           <button
             onClick={onClose}

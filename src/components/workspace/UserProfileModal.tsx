@@ -29,6 +29,7 @@ interface UserProfileModalProps {
   settings: EditorSettings;
   onUpdateSettings: (newSettings: Partial<EditorSettings>) => void;
   onProfileUpdated?: (updated: UserProfile) => void;
+  initialTab?: 'profile' | 'preferences' | 'partners' | 'account';
 }
 
 export function UserProfileModal({
@@ -38,9 +39,10 @@ export function UserProfileModal({
   settings,
   onUpdateSettings,
   onProfileUpdated,
+  initialTab = 'profile',
 }: UserProfileModalProps) {
   const { updateCurrentUserProfile } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'partners' | 'account'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'partners' | 'account'>(initialTab);
 
   // Profile fields
   const [fullName, setFullName] = useState(currentUser.full_name || '');
@@ -63,6 +65,9 @@ export function UserProfileModal({
 
   useEffect(() => {
     if (isOpen) {
+      if (initialTab) {
+        setActiveTab(initialTab);
+      }
       setFullName(currentUser.full_name || '');
       setUsername(currentUser.username || currentUser.email.split('@')[0]);
       setBio(currentUser.bio || '');
@@ -78,7 +83,7 @@ export function UserProfileModal({
         setLoadingPartners(false);
       });
     }
-  }, [isOpen, currentUser]);
+  }, [isOpen, initialTab, currentUser]);
 
   if (!isOpen) return null;
 
@@ -144,12 +149,16 @@ export function UserProfileModal({
     setPartners(prev => prev.filter(p => p.id !== partnerId));
   };
 
-  const handleRemovePartner = async (partnerId: string) => {
+  const handleRemovePartner = async (partnerId: string, partnerName: string) => {
+    const ok = window.confirm(`Remove ${partnerName} as a coding partner? This cannot be undone.`);
+    if (!ok) return;
     await DataService.removePartner(partnerId);
     setPartners(prev => prev.filter(p => p.id !== partnerId));
   };
 
   const handleUnsendPartner = async (partnerId: string) => {
+    const ok = window.confirm('Cancel this pending partner request?');
+    if (!ok) return;
     const res = await DataService.unsendPartnerRequest(partnerId);
     setPartners(prev => prev.filter(p => p.id !== partnerId));
     setPartnerMessage({ text: res.message, success: true });
@@ -172,8 +181,16 @@ export function UserProfileModal({
           style={{ borderColor: 'var(--ide-border)' }}
         >
           <div className="flex items-center gap-2">
-            <User className="w-4 h-4 text-sky-400" />
-            <span className="text-sm font-semibold" style={{ color: 'var(--ide-text)' }}>Developer Profile & Settings</span>
+            {activeTab === 'partners' && <Users className="w-4 h-4 text-emerald-400" />}
+            {activeTab === 'profile' && <User className="w-4 h-4 text-sky-400" />}
+            {activeTab === 'account' && <Shield className="w-4 h-4 text-amber-400" />}
+            {activeTab === 'preferences' && <Palette className="w-4 h-4 text-pink-400" />}
+            <span className="text-sm font-semibold" style={{ color: 'var(--ide-text)' }}>
+              {activeTab === 'partners' && 'Coding Partners & Collaborators'}
+              {activeTab === 'profile' && 'Developer Profile & Identity'}
+              {activeTab === 'account' && 'Account Credentials & Security'}
+              {activeTab === 'preferences' && 'IDE Themes & Preferences'}
+            </span>
           </div>
 
           <button
@@ -571,29 +588,29 @@ export function UserProfileModal({
             </div>
           )}
 
-          {/* 3. Coding Partners Tab */}
+          {/* 3. Network / Coding Partners Tab */}
           {activeTab === 'partners' && (
-            <div className="space-y-4">
-              <div 
-                className="p-3 rounded border"
+            <div className="space-y-5">
+              {/* ── Send Request ─── */}
+              <div
+                className="p-4 rounded-xl border"
                 style={{
-                  backgroundColor: 'var(--ide-dock-header)',
+                  background: 'linear-gradient(135deg, rgba(56,189,248,0.06), rgba(99,102,241,0.06))',
                   borderColor: 'var(--ide-border)',
                 }}
               >
-                <p className="font-medium mb-1" style={{ color: 'var(--ide-text)' }}>Collaborative Coding Partners</p>
-                <p className="text-[11px] leading-relaxed" style={{ color: 'var(--ide-text-muted)' }}>
-                  Add developers as coding partners to quickly invite them to projects, see their availability, and jump into real-time collaboration.
+                <p className="font-semibold mb-0.5" style={{ color: 'var(--ide-text)' }}>Add a Coding Partner</p>
+                <p className="text-[11px] mb-3" style={{ color: 'var(--ide-text-muted)' }}>
+                  Connect with developers to quickly invite them to projects and co-edit in real time.
                 </p>
-
-                <form onSubmit={handleSendPartnerRequest} className="flex gap-2 mt-3">
+                <form onSubmit={handleSendPartnerRequest} className="flex gap-2">
                   <input
                     type="text"
                     required
                     value={newPartnerInput}
                     onChange={(e) => setNewPartnerInput(e.target.value)}
-                    placeholder="Enter developer email or @username..."
-                    className="flex-1 border rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                    placeholder="Email or @username..."
+                    className="flex-1 border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-sky-500"
                     style={{
                       backgroundColor: 'var(--ide-input-bg)',
                       borderColor: 'var(--ide-border)',
@@ -602,120 +619,188 @@ export function UserProfileModal({
                   />
                   <button
                     type="submit"
-                    className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded font-medium flex items-center gap-1 transition-colors"
+                    className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-medium flex items-center gap-1 transition-colors"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
-                    <span>Send Request</span>
+                    <span>Connect</span>
                   </button>
                 </form>
-
                 {partnerMessage && (
-                  <p className={`text-[11px] mt-2 ${partnerMessage.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <p className={`text-[11px] mt-2 font-medium ${partnerMessage.success ? 'text-emerald-400' : 'text-red-400'}`}>
                     {partnerMessage.text}
                   </p>
                 )}
               </div>
 
-              {/* Partners List */}
-              <div className="space-y-2">
-                <h4 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--ide-text-muted)' }}>Your Coding Partners</h4>
-                {loadingPartners ? (
-                  <div className="py-4 text-center" style={{ color: 'var(--ide-text-muted)' }}>Loading partners...</div>
-                ) : partners.length === 0 ? (
-                  <div className="py-6 text-center text-xs italic" style={{ color: 'var(--ide-text-muted)' }}>
-                    No coding partners yet. Send an invitation above to collaborate!
-                  </div>
-                ) : (
-                  partners.map((p) => {
-                    const isIncomingPending = p.status === 'pending' && p.receiver_id === currentUser.id;
-                    const isOutgoingPending = p.status === 'pending' && p.requester_id === currentUser.id;
-
-                    return (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between p-2.5 rounded border"
-                        style={{
-                          backgroundColor: 'var(--ide-card-bg)',
-                          borderColor: 'var(--ide-border)',
-                        }}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          {p.profile?.avatar_url ? (
-                            <img src={p.profile.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-sky-600 flex items-center justify-center font-bold text-white uppercase">
-                              {(p.profile?.full_name || 'U').charAt(0)}
+              {loadingPartners ? (
+                <div className="py-6 flex items-center justify-center gap-2" style={{ color: 'var(--ide-text-muted)' }}>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Loading your network...</span>
+                </div>
+              ) : (
+                <>
+                  {/* ── Incoming requests section ─── */}
+                  {partners.filter(p => p.status === 'pending' && p.receiver_id === currentUser.id).length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--ide-text-muted)' }}>
+                          Incoming Requests ({partners.filter(p => p.status === 'pending' && p.receiver_id === currentUser.id).length})
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {partners.filter(p => p.status === 'pending' && p.receiver_id === currentUser.id).map(p => (
+                          <div
+                            key={p.id}
+                            className="flex items-center justify-between p-3 rounded-xl border"
+                            style={{ backgroundColor: 'rgba(251,191,36,0.05)', borderColor: 'rgba(251,191,36,0.25)' }}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              {p.profile?.avatar_url ? (
+                                <img src={p.profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-amber-400/40" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center font-bold text-white uppercase text-sm">
+                                  {(p.profile?.full_name || 'U').charAt(0)}
+                                </div>
+                              )}
+                              <div>
+                                <p className="font-semibold text-xs" style={{ color: 'var(--ide-text)' }}>{p.profile?.full_name || 'Developer'}</p>
+                                <p className="text-[10px]" style={{ color: 'var(--ide-text-muted)' }}>@{p.profile?.username || p.profile?.email?.split('@')[0]}</p>
+                              </div>
                             </div>
-                          )}
-
-                          <div className="min-w-0">
-                            <p className="font-semibold truncate" style={{ color: 'var(--ide-text)' }}>{p.profile?.full_name || 'Partner'}</p>
-                            <p className="text-[10px] truncate" style={{ color: 'var(--ide-text-muted)' }}>@{p.profile?.username || p.profile?.email}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {isIncomingPending && (
-                            <>
+                            <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => handleAcceptPartner(p.id)}
-                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-medium"
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-medium transition-colors"
                               >
                                 Accept
                               </button>
                               <button
                                 onClick={() => handleDeclinePartner(p.id)}
-                                className="px-2 py-1 border rounded text-[11px]"
-                                style={{
-                                  backgroundColor: 'var(--ide-input-bg)',
-                                  borderColor: 'var(--ide-border)',
-                                  color: 'var(--ide-text)',
-                                }}
+                                className="px-2.5 py-1 border rounded-lg text-[11px] font-medium transition-colors"
+                                style={{ borderColor: 'var(--ide-border)', color: 'var(--ide-text-muted)' }}
                               >
                                 Decline
                               </button>
-                            </>
-                          )}
-
-                          {isOutgoingPending && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded font-medium border border-amber-500/20">
-                                Pending Request
-                              </span>
-                              <button
-                                onClick={() => handleUnsendPartner(p.id)}
-                                className="px-2 py-0.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 rounded text-[10.5px] font-medium transition-colors flex items-center gap-1"
-                                title="Unsend friend request"
-                              >
-                                <X className="w-3 h-3" />
-                                <span>Unsend</span>
-                              </button>
                             </div>
-                          )}
-
-                          {p.status === 'accepted' && (
-                            <>
-                              <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded font-medium flex items-center gap-1">
-                                <CheckCheck className="w-3 h-3" /> Partner
-                              </span>
-                              <button
-                                onClick={() => handleRemovePartner(p.id)}
-                                className="p-1 hover:text-red-400 transition-colors"
-                                style={{ color: 'var(--ide-text-muted)' }}
-                                title="Remove partner"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          )}
-                        </div>
+                          </div>
+                        ))}
                       </div>
-                    );
-                  })
-                )}
-              </div>
+                    </div>
+                  )}
+
+                  {/* ── Outgoing pending ─── */}
+                  {partners.filter(p => p.status === 'pending' && p.requester_id === currentUser.id).length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--ide-text-muted)' }}>
+                          Pending ({partners.filter(p => p.status === 'pending' && p.requester_id === currentUser.id).length})
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {partners.filter(p => p.status === 'pending' && p.requester_id === currentUser.id).map(p => (
+                          <div
+                            key={p.id}
+                            className="flex items-center justify-between p-2.5 rounded-xl border"
+                            style={{ backgroundColor: 'var(--ide-card-bg)', borderColor: 'var(--ide-border)' }}
+                          >
+                            <div className="flex items-center gap-2">
+                              {p.profile?.avatar_url ? (
+                                <img src={p.profile.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover opacity-70" />
+                              ) : (
+                                <div className="w-7 h-7 rounded-full bg-neutral-600 flex items-center justify-center font-bold text-neutral-300 uppercase text-xs">
+                                  {(p.profile?.full_name || 'U').charAt(0)}
+                                </div>
+                              )}
+                              <div>
+                                <p className="font-medium text-[11px]" style={{ color: 'var(--ide-text)' }}>{p.profile?.full_name || 'Developer'}</p>
+                                <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-medium">Request Sent</span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleUnsendPartner(p.id)}
+                              className="text-[10.5px] text-rose-400 border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-colors font-medium"
+                            >
+                              <X className="w-3 h-3" />
+                              Cancel
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Accepted Partners — LinkedIn-style grid ─── */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--ide-text-muted)' }}>
+                        Coding Partners ({partners.filter(p => p.status === 'accepted').length})
+                      </span>
+                    </div>
+
+                    {partners.filter(p => p.status === 'accepted').length === 0 ? (
+                      <div className="py-8 text-center">
+                        <Users className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: 'var(--ide-text-muted)' }} />
+                        <p className="text-[11px] italic" style={{ color: 'var(--ide-text-muted)' }}>No accepted partners yet. Send a connection request above!</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {partners.filter(p => p.status === 'accepted').map(p => (
+                          <div
+                            key={p.id}
+                            className="flex flex-col items-center gap-2 p-3 rounded-xl border text-center group hover:border-emerald-500/40 transition-all"
+                            style={{ backgroundColor: 'var(--ide-card-bg)', borderColor: 'var(--ide-border)' }}
+                          >
+                            {/* Avatar */}
+                            <div className="relative">
+                              {p.profile?.avatar_url ? (
+                                <img
+                                  src={p.profile.avatar_url}
+                                  alt=""
+                                  className="w-12 h-12 rounded-full object-cover ring-2 ring-emerald-500/30"
+                                />
+                              ) : (
+                                <div
+                                  className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white uppercase text-lg"
+                                  style={{ background: 'linear-gradient(135deg, #0ea5e9, #6366f1)' }}
+                                >
+                                  {(p.profile?.full_name || 'U').charAt(0)}
+                                </div>
+                              )}
+                              <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-[var(--ide-card-bg)]" />
+                            </div>
+
+                            {/* Info */}
+                            <div className="min-w-0 w-full">
+                              <p className="font-semibold text-xs truncate" style={{ color: 'var(--ide-text)' }}>{p.profile?.full_name || 'Developer'}</p>
+                              <p className="text-[10px] truncate" style={{ color: 'var(--ide-text-muted)' }}>@{p.profile?.username || p.profile?.email?.split('@')[0]}</p>
+                              {p.profile?.skills && p.profile.skills.length > 0 && (
+                                <p className="text-[9.5px] mt-0.5 truncate" style={{ color: 'var(--ide-text-muted)' }}>
+                                  {p.profile.skills.slice(0, 2).join(' · ')}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Actions */}
+                            <button
+                              onClick={() => handleRemovePartner(p.id, p.profile?.full_name || 'this partner')}
+                              className="w-full text-[10px] py-1 rounded-lg border transition-colors opacity-0 group-hover:opacity-100"
+                              style={{ borderColor: 'rgba(239,68,68,0.3)', color: '#f87171', background: 'rgba(239,68,68,0.07)' }}
+                              title="Remove coding partner"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
+
 
           {/* 4. Account Tab */}
           {activeTab === 'account' && (

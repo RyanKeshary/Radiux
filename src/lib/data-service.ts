@@ -1423,20 +1423,6 @@ export const DataService = {
       } catch (e) {}
     }
 
-    // Baseline contributions for demo users to visualize the graph realistically if fresh account
-    if (userId.startsWith('user-') && Object.keys(activityCountByDate).length === 0) {
-      // Deterministic seed based on user id
-      const seed = userId.charCodeAt(userId.length - 1);
-      for (let i = 0; i < 365; i++) {
-        const d = new Date(today.getTime() - i * oneDayMs);
-        const dayOfWeek = d.getDay();
-        if ((i + seed) % 3 === 0 && dayOfWeek !== 0) {
-          const dateStr = d.toISOString().split('T')[0];
-          activityCountByDate[dateStr] = ((i * 7 + seed) % 8) + 1;
-        }
-      }
-    }
-
     const startDate = new Date(today.getTime() - 364 * oneDayMs);
     let total = 0;
     let currentStreak = 0;
@@ -1862,13 +1848,34 @@ export const DataService = {
     userId: string,
     notification: Omit<NotificationItem, 'id' | 'created_at' | 'read' | 'user_id'>
   ): Promise<NotificationItem> {
+    const idempotencyKey = `${notification.type}_${notification.sender_id || ''}_${userId}_${notification.partner_request_id || ''}`;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        let query = supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('type', notification.type);
+        if (notification.partner_request_id) {
+          query = query.eq('partner_request_id', notification.partner_request_id);
+        }
+        const { data: existing } = await query;
+        if (existing && existing.length > 0) {
+          return existing[0] as NotificationItem;
+        }
+      } catch (err) {}
+    }
+
     const item: NotificationItem = {
       ...notification,
       id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       user_id: userId,
       read: false,
       created_at: new Date().toISOString(),
-    };
+      idempotency_key: idempotencyKey,
+    } as any;
+
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('notifications').insert(item);

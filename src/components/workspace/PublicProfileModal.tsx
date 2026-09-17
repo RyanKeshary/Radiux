@@ -35,6 +35,7 @@ export function PublicProfileModal({
   const [loading, setLoading] = useState(true);
   const [partnerStatus, setPartnerStatus] = useState<'none' | 'pending' | 'accepted'>('none');
   const [sendingRequest, setSendingRequest] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && userId) {
@@ -61,30 +62,64 @@ export function PublicProfileModal({
 
   const handleAddPartner = async () => {
     if (!profile) return;
+    // Optimistic update immediately
+    setPartnerStatus('pending');
+    setStatusMessage('Request sent!');
     setSendingRequest(true);
-    const currentUser = await DataService.getProfile(currentUserId);
-    if (currentUser) {
-      const res = await DataService.sendPartnerRequest(currentUser, profile.email);
-      if (res.success) {
-        setPartnerStatus('pending');
+    try {
+      const currentUser = await DataService.getProfile(currentUserId);
+      if (currentUser) {
+        const res = await DataService.sendPartnerRequest(currentUser, profile.email);
+        if (!res.success) {
+          // Roll back on failure
+          setPartnerStatus('none');
+          setStatusMessage('Failed to send request');
+        }
       }
+    } catch {
+      setPartnerStatus('none');
+      setStatusMessage('Failed to send request');
+    } finally {
+      setSendingRequest(false);
+      // Re-fetch ground truth after a short delay
+      setTimeout(async () => {
+        const fresh = await DataService.getCodingPartners(currentUserId);
+        const match = fresh.find(
+          (p) => p.requester_id === currentUserId && p.receiver_id === profile.id ||
+                 p.requester_id === profile.id && p.receiver_id === currentUserId
+        );
+        if (match) setPartnerStatus(match.status as any);
+        setStatusMessage(null);
+      }, 1500);
     }
-    setSendingRequest(false);
   };
 
   const handleUnsendPartner = async () => {
     if (!profile) return;
+    // Confirmation before unsending
+    const ok = window.confirm(`Cancel partner request to ${profile.full_name || profile.email}?`);
+    if (!ok) return;
+    setPartnerStatus('none');
     setSendingRequest(true);
-    const partners = await DataService.getCodingPartners(currentUserId);
-    const match = partners.find(
-      (p) => (p.requester_id === currentUserId && p.receiver_id === profile.id) ||
-             (p.requester_id === profile.id && p.receiver_id === currentUserId)
-    );
-    if (match) {
-      await DataService.unsendPartnerRequest(match.id);
-      setPartnerStatus('none');
+    try {
+      const partners = await DataService.getCodingPartners(currentUserId);
+      const match = partners.find(
+        (p) => (p.requester_id === currentUserId && p.receiver_id === profile.id) ||
+               (p.requester_id === profile.id && p.receiver_id === currentUserId)
+      );
+      if (match) {
+        await DataService.unsendPartnerRequest(match.id);
+      }
+    } catch {
+      // If unsend fails, re-fetch actual status
+      const fresh = await DataService.getCodingPartners(currentUserId);
+      const match = fresh.find(
+        (p) => p.requester_id === userId || p.receiver_id === userId
+      );
+      setPartnerStatus(match ? (match.status as any) : 'none');
+    } finally {
+      setSendingRequest(false);
     }
-    setSendingRequest(false);
   };
 
   return (

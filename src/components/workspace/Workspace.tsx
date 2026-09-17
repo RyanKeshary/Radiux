@@ -58,6 +58,11 @@ import { AppNotification } from './NotificationsPopover';
 import { NotificationToastContainer, NotificationToastItem } from './NotificationToast';
 import { ProfilePreviewCard } from '@/components/profile/ProfilePreviewCard';
 import { useKeyboardManager } from '@/hooks/useKeyboardManager';
+import { InlineCommentsOverlay } from './InlineCommentsOverlay';
+import { ReviewRequestsModal } from './ReviewRequestsModal';
+import { ExtensionsPanel } from './ExtensionsPanel';
+import { IntegrationsModal } from './IntegrationsModal';
+import { CommentService } from '@/lib/collaboration/comment-service';
 import { soundManager } from '@/lib/sound';
 import { ChatPanel } from './ChatPanel';
 import { VoicePanel } from './VoicePanel';
@@ -183,41 +188,42 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const hasJoinedWorkspaceRef = useRef(false);
   const hasShownInitialToastRef = useRef(false);
   const lastLoadedKeyRef = useRef<string | null>(null);
+  const recentToastKeysRef = useRef<Map<string, number>>(new Map());
+  // Track IDs of notifications shown at initial load so polling never re-toasts them
+  const shownNotifIdsRef = useRef<Set<string>>(new Set());
 
   const showToast = useCallback((item: Omit<NotificationToastItem, 'id'>) => {
+    // Generate dedup key to prevent double popups from concurrent WebSocket / polling events
+    const dedupKey = `${item.type || 'system'}::${item.title || ''}::${item.message || ''}::${item.partnerRequestId || ''}::${item.projectId || ''}`;
+    const now = Date.now();
+    const lastShownTime = recentToastKeysRef.current.get(dedupKey);
+    if (lastShownTime && now - lastShownTime < 30000) {
+      // Suppress duplicate toast within 30-second window
+      return;
+    }
+    recentToastKeysRef.current.set(dedupKey, now);
+
+    // Housekeeping: purge entries older than 60s
+    if (recentToastKeysRef.current.size > 40) {
+      recentToastKeysRef.current.forEach((time, k) => {
+        if (now - time > 60000) {
+          recentToastKeysRef.current.delete(k);
+        }
+      });
+    }
+
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     const newToast: NotificationToastItem = {
       ...item,
       id,
       createdAt: item.createdAt || 'Just now',
     };
-    setToastList((prev) => [newToast, ...prev.slice(0, 2)]);
-
-    // Synchronize to Notification Center panel
-    const notifType: AppNotification['type'] = 
-      item.type === 'partner_request' ? 'partner_request' :
-      item.type === 'project_invite' ? 'project_invite' :
-      item.type === 'member_event' ? 'member_joined' :
-      'system';
-
-    const notifItem: AppNotification = {
-      id,
-      type: notifType,
-      title: item.title,
-      message: item.message,
-      read: false,
-      createdAt: item.createdAt || 'Just now',
-      projectId: item.projectId,
-      partnerRequestId: item.partnerRequestId,
-      senderName: item.title,
-    };
-
-    setNotifications((prev) => {
-      // Prevent duplicate identical unread entries
-      if (prev.some(p => p.id === id || (p.title === item.title && p.message === item.message && !p.read))) {
+    setToastList((prev) => {
+      // Prevent duplicate identical entries in current toast list
+      if (prev.some(t => (t.title === item.title && t.message === item.message) || t.id === id)) {
         return prev;
       }
-      return [notifItem, ...prev];
+      return [newToast, ...prev.slice(0, 2)];
     });
   }, []);
 
@@ -313,11 +319,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGitHubOpen, setIsGitHubOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileModalTab, setProfileModalTab] = useState<'profile' | 'preferences' | 'partners' | 'account'>('profile');
   const [selectedPublicUserId, setSelectedPublicUserId] = useState<string | null>(null);
   const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
   const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isReviewsOpen, setIsReviewsOpen] = useState(false);
+  const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [currentGitBranch, setCurrentGitBranch] = useState('main');
 
@@ -475,26 +484,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
         message: n.message,
         read: n.read,
         createdAt: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        projectId: n.data?.project_id,
-        partnerRequestId: n.data?.partner_request_id,
+        projectId: n.project_id || n.data?.project_id,
+        partnerRequestId: n.partner_request_id || n.data?.partner_request_id,
       }));
       setNotifications(mappedNotifs);
 
-      // Showcase the latest unread notification in the corner popup immediately on entering (once)!
-      if (!hasShownInitialToastRef.current) {
-        const unreadNotifs = mappedNotifs.filter(n => !n.read);
-        if (unreadNotifs.length > 0) {
-          const latest = unreadNotifs[0];
-          showToast({
-            type: latest.type === 'partner_request' ? 'partner_request' : latest.type === 'project_invite' ? 'project_invite' : 'system',
-            title: latest.title,
-            message: latest.message,
-            partnerRequestId: latest.partnerRequestId,
-            projectId: latest.projectId,
-          });
-          hasShownInitialToastRef.current = true;
-        }
-      }
+      // Phase 24: Suppress historical notifications from displaying as new toasts on initial load/refresh
+      mappedNotifs.forEach(n => shownNotifIdsRef.current.add(n.id));
+      hasShownInitialToastRef.current = true;
 
       // Seed remote workspace disk with existing files
       try {
@@ -616,26 +613,32 @@ export function Workspace({ projectId }: WorkspaceProps) {
               }
             } else if (msg.type === 'notification' && msg.notification) {
               if (!msg.notification.user_id || msg.notification.user_id === user?.id) {
-                setNotifications(prev => [msg.notification, ...prev]);
-                showToast({
-                  type: msg.notification.type === 'partner_request' ? 'partner_request' : 'system',
-                  title: msg.notification.title,
-                  message: msg.notification.message,
-                  partnerRequestId: msg.notification.partner_request_id,
+                const notif = msg.notification;
+                setNotifications(prev => {
+                  const exists = prev.some(p => p.id === notif.id);
+                  if (exists) {
+                    return prev.map(p => p.id === notif.id ? notif : p);
+                  }
+                  return [notif, ...prev];
                 });
-                soundManager.playNotification();
+
+                if (!shownNotifIdsRef.current.has(notif.id)) {
+                  shownNotifIdsRef.current.add(notif.id);
+                  showToast({
+                    type: notif.type === 'partner_request' ? 'partner_request' : 'system',
+                    title: notif.title,
+                    message: notif.message,
+                    partnerRequestId: notif.partner_request_id || notif.partnerRequestId,
+                  });
+                  soundManager.playNotification();
+                }
               }
             } else if (msg.type === 'partner_request_received') {
-              if (msg.notification) {
-                setNotifications(prev => [msg.notification, ...prev]);
-                showToast({
-                  type: 'partner_request',
-                  title: msg.notification.title || 'New Coding Partner Request',
-                  message: msg.notification.message,
-                  partnerRequestId: msg.notification.partner_request_id,
-                });
-                soundManager.playNotification();
-              }
+              // Canonical notification message handles reception and toast idempotently
+            } else if (msg.type === 'comments_update' && msg.threads) {
+              CommentService.handleRemoteCommentsUpdate(projectId, msg.threads);
+            } else if (msg.type === 'reviews_update' && msg.reviews) {
+              CommentService.handleRemoteReviewsUpdate(projectId, msg.reviews);
             }
           } catch (e) {}
         };
@@ -695,16 +698,20 @@ export function Workspace({ projectId }: WorkspaceProps) {
           message: n.message,
           read: n.read,
           createdAt: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          projectId: n.data?.project_id,
-          partnerRequestId: n.data?.partner_request_id,
+          projectId: n.project_id || n.data?.project_id,
+          partnerRequestId: n.partner_request_id || n.data?.partner_request_id,
         }));
 
         setNotifications((prev) => {
           const prevIds = new Set(prev.map(p => p.id));
-          const newUnreads = mapped.filter(m => !m.read && !prevIds.has(m.id));
+          // Only toast notifications that are truly brand new (not in prev AND not already shown at load)
+          const newUnreads = mapped.filter(
+            m => !m.read && !prevIds.has(m.id) && !shownNotifIdsRef.current.has(m.id)
+          );
           if (newUnreads.length > 0) {
             soundManager.playNotification();
             newUnreads.forEach(nu => {
+              shownNotifIdsRef.current.add(nu.id);
               showToast({
                 type: nu.type === 'partner_request' ? 'partner_request' : nu.type === 'project_invite' ? 'project_invite' : 'system',
                 title: nu.title,
@@ -1179,6 +1186,17 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const handleDeleteFile = async (fileId: string) => {
     try {
       const fileToDelete = files.find((f) => f.id === fileId);
+      const itemName = fileToDelete ? fileToDelete.name : 'this item';
+      const isFolder = fileToDelete?.is_folder;
+
+      const confirmMessage = isFolder
+        ? `Are you sure you want to permanently delete the folder "${itemName}" and all of its contents?\n\n⚠️ Warning: This action cannot be undone.`
+        : `Are you sure you want to permanently delete "${itemName}"?\n\n⚠️ Warning: This action cannot be undone.`;
+
+      if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
+        return;
+      }
+
       await DataService.deleteFile(fileId);
       setFiles((prev) => prev.filter((f) => f.id !== fileId));
       setEditorGroups((prev) =>
@@ -1521,82 +1539,72 @@ export function Workspace({ projectId }: WorkspaceProps) {
         color: 'var(--ide-text)',
       }}
     >
-      {/* 1. Top IDE App Header */}
+      {/* 1. Top IDE App Header — clean, minimal, premium */}
       <header 
-        className="h-9 border-b flex items-center justify-between px-2 text-xs flex-shrink-0 z-30"
+        className="h-10 border-b flex items-center justify-between px-3 text-xs flex-shrink-0 z-30 select-none"
         style={{
           backgroundColor: 'var(--ide-activity)',
           borderColor: 'var(--ide-border)',
           color: 'var(--ide-text)',
         }}
       >
-        {/* Left branding & Workspace Switcher */}
+        {/* Left: branding + workspace breadcrumb */}
         <div className="flex items-center gap-2">
           <Link
             href="/"
-            className="flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-            style={{ color: 'var(--ide-text-muted)' }}
-            title="Return to Dashboard"
+            className="p-1.5 rounded hover:bg-white/[0.07] text-neutral-500 hover:text-neutral-200 transition-colors"
+            title="Dashboard"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-3.5 h-3.5" />
           </Link>
 
           <button
             onClick={() => setIsProjectSwitcherOpen(true)}
-            className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors group text-left"
-            title="Switch Workspace (Ctrl+Alt+O)"
+            className="flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-white/[0.07] transition-colors group text-left"
+            title="Switch Workspace"
           >
-            <img src="/logo.png" alt="Radiux" className="w-4 h-4 rounded object-contain shadow-sm" />
-            <span 
-              className="font-bold tracking-wide group-hover:text-sky-400 transition-colors"
-              style={{ color: 'var(--ide-text)' }}
-            >
+            <img src="/logo.png" alt="Radiux" className="w-3.5 h-3.5 rounded object-contain opacity-80 group-hover:opacity-100 transition-opacity" />
+            <span className="font-semibold text-neutral-200 tracking-tight group-hover:text-white transition-colors">
               Radiux
             </span>
-            <span className="opacity-50">/</span>
+            <span className="text-neutral-600 font-light">/</span>
             <span 
-              className="font-medium truncate max-w-[140px] group-hover:underline opacity-80"
-              style={{ color: 'var(--ide-text)' }}
+              className="font-normal text-neutral-400 group-hover:text-neutral-200 truncate max-w-[120px] transition-colors"
+              title={project.name}
             >
               {project.name}
             </span>
           </button>
 
-          <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded font-bold uppercase bg-sky-500/20 text-sky-400 border border-sky-500/30">
+          <span className="hidden lg:inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-mono text-neutral-500">
+            <GitBranch className="w-2.5 h-2.5" />
+            main
+          </span>
+
+          <span className="hidden sm:inline-flex text-[9px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider text-neutral-500 border border-white/[0.06]">
             {role}
           </span>
         </div>
 
-        {/* Center: Quick Open / Command Search Box */}
-        <div className="flex-1 max-w-md mx-4 hidden md:block">
+        {/* Center: Quick Open search */}
+        <div className="flex-1 max-w-sm mx-4 hidden md:block">
           <button
             onClick={() => setIsQuickOpen(true)}
-            className="w-full flex items-center justify-between px-3 py-1 rounded-md text-xs border transition-all hover:border-sky-500"
-            style={{
-              backgroundColor: 'var(--ide-input-bg)',
-              borderColor: 'var(--ide-border)',
-              color: 'var(--ide-text-muted)',
-            }}
+            className="w-full flex items-center justify-between px-2.5 py-1 rounded text-xs border border-white/[0.07] hover:border-white/[0.14] bg-white/[0.03] hover:bg-white/[0.05] transition-all group cursor-pointer"
+            style={{ color: 'var(--ide-text-muted)' }}
           >
-            <div className="flex items-center gap-2">
-              <Search className="w-3.5 h-3.5 opacity-70" />
-              <span>Search files ({project.name})</span>
+            <div className="flex items-center gap-1.5">
+              <Search className="w-3 h-3 text-neutral-600 group-hover:text-neutral-400 transition-colors" />
+              <span className="truncate text-neutral-500 group-hover:text-neutral-300 transition-colors">Go to file...</span>
             </div>
-            <kbd 
-              className="px-1.5 py-0.2 rounded text-[10px] border font-mono"
-              style={{
-                backgroundColor: 'var(--ide-card-bg)',
-                borderColor: 'var(--ide-border)',
-                color: 'var(--ide-text-muted)',
-              }}
-            >
+            <kbd className="px-1 py-0.5 rounded text-[10px] font-mono border border-white/[0.07] text-neutral-600">
               Ctrl+P
             </kbd>
           </button>
         </div>
 
         {/* Right Tools & Presence */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {/* Peer Presence indicator */}
           <ProjectPresence
             projectId={projectId}
@@ -1661,40 +1669,46 @@ export function Workspace({ projectId }: WorkspaceProps) {
             }}
           />
 
-          {/* GitHub Sync Button */}
+          {/* GitHub Sync */}
           <button
             onClick={() => setIsGitHubOpen(true)}
-            className="flex items-center gap-1 px-2 py-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-            style={{ color: 'var(--ide-text)' }}
+            className="p-1.5 rounded hover:bg-white/[0.07] text-neutral-500 hover:text-neutral-200 transition-colors"
             title="GitHub Integration"
           >
             <Github className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline text-[11px]">GitHub</span>
           </button>
 
-          {/* Export Project ZIP */}
+          {/* Export */}
           <button
             onClick={handleExportProject}
-            className="p-1.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-            style={{ color: 'var(--ide-text)' }}
+            className="p-1.5 rounded hover:bg-white/[0.07] text-neutral-500 hover:text-neutral-200 transition-colors"
             title="Export Project ZIP"
           >
             <Download className="w-3.5 h-3.5" />
           </button>
 
+          {/* Separator */}
+          <span className="w-px h-4 bg-white/[0.08] mx-0.5" />
+
           {/* Invite Teammates */}
           <button
             onClick={() => setIsInviteOpen(true)}
-            className="flex items-center gap-1 px-2 py-1 rounded font-medium text-white transition-colors"
-            style={{ backgroundColor: 'var(--ide-accent)' }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium text-neutral-300 hover:text-white border border-white/[0.1] hover:border-white/[0.2] hover:bg-white/[0.07] transition-all active:scale-[0.98]"
           >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline text-[11px]">Invite</span>
+            <UserPlus className="w-3 h-3" />
+            <span className="hidden sm:inline">Invite</span>
           </button>
 
           {/* User Account Menu */}
           <UserMenu 
-            onOpenProfileModal={() => setIsProfileModalOpen(true)}
+            onOpenProfileModal={(tab) => {
+              setProfileModalTab(tab || 'profile');
+              setIsProfileModalOpen(true);
+            }}
+            onOpenPartnersModal={() => {
+              setProfileModalTab('partners');
+              setIsProfileModalOpen(true);
+            }}
             onOpenSettingsModal={() => setIsSettingsOpen(true)}
             onOpenShortcutsModal={() => setIsShortcutsOpen(true)}
             onOpenDiscoveryModal={() => setIsDiscoveryOpen(true)}
@@ -1718,6 +1732,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenNotifications={() => setIsNotificationsOpen(prev => !prev)}
+          onOpenIntegrations={() => setIsIntegrationsOpen(true)}
+          onOpenReviews={() => setIsReviewsOpen(true)}
           userAvatar={user?.avatar_url}
           userName={user?.full_name || 'User'}
         />
@@ -1879,6 +1895,35 @@ export function Workspace({ projectId }: WorkspaceProps) {
                     onToggleMute={toggleMute}
                   />
                 </div>
+              </div>
+            )}
+
+            {activeActivityView === 'extensions' && (
+              <div className="flex flex-col h-full overflow-hidden">
+                <ExtensionsPanel />
+              </div>
+            )}
+
+            {activeActivityView === 'comments' && (
+              <div className="flex flex-col h-full overflow-hidden">
+                <InlineCommentsOverlay
+                  projectId={projectId}
+                  activeFilePath={activeFile?.name || null}
+                  currentUser={{
+                    id: user?.id || 'guest',
+                    name: user?.full_name || 'Developer',
+                    avatar: user?.avatar_url,
+                    email: user?.email,
+                  }}
+                  onNavigateToLine={(line) => {
+                    if (activeFile) {
+                      handleNavigateToLocation(activeFile.name, line);
+                    }
+                  }}
+                  onOpenFile={(filePath, line) => {
+                    handleNavigateToLocation(filePath, line);
+                  }}
+                />
               </div>
             )}
           </div>
@@ -2138,6 +2183,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onTabChange={setActiveDockTab}
                 onNavigateToFile={handleNavigateToLocation}
                 theme={settings.theme}
+                onMoveToSidebar={(tab) => {
+                  setIsSidebarOpen(true);
+                  setActiveActivityView(tab);
+                  setActiveDockTab('terminal');
+                }}
               />
             )}
           </main>
@@ -2181,6 +2231,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
               onTabChange={setActiveDockTab}
               onNavigateToFile={handleNavigateToLocation}
               theme={settings.theme}
+              onMoveToSidebar={(tab) => {
+                setIsSidebarOpen(true);
+                setActiveActivityView(tab);
+                setActiveDockTab('terminal');
+              }}
             />
           )}
 
@@ -2223,6 +2278,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
               onTabChange={setActiveDockTab}
               onNavigateToFile={handleNavigateToLocation}
               theme={settings.theme}
+              onMoveToSidebar={(tab) => {
+                setIsSidebarOpen(true);
+                setActiveActivityView(tab);
+                setActiveDockTab('terminal');
+              }}
             />
           )}
         </div>
@@ -2321,10 +2381,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
           if (user) DataService.clearAllNotifications(user.id);
           setNotifications([]);
         }}
-        onAcceptPartnerRequest={async (reqId) => {
-          await DataService.respondToPartnerRequest(reqId, true);
+        onAcceptPartnerRequest={async (reqId, notifId) => {
+          await DataService.respondToPartnerRequest(reqId, true, notifId);
           soundManager.playSuccess();
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId && n.id !== notifId));
           showToast({
             type: 'system',
             title: 'Partner Accepted',
@@ -2335,9 +2395,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
             setMembers(m);
           } catch (e) {}
         }}
-        onIgnorePartnerRequest={async (reqId) => {
-          await DataService.respondToPartnerRequest(reqId, false);
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
+        onDeclinePartnerRequest={async (reqId, notifId) => {
+          await DataService.respondToPartnerRequest(reqId, false, notifId);
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId && n.id !== notifId));
+        }}
+        onIgnorePartnerRequest={async (reqId, notifId) => {
+          await DataService.respondToPartnerRequest(reqId, false, notifId);
+          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId && n.id !== notifId));
         }}
         onOpenProject={(pid) => {
           setIsNotificationsOpen(false);
@@ -2447,6 +2511,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
       {user && (
         <UserProfileModal
           isOpen={isProfileModalOpen}
+          initialTab={profileModalTab}
           onClose={() => setIsProfileModalOpen(false)}
           currentUser={user}
           settings={settings}
@@ -2482,6 +2547,30 @@ export function Workspace({ projectId }: WorkspaceProps) {
       <KeyboardShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      <ReviewRequestsModal
+        isOpen={isReviewsOpen}
+        onClose={() => setIsReviewsOpen(false)}
+        projectId={projectId}
+        currentUser={{
+          id: user?.id || 'guest',
+          name: user?.full_name || 'Developer',
+          avatar: user?.avatar_url,
+          email: user?.email,
+        }}
+        availableCollaborators={members.map((m) => ({
+          id: m.user_id,
+          name: m.profile?.full_name || 'Collaborator',
+          avatar: m.profile?.avatar_url,
+          email: m.profile?.email,
+        }))}
+        currentBranch={currentGitBranch}
+      />
+
+      <IntegrationsModal
+        isOpen={isIntegrationsOpen}
+        onClose={() => setIsIntegrationsOpen(false)}
       />
     </div>
   );

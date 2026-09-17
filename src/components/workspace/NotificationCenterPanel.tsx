@@ -359,13 +359,21 @@ export function NotificationCenterPanel({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (onDeclinePartnerRequest) onDeclinePartnerRequest(n.partnerRequestId!, n.id);
+                                }}
+                                className="px-2.5 py-1 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded text-[11px] font-medium transition-colors flex items-center gap-1"
+                              >
+                                <X className="w-3 h-3" />
+                                <span>Reject</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   if (onIgnorePartnerRequest) {
                                     onIgnorePartnerRequest(n.partnerRequestId!, n.id);
-                                  } else if (onDeclinePartnerRequest) {
-                                    onDeclinePartnerRequest(n.partnerRequestId!, n.id);
                                   }
                                 }}
-                                className="px-2.5 py-1 rounded text-[11px] border transition-colors hover:bg-white/10 text-neutral-300"
+                                className="px-2.5 py-1 rounded text-[11px] border transition-colors hover:bg-white/10 text-neutral-400"
                                 style={{
                                   backgroundColor: 'var(--ide-input-bg)',
                                   borderColor: 'var(--ide-border)',

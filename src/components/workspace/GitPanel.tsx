@@ -32,7 +32,6 @@ import { DataService } from '@/lib/data-service';
 import { GitStatus, GitCommit, GitFileChange } from '@/lib/types';
 import { DiffViewerModal } from './DiffViewerModal';
 import { GitHubModal } from './GitHubModal';
-import { DeploymentPanel } from './DeploymentPanel';
 
 interface GitPanelProps {
   projectId: string;
@@ -65,7 +64,7 @@ export function GitPanel({
   const [commitMessage, setCommitMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'changes' | 'history' | 'branches' | 'deploy'>('changes');
+  const [activeSubTab, setActiveSubTab] = useState<'changes' | 'history' | 'branches'>('changes');
   
   // Modals state
   const [selectedDiff, setSelectedDiff] = useState<{ file: string; diff: string; staged: boolean } | null>(null);
@@ -584,9 +583,9 @@ export function GitPanel({
           </div>
         </div>
 
-        {/* Row 2: Subtabs: Changes, History, Branches, Deploy - takes 100% width and scales proportionally */}
+        {/* Row 2: Subtabs: Changes, History, Branches */}
         <div 
-          className="grid grid-cols-4 gap-1 p-0.5 rounded-lg border text-xs w-full"
+          className="grid grid-cols-3 gap-1 p-0.5 rounded-lg border text-xs w-full"
           style={{
             backgroundColor: 'var(--ide-card-bg)',
             borderColor: 'var(--ide-border)',
@@ -647,21 +646,6 @@ export function GitPanel({
             title="Branches"
           >
             <span className="truncate">Branches</span>
-          </button>
-          <button
-            onClick={() => setActiveSubTab('deploy')}
-            className={`px-1 py-1 rounded-md transition-colors font-medium text-center truncate flex items-center justify-center gap-1 min-w-0 ${
-              activeSubTab === 'deploy'
-                ? 'bg-sky-600 text-white shadow-sm'
-                : 'hover:opacity-80'
-            }`}
-            style={{
-              color: activeSubTab === 'deploy' ? '#ffffff' : 'var(--ide-text-muted)',
-            }}
-            title="Deploy"
-          >
-            <Cloud className="w-3 h-3 flex-shrink-0" />
-            <span className="truncate">Deploy</span>
           </button>
         </div>
       </div>
@@ -1240,17 +1224,6 @@ export function GitPanel({
           </div>
         )}
 
-        {/* Subtab 4: Deployment Controls */}
-        {activeSubTab === 'deploy' && (
-          <div className="flex-1 overflow-y-auto">
-            <DeploymentPanel
-              projectId={projectId}
-              projectName={projectName}
-              onOpenInBottomPanel={onOpenInBottomPanel}
-              isBottomPanel={isBottomPanel}
-            />
-          </div>
-        )}
       </div>
 
       {/* Diff Viewer Modal */}

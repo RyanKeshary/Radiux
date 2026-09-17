@@ -16,7 +16,6 @@ import {
   Palette, 
   Lock, 
   Github, 
-  Rocket, 
   Cpu, 
   ExternalLink,
   Volume2,
@@ -27,7 +26,9 @@ import {
   Sparkles,
   CheckCircle2,
   AlertCircle,
-  FolderGit2
+  FolderGit2,
+  Blocks,
+  Share2
 } from 'lucide-react';
 import { ThemeId, THEMES, applyThemeVariables } from '@/lib/themes';
 import { useAuth } from '@/context/AuthContext';
@@ -35,6 +36,8 @@ import { DataService } from '@/lib/data-service';
 import { UserProfile, CodingPartner } from '@/lib/types';
 import { soundManager } from '@/lib/sound';
 import { CommandRegistry, CommandItem } from '@/lib/commands';
+import { ExtensionsPanel } from './ExtensionsPanel';
+import { IntegrationManager } from '@/lib/integrations/integration-manager';
 
 export interface EditorSettings {
   theme: ThemeId | 'vs-dark' | 'vs' | 'hc-black';
@@ -59,7 +62,8 @@ export type SettingsSection =
   | 'appearance'
   | 'privacy'
   | 'github'
-  | 'deployment'
+  | 'extensions'
+  | 'integrations'
   | 'advanced';
 
 interface EditorSettingsModalProps {
@@ -246,9 +250,10 @@ export function EditorSettingsModal({
     { id: 'shortcuts', label: '6. Keyboard Shortcuts', icon: <Keyboard className="w-4 h-4 text-purple-400" /> },
     { id: 'appearance', label: '7. Appearance', icon: <Palette className="w-4 h-4 text-pink-400" /> },
     { id: 'privacy', label: '8. Privacy', icon: <Lock className="w-4 h-4 text-teal-400" /> },
-    { id: 'github', label: '9. GitHub Integration', icon: <Github className="w-4 h-4 text-white" /> },
-    { id: 'deployment', label: '10. Deployment', icon: <Rocket className="w-4 h-4 text-orange-400" /> },
-    { id: 'advanced', label: '11. Advanced', icon: <Cpu className="w-4 h-4 text-rose-400" /> },
+    { id: 'github', label: '9. GitHub / Source Control', icon: <Github className="w-4 h-4 text-white" /> },
+    { id: 'extensions', label: '10. Extensions', icon: <Blocks className="w-4 h-4 text-emerald-400" /> },
+    { id: 'integrations', label: '11. Integrations', icon: <Share2 className="w-4 h-4 text-violet-400" /> },
+    { id: 'advanced', label: '12. Advanced', icon: <Cpu className="w-4 h-4 text-rose-400" /> },
   ];
 
   return (
@@ -991,50 +996,51 @@ export function EditorSettingsModal({
               </div>
             )}
 
-            {/* 10. Deployment */}
-            {activeSection === 'deployment' && (
+            {/* 10. Extensions */}
+            {activeSection === 'extensions' && (
+              <div className="space-y-4 max-w-xl h-full flex flex-col">
+                <div>
+                  <h3 className="text-sm font-semibold mb-1">Installed Extensions & Plugins</h3>
+                  <p className="text-[11px] opacity-70">
+                    Manage sandboxed extensions, capabilities, and keybindings.
+                  </p>
+                </div>
+                <div className="h-[400px] border rounded-lg overflow-hidden" style={{ borderColor: 'var(--ide-border)' }}>
+                  <ExtensionsPanel isCompact />
+                </div>
+              </div>
+            )}
+
+            {/* 11. Integrations */}
+            {activeSection === 'integrations' && (
               <div className="space-y-5 max-w-xl">
                 <div>
-                  <h3 className="text-sm font-semibold mb-1">Production Deployment & Hosting</h3>
+                  <h3 className="text-sm font-semibold mb-1">Platform Integrations</h3>
                   <p className="text-[11px] opacity-70">
-                    Deploy your fullstack collaborative IDE to Vercel and Render.
+                    Connect external source control, communication, and project management tools.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--ide-border)' }}>
-                    <div className="flex items-center gap-2 font-bold text-xs">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                      <span>Vercel Frontend</span>
-                    </div>
-                    <p className="text-[11px] opacity-70">Next.js UI & SSR Engine</p>
-                    <a
-                      href="https://radiux.vercel.app"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
+                  {IntegrationManager.getIntegrations().slice(0, 6).map((item) => (
+                    <div 
+                      key={item.provider}
+                      className="p-3.5 rounded-lg border space-y-1.5"
+                      style={{ borderColor: 'var(--ide-border)', backgroundColor: 'var(--ide-card-bg)' }}
                     >
-                      <span>radiux.vercel.app</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-
-                  <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--ide-border)' }}>
-                    <div className="flex items-center gap-2 font-bold text-xs">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                      <span>Render Backend</span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs text-neutral-200">{item.name}</span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                          item.status === 'connected' 
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-white/5 text-neutral-400 border border-white/10'
+                        }`}>
+                          {item.status === 'connected' ? 'Connected' : 'Disconnected'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] opacity-70 line-clamp-2">{item.description}</p>
                     </div>
-                    <p className="text-[11px] opacity-70">Node.js, WebSocket & PTY</p>
-                    <a
-                      href="https://codecollab-backend-isjt.onrender.com/health"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
-                    >
-                      <span>radiux-backend</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
+                  ))}
                 </div>
               </div>
             )}

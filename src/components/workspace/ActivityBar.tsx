@@ -12,10 +12,14 @@ import {
   User,
   Bell,
   MessageSquare,
-  Mic
+  Mic,
+  Blocks,
+  FileCode2,
+  Share2,
+  GitPullRequest
 } from 'lucide-react';
 
-export type ActivityView = 'explorer' | 'search' | 'git' | 'chat' | 'voice' | 'preview' | 'collaborators';
+export type ActivityView = 'explorer' | 'search' | 'git' | 'chat' | 'voice' | 'preview' | 'collaborators' | 'extensions' | 'comments';
 
 interface ActivityBarProps {
   activeView: ActivityView | null;
@@ -29,6 +33,8 @@ interface ActivityBarProps {
   onOpenShortcuts: () => void;
   onOpenProfile: () => void;
   onOpenNotifications: () => void;
+  onOpenIntegrations?: () => void;
+  onOpenReviews?: () => void;
   userAvatar?: string;
   userName?: string;
 }
@@ -45,6 +51,8 @@ export function ActivityBar({
   onOpenShortcuts,
   onOpenProfile,
   onOpenNotifications,
+  onOpenIntegrations,
+  onOpenReviews,
   userAvatar,
   userName = 'User',
 }: ActivityBarProps) {
@@ -69,6 +77,12 @@ export function ActivityBar({
       badge: gitChangedCount > 0 ? gitChangedCount : undefined,
     },
     {
+      id: 'comments',
+      label: 'Code Comments & Reviews',
+      icon: <FileCode2 className="w-5 h-5" />,
+      shortcut: 'Ctrl+Shift+M',
+    },
+    {
       id: 'chat',
       label: 'Project Chat',
       icon: <MessageSquare className="w-5 h-5" />,
@@ -88,6 +102,12 @@ export function ActivityBar({
       icon: <Users className="w-5 h-5" />,
       shortcut: 'Ctrl+Shift+C',
       badge: collaboratorCount > 1 ? collaboratorCount : undefined,
+    },
+    {
+      id: 'extensions',
+      label: 'Extensions & Plugins',
+      icon: <Blocks className="w-5 h-5" />,
+      shortcut: 'Ctrl+Shift+X',
     },
   ];
 
@@ -173,6 +193,30 @@ export function ActivityBar({
         >
           <Keyboard className="w-5 h-5" />
         </button>
+
+        {/* Review Requests */}
+        {onOpenReviews && (
+          <button
+            onClick={onOpenReviews}
+            className="w-10 h-10 flex items-center justify-center rounded opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-all"
+            title="Peer Code Review Requests"
+            aria-label="Code Reviews"
+          >
+            <GitPullRequest className="w-5 h-5 text-sky-400" />
+          </button>
+        )}
+
+        {/* Platform Integrations */}
+        {onOpenIntegrations && (
+          <button
+            onClick={onOpenIntegrations}
+            className="w-10 h-10 flex items-center justify-center rounded opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-all"
+            title="Integrations (GitHub, GitLab, Slack, Linear...)"
+            aria-label="Integrations"
+          >
+            <Share2 className="w-5 h-5 text-violet-400" />
+          </button>
+        )}
 
         {/* IDE Preferences & Settings */}
         <button

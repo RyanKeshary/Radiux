@@ -36,7 +36,8 @@ import {
   Users,
   Settings,
   User,
-  Sparkles
+  Sparkles,
+  Globe
 } from 'lucide-react';
 import { NotificationCenterPanel } from '@/components/workspace/NotificationCenterPanel';
 import { UserProfileModal } from '@/components/workspace/UserProfileModal';
@@ -55,6 +56,7 @@ export default function DashboardPage() {
   const [exportingWorkspace, setExportingWorkspace] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileModalTab, setProfileModalTab] = useState<'profile' | 'preferences' | 'partners' | 'account'>('profile');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCollaboratorsOpen, setIsCollaboratorsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -153,13 +155,14 @@ export default function DashboardPage() {
         const notifs = await DataService.getNotifications(user.id);
         setNotifications(notifs.map(n => ({
           id: n.id,
-          type: n.type,
+          type: n.type as any,
           title: n.title,
           message: n.message,
           read: n.read,
+          actionStatus: n.action_status,
           createdAt: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          projectId: n.data?.project_id,
-          partnerRequestId: n.data?.partner_request_id,
+          projectId: n.project_id || n.data?.project_id,
+          partnerRequestId: n.partner_request_id || n.data?.partner_request_id,
         })));
       } catch (e) {}
 
@@ -370,7 +373,14 @@ export default function DashboardPage() {
 
           <UserMenu 
             onViewPublicProfile={() => router.push('/profile/' + (user?.username || user?.id))}
-            onOpenProfileModal={() => setIsProfileModalOpen(true)}
+            onOpenProfileModal={(tab) => {
+              setProfileModalTab(tab || 'profile');
+              setIsProfileModalOpen(true);
+            }}
+            onOpenPartnersModal={() => {
+              setProfileModalTab('partners');
+              setIsProfileModalOpen(true);
+            }}
             onOpenSettingsModal={() => setIsSettingsOpen(true)}
             onOpenDiscoveryModal={() => setIsCollaboratorsOpen(true)}
           />
@@ -764,6 +774,14 @@ export default function DashboardPage() {
                             )}
 
                             <Link
+                              href={`/project/${project.id}/public`}
+                              className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
+                              title="Public Showcase Page"
+                            >
+                              <Globe className="w-3.5 h-3.5" />
+                            </Link>
+
+                            <Link
                               href={`/project/${project.id}`}
                               className="px-2.5 py-1 rounded bg-sky-600/10 text-sky-400 hover:bg-sky-600 hover:text-white border border-sky-500/20 font-medium text-[11px] transition-all flex items-center gap-1"
                             >
@@ -885,6 +903,7 @@ export default function DashboardPage() {
 
           <UserProfileModal
             isOpen={isProfileModalOpen}
+            initialTab={profileModalTab}
             onClose={() => setIsProfileModalOpen(false)}
             currentUser={user}
             settings={editorSettings}

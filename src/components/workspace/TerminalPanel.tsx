@@ -1,11 +1,46 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { config } from '@/lib/config';
-import { Square, RotateCcw, Trash2, Terminal as TerminalIcon, Copy, Clipboard, RefreshCw } from 'lucide-react';
+import { 
+  Square, 
+  RotateCcw, 
+  Trash2, 
+  Terminal as TerminalIcon, 
+  Clipboard, 
+  Plus, 
+  ChevronDown, 
+  X, 
+  Play, 
+  Columns, 
+  Maximize2, 
+  Minimize2,
+  Check,
+  Edit2
+} from 'lucide-react';
+
+interface TerminalProfile {
+  id: string;
+  name: string;
+  executable: string;
+  args: string[];
+  icon?: string;
+  platform: string;
+  available: boolean;
+  isDefault: boolean;
+}
+
+interface TerminalSessionState {
+  id: string;
+  title: string;
+  profileId: string;
+  status: 'starting' | 'running' | 'exited' | 'stopping';
+  pid?: number | null;
+  detectedPorts?: number[];
+}
 
 interface TerminalPanelProps {
   projectId: string;
@@ -75,16 +110,45 @@ const TERMINAL_THEMES: Record<string, any> = {
 
 export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme = 'dark' }: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Multi-session state
+  const [sessions, setSessions] = useState<TerminalSessionState[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+  const [availableProfiles, setAvailableProfiles] = useState<TerminalProfile[]>([]);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  
+  // Connection and process state for active session
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
+  const [detectedPorts, setDetectedPorts] = useState<number[]>([]);
+  const [splitView, setSplitView] = useState(false);
+  const [secondarySessionId, setSecondarySessionId] = useState<string | null>(null);
+
+  // References to keep active xterm & ws instances alive across session switching
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [processPid, setProcessPid] = useState<number | null>(null);
-  const [detectedPorts, setDetectedPorts] = useState<number[]>([]);
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
-  const [reconnectTrigger, setReconnectTrigger] = useState(0);
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<any>(null);
+
+  // Fetch host terminal profiles on mount
+  useEffect(() => {
+    let isMounted = true;
+    const fetchProfiles = async () => {
+      try {
+        const res = await fetch(config.buildApiUrl('/api/terminal/profiles'));
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data.profiles)) {
+            setAvailableProfiles(data.profiles);
+          }
+        }
+      } catch (e) {}
+    };
+    fetchProfiles();
+    return () => { isMounted = false; };
+  }, []);
 
   // Update theme dynamically
   useEffect(() => {
@@ -97,15 +161,26 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
     }
   }, [theme]);
 
-  useEffect(() => {
+  // Connect or switch pseudo-terminal session
+  const connectToSession = useCallback((sessionId: string, profileId?: string) => {
     if (!containerRef.current) return;
 
-    let isMounted = true;
-    let ws: WebSocket | null = null;
+    // Clean up previous socket if any
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
+    // Clean up previous xterm instance if any
+    if (xtermRef.current) {
+      xtermRef.current.dispose();
+      xtermRef.current = null;
+    }
+
+    setConnectionStatus('connecting');
 
     const termTheme = TERMINAL_THEMES[theme] || TERMINAL_THEMES.dark;
-
-    // 1. Initialize xterm.js with full ANSI colors and cursor settings
     const term = new XTerm({
       theme: {
         ...termTheme,
@@ -122,16 +197,15 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
       fontSize: 13,
       lineHeight: 1.25,
       cursorBlink: true,
-      scrollback: 5000,
-      convertEol: false, // node-pty handles CRLF properly
+      scrollback: 10000,
+      convertEol: false,
       allowProposedApi: true,
     });
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(containerRef.current);
-    
-    // Slight delay before first fit to ensure DOM has rendered width/height
+
     setTimeout(() => {
       try {
         fitAddon.fit();
@@ -141,134 +215,175 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    term.writeln('\x1b[1;36m[Radiux Remote Terminal]\x1b[0m Connecting to workspace environment...');
-    setConnectionStatus('connecting');
+    term.writeln('\x1b[1;36m[Radiux IDE Terminal]\x1b[0m Initializing PTY process session...');
 
-    const sendResize = () => {
-      if (ws && ws.readyState === WebSocket.OPEN && term.cols && term.rows) {
+    const sendResize = (ws: WebSocket) => {
+      if (ws.readyState === WebSocket.OPEN && term.cols && term.rows) {
         ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
       }
     };
 
-    // 2. Connect to terminal WebSocket with auto-retry and container wake-up
-    const connectWs = () => {
-      if (!isMounted) return;
-      const wsUrl = config.buildWsUrl('/terminal', { projectId });
-      ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    const wsUrl = config.buildWsUrl('/terminal', {
+      projectId,
+      sessionId: sessionId || '',
+      profileId: profileId || '',
+      cols: String(term.cols || 80),
+      rows: String(term.rows || 24),
+    });
 
-      ws.onopen = () => {
-        retryCountRef.current = 0;
-        setConnectionStatus('connected');
-        term.writeln('\x1b[1;32m[Connected]\x1b[0m Workspace shell ready (\x1b[36mNode.js\x1b[0m + \x1b[33mPython 3.12\x1b[0m).');
-        term.writeln('\x1b[90mTip: To execute scripts, run \x1b[33mpython <filename>.py\x1b[90m or \x1b[36mnode <filename>.js\x1b[0m');
-        term.writeln('');
-        try {
-          fitAddon.fit();
-          sendResize();
-        } catch (e) {}
-      };
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
 
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === 'output') {
-            term.write(payload.data);
-          } else if (payload.type === 'status') {
-            setIsRunning(payload.running);
-            if (payload.pid) setProcessPid(payload.pid);
-            if (Array.isArray(payload.ports)) {
-              setDetectedPorts(payload.ports);
-              if (payload.ports.length > 0 && onPortDetected) {
-                onPortDetected(payload.ports[payload.ports.length - 1]);
-              }
-            }
-          } else if (payload.type === 'port_detected') {
-            setDetectedPorts((prev) => Array.from(new Set([...prev, payload.port])));
-            term.writeln(`\r\n\x1b[1;35m[Web Server Detected]\x1b[0m App listening on port \x1b[1m${payload.port}\x1b[0m (Opening Preview tab)\r\n`);
-            if (onPortDetected) onPortDetected(payload.port);
-          } else if (payload.type === 'exit') {
-            setIsRunning(false);
-            term.writeln(`\r\n\x1b[1;33m[Process Exited with code ${payload.code}]\x1b[0m`);
-          }
-        } catch (err) {
-          term.write(event.data);
-        }
-      };
-
-      ws.onerror = () => {
-        setConnectionStatus('error');
-        term.writeln('\r\n\x1b[1;31m[Connection Error]\x1b[0m Could not connect to remote terminal server.');
-        if (retryCountRef.current < 4) {
-          retryCountRef.current += 1;
-          const delay = retryCountRef.current * 2500;
-          term.writeln(`\x1b[1;33m[Auto-Reconnect]\x1b[0m Waking up backend environment... Retrying in ${delay / 1000}s (Attempt ${retryCountRef.current}/4)`);
-          config.wakeUpBackend();
-          clearTimeout(retryTimerRef.current);
-          retryTimerRef.current = setTimeout(() => {
-            if (isMounted) connectWs();
-          }, delay);
-        } else {
-          term.writeln('\x1b[90mTip: Click "Reconnect" above to wake up the terminal container.\x1b[0m');
-        }
-      };
+    ws.onopen = () => {
+      retryCountRef.current = 0;
+      setConnectionStatus('connected');
+      try {
+        fitAddon.fit();
+        sendResize(ws);
+      } catch (e) {}
     };
 
-    connectWs();
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'init') {
+          setActiveSessionId(payload.sessionId);
+          if (payload.availableProfiles) {
+            setAvailableProfiles(payload.availableProfiles);
+          }
+          if (Array.isArray(payload.sessions)) {
+            setSessions(payload.sessions);
+          } else {
+            setSessions((prev) => {
+              if (prev.some(s => s.id === payload.sessionId)) {
+                return prev.map(s => s.id === payload.sessionId ? { ...s, title: payload.title, profileId: payload.profileId } : s);
+              }
+              return [...prev, {
+                id: payload.sessionId,
+                title: payload.title || 'Terminal',
+                profileId: payload.profileId || 'default',
+                status: payload.running ? 'running' : 'exited',
+                pid: payload.pid,
+              }];
+            });
+          }
 
-    // User typing input to terminal (forwards keystrokes directly to PTY)
+          if (payload.history) {
+            term.write(payload.history);
+          }
+
+          if (Array.isArray(payload.ports)) {
+            setDetectedPorts(payload.ports);
+            if (payload.ports.length > 0 && onPortDetected) {
+              onPortDetected(payload.ports[payload.ports.length - 1]);
+            }
+          }
+        } else if (payload.type === 'output') {
+          if (payload.sessionId === sessionId || !payload.sessionId) {
+            term.write(payload.data);
+          }
+        } else if (payload.type === 'status') {
+          setSessions((prev) => prev.map(s => {
+            if (s.id === (payload.sessionId || sessionId)) {
+              return { ...s, status: payload.running ? 'running' : 'exited', pid: payload.pid };
+            }
+            return s;
+          }));
+        } else if (payload.type === 'port_detected') {
+          setDetectedPorts((prev) => Array.from(new Set([...prev, payload.port])));
+          term.writeln(`\r\n\x1b[1;35m[Server Detected]\x1b[0m Listening on port \x1b[1m${payload.port}\x1b[0m\r\n`);
+          if (onPortDetected) onPortDetected(payload.port);
+        } else if (payload.type === 'exit') {
+          setSessions((prev) => prev.map(s => {
+            if (s.id === (payload.sessionId || sessionId)) {
+              return { ...s, status: 'exited' };
+            }
+            return s;
+          }));
+          term.writeln(`\r\n\x1b[1;33m[Process Exited (code ${payload.code})]\x1b[0m`);
+        } else if (payload.type === 'session_renamed') {
+          setSessions((prev) => prev.map(s => s.id === payload.sessionId ? { ...s, title: payload.title } : s));
+        } else if (payload.type === 'session_closed') {
+          setSessions((prev) => prev.filter(s => s.id !== payload.sessionId));
+        }
+      } catch (err) {
+        term.write(event.data);
+      }
+    };
+
+    ws.onerror = () => {
+      setConnectionStatus('error');
+      term.writeln('\r\n\x1b[1;31m[Connection Error]\x1b[0m Could not connect to terminal daemon.');
+    };
+
+    ws.onclose = () => {
+      setConnectionStatus('error');
+      if (retryCountRef.current < 4) {
+        retryCountRef.current += 1;
+        const delay = Math.min(retryCountRef.current * 1500, 6000);
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = setTimeout(() => {
+          connectToSession(sessionId, profileId);
+        }, delay);
+      }
+    };
+
     term.onData((data) => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'input', data }));
       }
     });
 
-    // Handle Ctrl+C, Ctrl+V, right-click paste
+  }, [projectId, theme, onPortDetected]);
+
+  // Initial connection on mount
+  useEffect(() => {
+    connectToSession(activeSessionId);
+
+    const containerEl = containerRef.current;
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Allow browser Ctrl+V to paste into xterm
       if (e.ctrlKey && e.key.toLowerCase() === 'v') {
         navigator.clipboard.readText().then((text) => {
-          if (text && ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'input', data: text }));
+          if (text && wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
           }
         }).catch(() => {});
       }
     };
 
-    const containerEl = containerRef.current;
     if (containerEl) {
       containerEl.addEventListener('keydown', handleKeyDown);
     }
 
     const handleResize = () => {
       try {
-        fitAddon.fit();
-        sendResize();
+        fitAddonRef.current?.fit();
+        if (wsRef.current?.readyState === WebSocket.OPEN && xtermRef.current) {
+          wsRef.current.send(JSON.stringify({
+            type: 'resize',
+            cols: xtermRef.current.cols,
+            rows: xtermRef.current.rows,
+          }));
+        }
       } catch (e) {}
     };
 
     window.addEventListener('resize', handleResize);
 
-    // Watch container DOM node with ResizeObserver so maximize, dock resize, or tab switches immediately refit
-    // Double rAF ensures that fullscreen transitions fully paint before measuring dimensions
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined' && containerEl) {
       resizeObserver = new ResizeObserver(() => {
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            handleResize();
-          });
+          handleResize();
         });
       });
       resizeObserver.observe(containerEl);
-      // Also observe the parent so fullscreen/dock resizes are caught
       if (containerEl.parentElement) {
         resizeObserver.observe(containerEl.parentElement);
       }
     }
 
     return () => {
-      isMounted = false;
       clearTimeout(retryTimerRef.current);
       if (containerEl) {
         containerEl.removeEventListener('keydown', handleKeyDown);
@@ -277,10 +392,54 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
         resizeObserver.disconnect();
       }
       window.removeEventListener('resize', handleResize);
-      if (ws) ws.close();
-      term.dispose();
+      if (wsRef.current) wsRef.current.close();
+      if (xtermRef.current) xtermRef.current.dispose();
     };
-  }, [projectId, reconnectTrigger]);
+  }, [projectId]);
+
+  const handleCreateSession = (profileId?: string) => {
+    const newSessionId = `term_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    setIsProfileMenuOpen(false);
+    setActiveSessionId(newSessionId);
+    connectToSession(newSessionId, profileId);
+  };
+
+  const handleSwitchSession = (sid: string) => {
+    if (sid === activeSessionId) return;
+    setActiveSessionId(sid);
+    connectToSession(sid);
+  };
+
+  const handleCloseSession = (sid: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'kill' }));
+    }
+
+    fetch(config.buildApiUrl('/api/terminal/sessions', { projectId, sessionId: sid }), {
+      method: 'DELETE',
+    }).catch(() => {});
+
+    setSessions((prev) => {
+      const filtered = prev.filter(s => s.id !== sid);
+      if (sid === activeSessionId && filtered.length > 0) {
+        setActiveSessionId(filtered[0].id);
+        connectToSession(filtered[0].id);
+      } else if (filtered.length === 0) {
+        handleCreateSession();
+      }
+      return filtered;
+    });
+  };
+
+  const handleRenameSession = (sid: string, newTitle: string) => {
+    if (!newTitle.trim()) return;
+    setSessions((prev) => prev.map(s => s.id === sid ? { ...s, title: newTitle.trim() } : s));
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'rename', title: newTitle.trim() }));
+    }
+    setEditingSessionId(null);
+  };
 
   const handleKill = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -291,7 +450,7 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
   const handleRestart = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       xtermRef.current?.clear();
-      xtermRef.current?.writeln('\x1b[1;33m[Restarting Shell Session...]\x1b[0m');
+      xtermRef.current?.writeln('\x1b[1;33m[Restarting PTY Session...]\x1b[0m');
       wsRef.current.send(JSON.stringify({ type: 'restart' }));
     }
   };
@@ -309,6 +468,37 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
     } catch (e) {}
   };
 
+  const handleRunCommand = (cmd: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'input', data: `${cmd}\r` }));
+    } else {
+      xtermRef.current?.writeln(`\r\n\x1b[33m[Terminal] Executing command: "${cmd}"\x1b[0m`);
+      config.wakeUpBackend();
+      connectToSession(activeSessionId);
+    }
+  };
+
+  const getRunCommandForFile = () => {
+    if (!activeFileName) return null;
+    const lower = activeFileName.toLowerCase();
+    if (lower.endsWith('.py')) {
+      return { label: `Run Python (${activeFileName})`, cmd: `python "${activeFileName}"`, color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' };
+    }
+    if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) {
+      return { label: `Run Node (${activeFileName})`, cmd: `node "${activeFileName}"`, color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' };
+    }
+    if (lower.endsWith('.ts')) {
+      return { label: `Run TS (${activeFileName})`, cmd: `node "${activeFileName}"`, color: 'text-sky-400 border-sky-500/30 bg-sky-500/10' };
+    }
+    if (lower.endsWith('.sh')) {
+      return { label: `Run Bash (${activeFileName})`, cmd: `bash "${activeFileName}"`, color: 'text-neutral-300 border-neutral-700 bg-neutral-800' };
+    }
+    return null;
+  };
+
+  const activeRunAction = getRunCommandForFile();
+  const currentSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
+
   return (
     <div 
       className="flex flex-col h-full w-full overflow-hidden select-none"
@@ -317,140 +507,178 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
         color: 'var(--ide-text)',
       }}
     >
-      {/* Terminal Toolbar */}
+      {/* VS Code Style Multi-Session Terminal Tab Bar */}
       <div 
-        className="h-7 border-b px-3 flex items-center justify-between text-xs"
+        className="h-8 border-b px-2 flex items-center justify-between text-xs flex-shrink-0"
         style={{
           backgroundColor: 'var(--ide-dock-header)',
           borderColor: 'var(--ide-border)',
           color: 'var(--ide-text)',
         }}
       >
-        <div className="flex items-center gap-2">
-          <TerminalIcon className="w-3.5 h-3.5 text-sky-400" />
-          <span className="font-semibold" style={{ color: 'var(--ide-text)' }}>Terminal (node + python)</span>
-          {isRunning ? (
-            <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              RUNNING {processPid ? `(PID: ${processPid})` : ''}
-            </span>
-          ) : (
-            <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-700 text-neutral-300">
-              IDLE
-            </span>
-          )}
-          {connectionStatus === 'connecting' && (
-            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-              Connecting...
-            </span>
-          )}
-          {connectionStatus === 'error' && (
+        {/* Left: Terminal Tabs */}
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-[65%]">
+          {sessions.map((sess) => {
+            const isActive = sess.id === activeSessionId;
+            const isEditing = editingSessionId === sess.id;
+
+            return (
+              <div
+                key={sess.id}
+                onClick={() => handleSwitchSession(sess.id)}
+                onDoubleClick={() => {
+                  setEditingSessionId(sess.id);
+                  setEditingTitle(sess.title);
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded cursor-pointer transition-all text-[11px] group relative ${
+                  isActive 
+                    ? 'bg-neutral-800/90 text-white font-medium shadow-sm border border-neutral-700/60' 
+                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40'
+                }`}
+                title="Click to switch terminal | Double-click to rename"
+              >
+                <TerminalIcon className={`w-3 h-3 ${isActive ? 'text-sky-400' : 'text-neutral-500'}`} />
+
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editingTitle}
+                    autoFocus
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    onBlur={() => handleRenameSession(sess.id, editingTitle)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRenameSession(sess.id, editingTitle);
+                      if (e.key === 'Escape') setEditingSessionId(null);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-neutral-900 border border-sky-500 rounded px-1 py-0 text-white text-[11px] outline-none w-24"
+                  />
+                ) : (
+                  <span className="truncate max-w-[120px]">{sess.title}</span>
+                )}
+
+                {sess.status === 'running' ? (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Running" />
+                ) : (
+                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" title="Exited" />
+                )}
+
+                {sessions.length > 1 && (
+                  <button
+                    onClick={(e) => handleCloseSession(sess.id, e)}
+                    className="opacity-0 group-hover:opacity-100 hover:text-rose-400 rounded p-0.5 transition-opacity"
+                    title="Kill Terminal"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {/* New Terminal Dropdown Button */}
+          <div className="relative">
             <button
-              onClick={() => {
-                config.wakeUpBackend();
-                setReconnectTrigger((prev) => prev + 1);
-              }}
-              className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition-colors font-medium cursor-pointer"
-              title="Click to wake up terminal container & reconnect"
+              onClick={() => setIsProfileMenuOpen(prev => !prev)}
+              className="flex items-center gap-0.5 px-1.5 py-1 rounded text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              title="New Terminal Profile"
             >
-              <RotateCcw className="w-2.5 h-2.5" />
-              Reconnect
+              <Plus className="w-3.5 h-3.5" />
+              <ChevronDown className="w-2.5 h-2.5 opacity-60" />
             </button>
-          )}
+
+            {isProfileMenuOpen && (
+              <div 
+                className="absolute left-0 top-full mt-1 w-48 rounded-md shadow-2xl border py-1 z-50 animate-in fade-in-50 zoom-in-95 duration-100"
+                style={{
+                  backgroundColor: 'var(--ide-card-bg)',
+                  borderColor: 'var(--ide-border)',
+                }}
+              >
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">
+                  Select Shell Profile
+                </div>
+                {availableProfiles.length > 0 ? (
+                  availableProfiles.map((prof) => (
+                    <button
+                      key={prof.id}
+                      onClick={() => handleCreateSession(prof.id)}
+                      className="w-full text-left px-2.5 py-1.5 text-xs text-neutral-200 hover:bg-sky-500/20 hover:text-white flex items-center justify-between group transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <TerminalIcon className="w-3 h-3 text-sky-400 group-hover:scale-110 transition-transform" />
+                        <span>{prof.name}</span>
+                      </div>
+                      {prof.isDefault && (
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-neutral-800 text-neutral-400">Default</span>
+                      )}
+                    </button>
+                  ))
+                ) : (
+                  <button
+                    onClick={() => handleCreateSession()}
+                    className="w-full text-left px-2.5 py-1.5 text-xs text-neutral-200 hover:bg-sky-500/20 flex items-center gap-2"
+                  >
+                    <TerminalIcon className="w-3 h-3 text-sky-400" />
+                    <span>Default Shell</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* Right: Quick Action Controls */}
         <div className="flex items-center gap-1.5">
-          {/* Context-aware Run button based on active file */}
-          {activeFileName && activeFileName.endsWith('.py') ? (
+          {/* Active File Run button */}
+          {activeRunAction && (
             <button
-              onClick={() => {
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: 'input', data: `python "${activeFileName}"\r` }));
-                }
-              }}
-              title={`Run python "${activeFileName}"`}
-              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors text-[11px] font-mono font-medium border border-amber-500/30"
+              onClick={() => handleRunCommand(activeRunAction.cmd)}
+              title={activeRunAction.label}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium border transition-colors ${activeRunAction.color}`}
             >
-              <span>▶ python {activeFileName}</span>
+              <Play className="w-2.5 h-2.5 fill-current" />
+              <span className="hidden sm:inline">{activeRunAction.label}</span>
             </button>
-          ) : activeFileName && (activeFileName.endsWith('.js') || activeFileName.endsWith('.mjs')) ? (
-            <button
-              onClick={() => {
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: 'input', data: `node "${activeFileName}"\r` }));
-                }
-              }}
-              title={`Run node "${activeFileName}"`}
-              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 transition-colors text-[11px] font-mono font-medium border border-emerald-500/30"
-            >
-              <span>▶ node {activeFileName}</span>
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={() => {
-                  if (wsRef.current?.readyState === WebSocket.OPEN) {
-                    wsRef.current.send(JSON.stringify({ type: 'input', data: 'node index.js\r' }));
-                  }
-                }}
-                title="Run node index.js"
-                className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 transition-colors text-[11px] font-mono"
-              >
-                <span>▶ node index.js</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  if (wsRef.current?.readyState === WebSocket.OPEN) {
-                    wsRef.current.send(JSON.stringify({ type: 'input', data: 'python main.py\r' }));
-                  }
-                }}
-                title="Run python main.py"
-                className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors text-[11px] font-mono"
-              >
-                <span>▶ python main.py</span>
-              </button>
-            </>
           )}
 
           <button
             onClick={handlePaste}
             title="Paste Clipboard (Ctrl+V)"
-            className="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-[#333333] text-neutral-400 hover:text-white transition-colors text-[11px]"
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors text-[11px]"
           >
             <Clipboard className="w-3 h-3" />
-            <span className="hidden sm:inline">Paste</span>
+            <span className="hidden md:inline">Paste</span>
           </button>
 
           <button
             onClick={handleKill}
             title="Send SIGINT / Stop Running Process (Ctrl+C)"
-            className="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-rose-500/20 hover:text-rose-300 text-neutral-400 transition-colors text-[11px]"
+            className="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-rose-500/20 text-neutral-400 hover:text-rose-300 transition-colors text-[11px]"
           >
             <Square className="w-3 h-3" />
-            <span className="hidden sm:inline">Stop (Ctrl+C)</span>
+            <span className="hidden md:inline">Stop (Ctrl+C)</span>
           </button>
 
           <button
             onClick={handleRestart}
             title="Restart Terminal Session"
-            className="p-1 rounded hover:bg-[#333333] hover:text-white text-neutral-400 transition-colors"
+            className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
           >
             <RotateCcw className="w-3 h-3" />
           </button>
 
           <button
             onClick={handleClear}
-            title="Clear Terminal"
-            className="p-1 rounded hover:bg-[#333333] hover:text-white text-neutral-400 transition-colors"
+            title="Clear Terminal (Ctrl+L)"
+            className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
           >
             <Trash2 className="w-3 h-3" />
           </button>
         </div>
       </div>
 
-      {/* Terminal Viewport — must be position:relative with explicit 0 padding for xterm to measure correctly */}
+      {/* Terminal Viewport Container */}
       <div 
         ref={containerRef} 
         onContextMenu={(e) => {
