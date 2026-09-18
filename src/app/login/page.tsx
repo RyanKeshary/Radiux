@@ -1,16 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { LogIn, UserPlus, X, Loader2, Github, Mail, KeyRound, ArrowLeft } from 'lucide-react';
+import { Loader2, Github, Mail, KeyRound, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
-interface AuthModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  defaultMode?: 'signin' | 'signup';
-}
-
-// Google icon SVG (no lucide equivalent)
+// Google icon SVG
 function GoogleIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -24,9 +20,12 @@ function GoogleIcon({ className }: { className?: string }) {
 
 type AuthMode = 'signin' | 'signup' | 'reset';
 
-export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModalProps) {
-  const { signInWithPassword, signUpWithPassword, signInWithOAuth, resetPassword, isSupabase } = useAuth();
-  const [mode, setMode] = useState<AuthMode>(defaultMode);
+function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user, loading: authLoading, signInWithPassword, signUpWithPassword, signInWithOAuth, resetPassword, isSupabase } = useAuth();
+
+  const [mode, setMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -35,17 +34,22 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  React.useEffect(() => {
-    if (isOpen && typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const authErr = params.get('auth_error');
-      if (authErr) {
-        setError(decodeURIComponent(authErr));
-      }
-    }
-  }, [isOpen]);
+  const nextUrl = searchParams.get('next') || '/';
 
-  if (!isOpen) return null;
+  // Read any auth errors passed from callback or middleware
+  useEffect(() => {
+    const err = searchParams.get('auth_error');
+    if (err) {
+      setError(decodeURIComponent(err));
+    }
+  }, [searchParams]);
+
+  // If already authenticated, redirect to destination
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace(nextUrl);
+    }
+  }, [user, authLoading, router, nextUrl]);
 
   const clearState = () => {
     setError('');
@@ -70,17 +74,16 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
       if (mode === 'signin') {
         const { error: err } = await signInWithPassword(email.trim(), password);
         if (err) throw err;
-        onClose();
+        router.replace(nextUrl);
       } else if (mode === 'signup') {
         const { error: err } = await signUpWithPassword(email.trim(), password, fullName.trim());
         if (err) throw err;
-        // Check if email confirmation is needed
-        setSuccessMsg('Account created! Check your email to confirm your account, then sign in.');
+        setSuccessMsg('Account created! Please check your email to confirm your account, then sign in.');
         setMode('signin');
       } else if (mode === 'reset') {
         const { error: err } = await resetPassword(email.trim());
         if (err) throw err;
-        setSuccessMsg('Password reset email sent! Check your inbox.');
+        setSuccessMsg('Password reset instructions have been sent to your email.');
         setMode('signin');
       }
     } catch (err: any) {
@@ -100,52 +103,67 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
     try {
       const { error: err } = await signInWithOAuth(provider);
       if (err) throw err;
-      // Page will redirect to OAuth provider — no need to close modal
     } catch (err: any) {
       setError(err.message || `Failed to sign in with ${provider}`);
       setOauthLoading(null);
     }
   };
 
-  const modeTitle = mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Reset Password';
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#18181b] text-neutral-400">
+        <Loader2 className="w-8 h-8 animate-spin text-sky-500" />
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="w-full max-w-sm bg-[#252526] border border-[#3c3c3c] rounded-xl shadow-2xl p-6 text-[#cccccc]">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#3c3c3c]">
-          <div className="flex items-center gap-2.5 text-white font-semibold text-base">
-            {mode === 'signin' && <><img src="/logo.png" alt="Radiux" className="w-5 h-5 rounded object-contain" /><span>Sign In to Radiux</span></>}
-            {mode === 'signup' && <><img src="/logo.png" alt="Radiux" className="w-5 h-5 rounded object-contain" /><span>Create an Account</span></>}
-            {mode === 'reset' && <><KeyRound className="w-5 h-5 text-amber-400" /><span>Reset Password</span></>}
-          </div>
-          <button onClick={onClose} className="p-1 rounded text-neutral-400 hover:text-white hover:bg-[#333333]">
-            <X className="w-4 h-4" />
-          </button>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#18181b] text-[#cccccc] p-4 select-none">
+      {/* Background radial glow */}
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_40%,rgba(14,165,233,0.06),transparent_60%)]" />
+
+      <div className="w-full max-w-sm bg-[#252526] border border-[#3c3c3c] rounded-2xl shadow-2xl p-7 relative z-10">
+        {/* Header Branding */}
+        <div className="flex flex-col items-center text-center pb-4 mb-5 border-b border-[#3c3c3c]">
+          <Link href="/" className="inline-block hover:opacity-90 transition-opacity">
+            <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-lg ring-1 ring-white/10 bg-black/40 mb-3 mx-auto">
+              <img src="/logo.png" alt="Radiux" className="w-12 h-12 rounded-xl object-contain" />
+            </div>
+          </Link>
+          <h1 className="text-lg font-bold text-white tracking-tight">
+            {mode === 'signin' && 'Welcome to Radiux'}
+            {mode === 'signup' && 'Join Radiux Cloud IDE'}
+            {mode === 'reset' && 'Reset your Password'}
+          </h1>
+          <p className="text-xs text-neutral-400 mt-1">
+            {mode === 'signin' && 'Sign in to access your projects and workspaces'}
+            {mode === 'signup' && 'Create an account to start collaborating'}
+            {mode === 'reset' && 'Enter your email to receive recovery instructions'}
+          </p>
         </div>
 
         {/* Success message */}
         {successMsg && (
-          <div className="mb-4 p-2.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+          <div className="mb-4 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
             {successMsg}
           </div>
         )}
 
         {/* Error message */}
         {error && (
-          <div className="mb-4 p-2.5 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+          <div className="mb-4 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
             {error}
           </div>
         )}
 
         {/* OAuth Buttons (sign in / sign up only) */}
         {mode !== 'reset' && isSupabase && (
-          <div className="flex flex-col gap-2 mb-4">
+          <div className="flex flex-col gap-2.5 mb-5">
             <button
               type="button"
               onClick={() => handleOAuth('google')}
               disabled={oauthLoading !== null || loading}
-              className="w-full flex items-center justify-center gap-2.5 py-2 rounded-lg bg-white hover:bg-neutral-100 text-neutral-900 text-sm font-medium transition-colors disabled:opacity-50 shadow-sm"
+              className="w-full flex items-center justify-center gap-2.5 py-2.5 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 text-sm font-semibold transition-all disabled:opacity-50 shadow-sm active:scale-[0.99]"
             >
               {oauthLoading === 'google' ? (
                 <Loader2 className="w-4 h-4 animate-spin text-neutral-600" />
@@ -159,7 +177,7 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
               type="button"
               onClick={() => handleOAuth('github')}
               disabled={oauthLoading !== null || loading}
-              className="w-full flex items-center justify-center gap-2.5 py-2 rounded-lg bg-[#24292e] hover:bg-[#2f363d] text-white text-sm font-medium transition-colors disabled:opacity-50 shadow-sm border border-[#3c3c3c]"
+              className="w-full flex items-center justify-center gap-2.5 py-2.5 rounded-xl bg-[#24292e] hover:bg-[#2f363d] text-white text-sm font-semibold transition-all disabled:opacity-50 shadow-sm border border-[#3c3c3c] active:scale-[0.99]"
             >
               {oauthLoading === 'github' ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -171,7 +189,7 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
 
             <div className="flex items-center gap-3 my-1">
               <div className="flex-1 h-px bg-[#3c3c3c]" />
-              <span className="text-xs text-neutral-500">or</span>
+              <span className="text-[11px] text-neutral-500 font-medium">or continue with email</span>
               <div className="flex-1 h-px bg-[#3c3c3c]" />
             </div>
           </div>
@@ -184,11 +202,11 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
               <label className="block text-xs font-medium text-neutral-300 mb-1">Full Name</label>
               <input
                 type="text"
-                placeholder="e.g. Alex Rivera"
+                placeholder="Alex Rivera"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
-                className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500 transition-colors"
+                className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500 transition-colors"
               />
             </div>
           )}
@@ -201,7 +219,7 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500 transition-colors"
+              className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500 transition-colors"
             />
           </div>
 
@@ -226,7 +244,7 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={mode === 'signup' ? 6 : undefined}
-                className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500 transition-colors"
+                className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500 transition-colors"
               />
             </div>
           )}
@@ -234,26 +252,26 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
           <button
             type="submit"
             disabled={loading || oauthLoading !== null}
-            className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-md"
+            className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-md active:scale-[0.99]"
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             <Mail className="w-4 h-4" />
             <span>
-              {mode === 'signin' && 'Sign In with Email'}
+              {mode === 'signin' && 'Sign In'}
               {mode === 'signup' && 'Create Account'}
-              {mode === 'reset' && 'Send Reset Email'}
+              {mode === 'reset' && 'Send Recovery Email'}
             </span>
           </button>
         </form>
 
-        {/* Footer links */}
-        <div className="mt-4 pt-3 border-t border-[#3c3c3c] text-center text-xs text-neutral-400">
+        {/* Footer Mode Switcher */}
+        <div className="mt-5 pt-4 border-t border-[#3c3c3c] text-center text-xs text-neutral-400">
           {mode === 'signin' && (
             <p>
               Don't have an account?{' '}
               <button
                 onClick={() => { setMode('signup'); clearState(); }}
-                className="text-sky-400 hover:underline font-medium"
+                className="text-sky-400 hover:underline font-semibold"
               >
                 Sign up
               </button>
@@ -264,7 +282,7 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
               Already have an account?{' '}
               <button
                 onClick={() => { setMode('signin'); clearState(); }}
-                className="text-sky-400 hover:underline font-medium"
+                className="text-sky-400 hover:underline font-semibold"
               >
                 Sign in
               </button>
@@ -273,14 +291,28 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'signin' }: AuthModal
           {mode === 'reset' && (
             <button
               onClick={() => { setMode('signin'); clearState(); }}
-              className="flex items-center gap-1 mx-auto text-sky-400 hover:underline font-medium"
+              className="flex items-center gap-1.5 mx-auto text-sky-400 hover:underline font-semibold"
             >
-              <ArrowLeft className="w-3 h-3" />
+              <ArrowLeft className="w-3.5 h-3.5" />
               Back to sign in
             </button>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[#18181b] text-neutral-400">
+          <Loader2 className="w-8 h-8 animate-spin text-sky-500" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </React.Suspense>
   );
 }

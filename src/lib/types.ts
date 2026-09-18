@@ -29,6 +29,7 @@ export interface UserProfile {
   id: string;
   email: string;
   full_name: string;
+  display_name?: string;
   avatar_url?: string;
   username?: string;
   bio?: string;
@@ -47,7 +48,11 @@ export interface UserProfile {
   pinned_project_ids?: string[]; // Maximum 4 projects
   privacy?: ProfilePrivacySettings;
   preferences?: Record<string, any>;
+  provider?: string;
+  providers?: string[];
+  identities?: any[];
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface DirectMessage {
