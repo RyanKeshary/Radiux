@@ -3,15 +3,24 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/context/AuthContext';
 import { DataService } from '@/lib/data-service';
 import { Project } from '@/lib/types';
 import { THEMES, ThemeId, applyThemeVariables } from '@/lib/themes';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { AuthModal } from '@/components/auth/AuthModal';
-import { CreateProjectModal } from '@/components/dashboard/CreateProjectModal';
-import { ImportProjectModal } from '@/components/dashboard/ImportProjectModal';
-import { ImportWorkspaceModal } from '@/components/dashboard/ImportWorkspaceModal';
+import { useDebounce } from '@/hooks/useDebounce';
+
+// Dynamically import heavy modals so they are loaded only when opened
+const CreateProjectModal = dynamic(() => import('@/components/dashboard/CreateProjectModal').then(m => m.CreateProjectModal), { ssr: false });
+const ImportProjectModal = dynamic(() => import('@/components/dashboard/ImportProjectModal').then(m => m.ImportProjectModal), { ssr: false });
+const ImportWorkspaceModal = dynamic(() => import('@/components/dashboard/ImportWorkspaceModal').then(m => m.ImportWorkspaceModal), { ssr: false });
+const NotificationCenterPanel = dynamic(() => import('@/components/workspace/NotificationCenterPanel').then(m => m.NotificationCenterPanel), { ssr: false });
+const UserProfileModal = dynamic(() => import('@/components/workspace/UserProfileModal').then(m => m.UserProfileModal), { ssr: false });
+const EditorSettingsModal = dynamic(() => import('@/components/workspace/EditorSettingsModal').then(m => m.EditorSettingsModal), { ssr: false });
+const DeveloperDiscoveryModal = dynamic(() => import('@/components/profile/DeveloperDiscoveryModal').then(m => m.DeveloperDiscoveryModal), { ssr: false });
+import type { EditorSettings } from '@/components/workspace/EditorSettingsModal';
 import { 
   Code2, 
   FolderGit2, 
@@ -42,10 +51,6 @@ import {
   Globe,
   Loader2
 } from 'lucide-react';
-import { NotificationCenterPanel } from '@/components/workspace/NotificationCenterPanel';
-import { UserProfileModal } from '@/components/workspace/UserProfileModal';
-import { EditorSettingsModal, EditorSettings } from '@/components/workspace/EditorSettingsModal';
-import { DeveloperDiscoveryModal } from '@/components/profile/DeveloperDiscoveryModal';
 import { soundManager } from '@/lib/sound';
 
 export default function DashboardPage() {
@@ -66,8 +71,9 @@ export default function DashboardPage() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
 
-  // Search & Filter State
+  // Search & Filter State (debounced to avoid re-rendering on every keystroke)
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 150);
   const [filterType, setFilterType] = useState<'all' | 'owned' | 'shared'>('all');
 
   // Last opened workspace state for instant resume
@@ -254,8 +260,8 @@ export default function DashboardPage() {
       list = list.filter(p => p.owner_id !== user?.id);
     }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase().trim();
       list = list.filter(p => 
         p.name.toLowerCase().includes(q) || 
         (p.description && p.description.toLowerCase().includes(q))
@@ -265,7 +271,7 @@ export default function DashboardPage() {
     // Sort by recent updated by default
     list.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
     return list;
-  }, [projects, filterType, searchQuery, user?.id]);
+  }, [projects, filterType, debouncedSearch, user?.id]);
 
   return (
     <div 
@@ -750,11 +756,27 @@ export default function DashboardPage() {
                   />
                 </div>
 
-                {/* Workspaces List */}
+                {/* Workspaces List Skeleton */}
                 {loading || authLoading ? (
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {[1, 2, 3, 4].map(i => (
-                      <div key={i} className="h-12 rounded border animate-pulse" style={{ backgroundColor: 'var(--ide-card-bg)', borderColor: 'var(--ide-border)' }} />
+                      <div 
+                        key={i} 
+                        className="p-3 rounded-lg border flex items-center justify-between animate-pulse" 
+                        style={{ backgroundColor: 'var(--ide-card-bg)', borderColor: 'var(--ide-border)' }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded bg-white/10" />
+                          <div className="space-y-1.5">
+                            <div className="w-32 h-3.5 rounded bg-white/10" />
+                            <div className="w-48 h-2.5 rounded bg-white/5" />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-4 rounded bg-white/10" />
+                          <div className="w-12 h-4 rounded bg-white/5" />
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : filteredProjects.length === 0 ? (

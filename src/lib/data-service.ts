@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { supabase, isSupabaseConfigured } from './supabase/client';
 import { StorageMock } from './storage-mock';
 import { buildApiUrl } from './config';
+import { queryCache } from './cache-utils';
 import { 
   Project, 
   ProjectMember, 
@@ -107,21 +108,37 @@ export const DataService = {
   },
 
   // Projects
-  async getProjects(userId: string): Promise<Project[]> {
+  async getProjects(userId: string, options?: { limit?: number; offset?: number }): Promise<Project[]> {
+    const limit = options?.limit ?? 100;
+    const offset = options?.offset ?? 0;
+    const cacheKey = `projects:${userId}:${limit}:${offset}`;
+    const cached = queryCache.get<Project[]>(cacheKey);
+    if (cached) return cached;
+
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
+      let query = supabase
         .from('projects')
         .select('*')
         .order('updated_at', { ascending: false });
 
+      if (options?.limit) {
+        query = query.range(offset, offset + limit - 1);
+      }
+
+      const { data, error } = await query;
+
       if (!error && data) {
-        return data.map((p: any) => ({
+        const result = data.map((p: any) => ({
           ...p,
           role: p.owner_id === userId ? 'owner' : 'member'
         }));
+        queryCache.set(cacheKey, result, 15);
+        return result;
       }
     }
-    return StorageMock.getProjects(userId);
+    const local = StorageMock.getProjects(userId);
+    queryCache.set(cacheKey, local, 15);
+    return local;
   },
 
   async getProject(projectId: string): Promise<Project | null> {
@@ -168,15 +185,19 @@ export const DataService = {
           content: `// Project: ${name}\n// Created by ${user.full_name}\n\nconsole.log("Welcome to Radiux!");\n`
         });
 
+        queryCache.invalidatePrefix('projects:');
         return data;
       }
       console.warn('Supabase createProject failed, storing locally:', error?.message);
     }
 
-    return StorageMock.createProject(name, description, user);
+    const localCreated = StorageMock.createProject(name, description, user);
+    queryCache.invalidatePrefix('projects:');
+    return localCreated;
   },
 
   async deleteProject(projectId: string): Promise<boolean> {
+    queryCache.invalidatePrefix('projects:');
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('files').delete().eq('project_id', projectId);
@@ -1273,6 +1294,8 @@ export const DataService = {
       }
     }
 
+    queryCache.invalidatePrefix(`profile:${userId}`);
+    queryCache.invalidatePrefix(`contributions:${userId}`);
     return localUpdated;
   },
 
@@ -1397,30 +1420,57 @@ export const DataService = {
   },
 
   // Level 8: Developer Activity Contribution Calendar (52-week calculation)
+  // OPTIMIZED: Eliminates N+1 query loop and caches computed heatmaps with 5-minute TTL
   async getDeveloperContributions(userId: string): Promise<{
     days: ContributionDay[];
     totalContributions: number;
     currentStreak: number;
     longestStreak: number;
   }> {
+    const cacheKey = `contributions:${userId}`;
+    const cached = queryCache.get<{
+      days: ContributionDay[];
+      totalContributions: number;
+      currentStreak: number;
+      longestStreak: number;
+    }>(cacheKey);
+    if (cached) return cached;
+
     const days: ContributionDay[] = [];
     const today = new Date();
     const oneDayMs = 24 * 60 * 60 * 1000;
     
-    // Aggregation of real events from user's projects
+    // Aggregation of real events: Single bulk query instead of N sequential project loops
     const activityCountByDate: Record<string, number> = {};
-    const userProjects = await this.getProjects(userId);
     
-    for (const proj of userProjects) {
+    if (isSupabaseConfigured && supabase) {
       try {
-        const activities = await this.getActivities(proj.id);
-        for (const act of activities) {
-          if (act.user_id === userId) {
+        const { data, error } = await supabase
+          .from('activities')
+          .select('created_at')
+          .eq('user_id', userId);
+
+        if (!error && data) {
+          for (const act of data) {
             const dateStr = act.created_at.split('T')[0];
             activityCountByDate[dateStr] = (activityCountByDate[dateStr] || 0) + 1;
           }
         }
       } catch (e) {}
+    } else {
+      // Local/offline fallback
+      const userProjects = await this.getProjects(userId);
+      for (const proj of userProjects) {
+        try {
+          const activities = StorageMock.getActivities(proj.id);
+          for (const act of activities) {
+            if (act.user_id === userId) {
+              const dateStr = act.created_at.split('T')[0];
+              activityCountByDate[dateStr] = (activityCountByDate[dateStr] || 0) + 1;
+            }
+          }
+        } catch (e) {}
+      }
     }
 
     const startDate = new Date(today.getTime() - 364 * oneDayMs);
@@ -1465,12 +1515,15 @@ export const DataService = {
       }
     }
 
-    return {
+    const result = {
       days,
       totalContributions: total,
       currentStreak,
       longestStreak,
     };
+
+    queryCache.set(cacheKey, result, 300); // 5 minutes TTL
+    return result;
   },
 
   // Level 8: Direct Developer Messaging

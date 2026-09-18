@@ -40,28 +40,31 @@ import { BottomDock, DockOrientation, DockTab } from './BottomDock';
 import { ProblemItem } from './ProblemsPanel';
 import { OutputLogEntry } from './OutputPanel';
 
-// Modals
+// Modals (Dynamically imported for code splitting and fast initial bundle load)
 import { InviteMemberModal } from './InviteMemberModal';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { CommandPalette, CommandItem } from './CommandPalette';
-import { QuickOpenModal } from './QuickOpenModal';
-import { GlobalSearchModal } from './GlobalSearchModal';
-import { EditorSettingsModal, EditorSettings } from './EditorSettingsModal';
-import { GitHubModal } from './GitHubModal';
-import { UserProfileModal } from './UserProfileModal';
-import { PublicProfileModal } from './PublicProfileModal';
-import { DeveloperDiscoveryModal } from '@/components/profile/DeveloperDiscoveryModal';
-import { ProjectSwitcherModal } from './ProjectSwitcherModal';
-import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
-import { NotificationCenterPanel } from './NotificationCenterPanel';
+import type { EditorSettings } from './EditorSettingsModal';
+
+const QuickOpenModal = dynamic(() => import('./QuickOpenModal').then(m => m.QuickOpenModal), { ssr: false });
+const GlobalSearchModal = dynamic(() => import('./GlobalSearchModal').then(m => m.GlobalSearchModal), { ssr: false });
+const EditorSettingsModal = dynamic(() => import('./EditorSettingsModal').then(m => m.EditorSettingsModal), { ssr: false });
+const GitHubModal = dynamic(() => import('./GitHubModal').then(m => m.GitHubModal), { ssr: false });
+const UserProfileModal = dynamic(() => import('./UserProfileModal').then(m => m.UserProfileModal), { ssr: false });
+const PublicProfileModal = dynamic(() => import('./PublicProfileModal').then(m => m.PublicProfileModal), { ssr: false });
+const DeveloperDiscoveryModal = dynamic(() => import('@/components/profile/DeveloperDiscoveryModal').then(m => m.DeveloperDiscoveryModal), { ssr: false });
+const ProjectSwitcherModal = dynamic(() => import('./ProjectSwitcherModal').then(m => m.ProjectSwitcherModal), { ssr: false });
+const KeyboardShortcutsModal = dynamic(() => import('./KeyboardShortcutsModal').then(m => m.KeyboardShortcutsModal), { ssr: false });
+const ReviewRequestsModal = dynamic(() => import('./ReviewRequestsModal').then(m => m.ReviewRequestsModal), { ssr: false });
+const IntegrationsModal = dynamic(() => import('./IntegrationsModal').then(m => m.IntegrationsModal), { ssr: false });
+const NotificationCenterPanel = dynamic(() => import('./NotificationCenterPanel').then(m => m.NotificationCenterPanel), { ssr: false });
+
 import { AppNotification } from './NotificationsPopover';
 import { NotificationToastContainer, NotificationToastItem } from './NotificationToast';
 import { ProfilePreviewCard } from '@/components/profile/ProfilePreviewCard';
 import { useKeyboardManager } from '@/hooks/useKeyboardManager';
 import { InlineCommentsOverlay } from './InlineCommentsOverlay';
-import { ReviewRequestsModal } from './ReviewRequestsModal';
 import { ExtensionsPanel } from './ExtensionsPanel';
-import { IntegrationsModal } from './IntegrationsModal';
 import { CommentService } from '@/lib/collaboration/comment-service';
 import { soundManager } from '@/lib/sound';
 import { ChatPanel } from './ChatPanel';
