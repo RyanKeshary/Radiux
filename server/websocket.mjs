@@ -218,10 +218,6 @@ function updateCodingPartnerStatus(requestId, status) {
     p.status = status;
     p.updated_at = new Date().toISOString();
     saveJsonFile(file, all);
-
-    // Synchronize notification status immediately
-    markGlobalNotificationRead({ partnerRequestId: requestId, actionStatus: status });
-
     return p;
   }
   return null;
@@ -233,7 +229,6 @@ function removeCodingPartner(partnerRequestId) {
   const match = all.find(p => p.id === partnerRequestId);
   const filtered = all.filter(p => p.id !== partnerRequestId);
   saveJsonFile(file, filtered);
-  deleteGlobalNotification({ partnerRequestId });
   return match;
 }
 
@@ -562,7 +557,13 @@ const server = http.createServer(async (request, response) => {
     request.on('data', chunk => body += chunk);
     request.on('end', async () => {
       try {
-        const { projectId, command, options } = JSON.parse(body);
+        const { projectId, command, options, userRole } = JSON.parse(body);
+        const effectiveRole = userRole || options?.userRole;
+        if (effectiveRole === 'visitor') {
+          response.writeHead(403, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ error: 'Visitors are not authorized to execute commands in this workspace.' }));
+          return;
+        }
         if (projectId && command) {
           const result = await WorkspaceManager.runCommand(projectId, command, options);
           response.writeHead(200, { 'Content-Type': 'application/json' });
@@ -632,6 +633,14 @@ const server = http.createServer(async (request, response) => {
         if (!projectId) {
           response.writeHead(400, { 'Content-Type': 'application/json' });
           response.end(JSON.stringify({ error: 'Missing projectId' }));
+          return;
+        }
+
+        // Server-side RBAC: Visitors are strictly forbidden from modifying Git state
+        const isWriteAction = !['status', 'log', 'diff', 'branches', 'remotes'].includes(action);
+        if (isWriteAction && (payload.userRole === 'visitor' || parsedUrl.searchParams.get('userRole') === 'visitor')) {
+          response.writeHead(403, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ success: false, error: 'Visitors are not authorized to perform Git modifications in this workspace.' }));
           return;
         }
 
@@ -1337,8 +1346,17 @@ server.on('upgrade', async (request, socket, head) => {
     const sessionId = parsedUrl.searchParams.get('sessionId') || '';
     const profileId = parsedUrl.searchParams.get('profileId') || '';
     const title = parsedUrl.searchParams.get('title') || '';
+    const role = parsedUrl.searchParams.get('role') || '';
     const cols = parseInt(parsedUrl.searchParams.get('cols') || '80', 10);
     const rows = parseInt(parsedUrl.searchParams.get('rows') || '24', 10);
+
+    // Server-side RBAC: Visitors cannot open an interactive terminal
+    if (role === 'visitor') {
+      console.warn(`[WS/terminal] Rejected visitor terminal connection for project: ${projectId}`);
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
 
     // Level 6: Verify token for terminal access
     let verifiedUser = null;

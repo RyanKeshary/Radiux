@@ -5,8 +5,8 @@
  * Never construct WebSocket or API URLs inline — always use these helpers.
  */
 
-export const CLOUD_BACKEND_WS = 'wss://codecollab-backend-isjt.onrender.com';
-export const CLOUD_BACKEND_API = 'https://codecollab-backend-isjt.onrender.com';
+export const CLOUD_BACKEND_WS = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_WS_URL) || 'wss://radiux-backend.onrender.com';
+export const CLOUD_BACKEND_API = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || 'https://radiux-backend.onrender.com';
 
 /** WebSocket base URL (Yjs sync, chat, terminal, voice signaling) */
 export let WS_URL: string =

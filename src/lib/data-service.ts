@@ -19,7 +19,8 @@ import {
   WorkspaceExportManifest,
   CodingPartner,
   DirectMessage,
-  ContributionDay
+  ContributionDay,
+  WorkspaceRole
 } from './types';
 
 export const DataService = {
@@ -65,7 +66,7 @@ export const DataService = {
   },
 
   // Check if a user has access to a project
-  async verifyProjectAccess(projectId: string, userId: string): Promise<{ authorized: boolean; role?: 'owner' | 'member' }> {
+  async verifyProjectAccess(projectId: string, userId: string): Promise<{ authorized: boolean; role?: WorkspaceRole }> {
     // 1. Try Supabase
     if (isSupabaseConfigured && supabase) {
       const { data: proj, error: projError } = await supabase
@@ -86,7 +87,9 @@ export const DataService = {
           .single();
 
         if (member) {
-          return { authorized: true, role: member.role as 'owner' | 'member' };
+          const rawRole = (member.role || 'editor') as WorkspaceRole;
+          const normalizedRole = rawRole === 'member' ? 'editor' : rawRole;
+          return { authorized: true, role: normalizedRole };
         }
         return { authorized: false };
       }
@@ -227,14 +230,14 @@ export const DataService = {
     return StorageMock.getMembers(projectId);
   },
 
-  async addMember(projectId: string, user: UserProfile): Promise<ProjectMember> {
+  async addMember(projectId: string, user: UserProfile, role: WorkspaceRole = 'editor'): Promise<ProjectMember> {
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase
         .from('project_members')
         .insert({
           project_id: projectId,
           user_id: user.id,
-          role: 'member'
+          role
         })
         .select('*, profile:profiles(*)')
         .single();
@@ -244,6 +247,19 @@ export const DataService = {
       }
     }
     return StorageMock.addMember(projectId, user);
+  },
+
+  async updateMemberRole(projectId: string, userId: string, role: WorkspaceRole): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase
+        .from('project_members')
+        .update({ role })
+        .eq('project_id', projectId)
+        .eq('user_id', userId);
+
+      return !error;
+    }
+    return true;
   },
 
   async removeMember(projectId: string, userId: string): Promise<boolean> {

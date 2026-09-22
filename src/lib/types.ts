@@ -117,6 +117,8 @@ export interface NotificationItem {
   created_at: string;
 }
 
+export type WorkspaceRole = 'owner' | 'editor' | 'visitor' | 'member';
+
 export interface Project {
   id: string;
   name: string;
@@ -124,14 +126,14 @@ export interface Project {
   owner_id: string;
   created_at: string;
   updated_at: string;
-  role?: 'owner' | 'member';
+  role?: WorkspaceRole;
 }
 
 export interface ProjectMember {
   id: string;
   project_id: string;
   user_id: string;
-  role: 'owner' | 'member';
+  role: WorkspaceRole;
   created_at: string;
   profile?: UserProfile;
 }

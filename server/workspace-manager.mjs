@@ -24,7 +24,7 @@ const projectSessions = new Map();
 export function getSanitizedEnv() {
   const safeEnv = {};
   for (const [k, v] of Object.entries(process.env)) {
-    const isSensitive = /SUPABASE|SECRET|KEY|TOKEN|PASSWORD|DATABASE|CREDENTIAL|AUTH|RENDER|ALLOWED_ORIGIN|COOKIE/i.test(k);
+    const isSensitive = /SUPABASE|GROQ|SECRET|KEY|TOKEN|PASSWORD|DATABASE|CREDENTIAL|AUTH|RENDER|ALLOWED_ORIGIN|COOKIE|PRIVATE/i.test(k);
     if (!isSensitive) {
       safeEnv[k] = v;
     }
@@ -643,7 +643,7 @@ export const WorkspaceManager = {
       exec(command, {
         cwd: wsDir,
         timeout,
-        env: { ...process.env, ...safeEnv },
+        env: safeEnv, // Strictly sanitized: Do NOT spread process.env which would leak filtered secrets back in
         maxBuffer: 1024 * 1024 * 4,
       }, (error, stdout, stderr) => {
         const duration = Date.now() - startTime;

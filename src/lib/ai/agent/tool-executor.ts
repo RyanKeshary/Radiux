@@ -46,6 +46,19 @@ export class ToolExecutor {
   ): Promise<AIToolResult> {
     const wsDir = path.resolve(WORKSPACES_ROOT, (projectId || 'default').replace(/[^a-zA-Z0-9_-]/g, ''));
 
+    const userRole = context.user?.role;
+    const isVisitor = userRole === 'visitor';
+    const writeTools = ['write_file', 'edit_file', 'delete_file', 'run_terminal'];
+
+    if (isVisitor && writeTools.includes(toolName)) {
+      return {
+        toolCallId: '',
+        name: toolName,
+        output: `Access Denied (403): Workspace role is "visitor". Visitors only have read-only privileges. File modifications and terminal execution are strictly forbidden.`,
+        error: 'Forbidden (Visitor)',
+      };
+    }
+
     try {
       switch (toolName) {
         // ----------------------------------------------------------------------
@@ -547,6 +560,103 @@ export class ToolExecutor {
             toolCallId: '',
             name: toolName,
             output: context.diagnostics || 'No active diagnostics reported in workspace.',
+          };
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 15: inspect_project
+        // ----------------------------------------------------------------------
+        case 'inspect_project': {
+          let summary = `Project: ${context.project.name} (ID: ${context.project.id})\n`;
+          if (context.project.description) {
+            summary += `Description: ${context.project.description}\n`;
+          }
+
+          const hasPkg = fs.existsSync(path.join(wsDir, 'package.json'));
+          const hasTs = fs.existsSync(path.join(wsDir, 'tsconfig.json'));
+          const hasNext = fs.existsSync(path.join(wsDir, 'next.config.js')) || fs.existsSync(path.join(wsDir, 'next.config.mjs'));
+          const hasVite = fs.existsSync(path.join(wsDir, 'vite.config.ts')) || fs.existsSync(path.join(wsDir, 'vite.config.js'));
+          const hasTailwind = fs.existsSync(path.join(wsDir, 'tailwind.config.js')) || fs.existsSync(path.join(wsDir, 'tailwind.config.ts'));
+
+          summary += `Tech Stack Indicators:\n`;
+          summary += `- Node.js / npm: ${hasPkg ? 'Detected' : 'Not detected'}\n`;
+          summary += `- TypeScript: ${hasTs ? 'Detected' : 'Not detected'}\n`;
+          summary += `- Next.js: ${hasNext ? 'Detected' : 'Not detected'}\n`;
+          summary += `- Vite: ${hasVite ? 'Detected' : 'Not detected'}\n`;
+          summary += `- Tailwind CSS: ${hasTailwind ? 'Detected' : 'Not detected'}\n`;
+
+          summary += `Active Branch: ${context.git?.branch || 'main'}\n`;
+          summary += `Open Editor Tabs: ${(context.openTabs || []).join(', ') || 'None'}\n`;
+
+          return {
+            toolCallId: '',
+            name: toolName,
+            output: summary,
+          };
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 16: inspect_package_json
+        // ----------------------------------------------------------------------
+        case 'inspect_package_json': {
+          const pkgPath = this.getWorkspacePath(projectId, 'package.json');
+          if (!fs.existsSync(pkgPath)) {
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: 'No package.json file found in workspace root.',
+            };
+          }
+
+          try {
+            const raw = fs.readFileSync(pkgPath, 'utf8');
+            const pkg = JSON.parse(raw);
+            const formatted = {
+              name: pkg.name,
+              version: pkg.version,
+              scripts: pkg.scripts || {},
+              dependencies: pkg.dependencies || {},
+              devDependencies: pkg.devDependencies || {},
+            };
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: JSON.stringify(formatted, null, 2),
+            };
+          } catch (e: any) {
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: `Failed to parse package.json: ${e.message}`,
+              error: e.message,
+            };
+          }
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 17: inspect_environment_safely (Zero Secrets Exposed!)
+        // ----------------------------------------------------------------------
+        case 'inspect_environment_safely': {
+          let gitVer = 'unknown';
+          try {
+            const { stdout } = await execAsync('git --version');
+            gitVer = stdout.trim();
+          } catch {}
+
+          const safeEnv = {
+            os: process.platform,
+            architecture: process.arch,
+            nodeVersion: process.version,
+            gitVersion: gitVer,
+            workspaceRoot: `[PROJECT_ROOT]/${(projectId || 'default').replace(/[^a-zA-Z0-9_-]/g, '')}`,
+            activeUserRole: context.user?.role || 'editor',
+            isSandboxIsolated: true,
+          };
+
+          return {
+            toolCallId: '',
+            name: toolName,
+            output: JSON.stringify(safeEnv, null, 2),
           };
         }
 

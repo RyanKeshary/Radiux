@@ -30,6 +30,7 @@ interface MonacoEditorWrapperProps {
   onToggleDock?: () => void;
   onSave?: () => void;
   onAskAI?: (prompt: string) => void;
+  readOnly?: boolean;
 }
 
 
@@ -151,6 +152,7 @@ export function MonacoEditorWrapper({
   onToggleDock,
   onSave,
   onAskAI,
+  readOnly,
 }: MonacoEditorWrapperProps) {
   const { user } = useAuth();
   const [synced, setSynced] = useState(false);
@@ -781,6 +783,7 @@ export function MonacoEditorWrapper({
           defaultValue={file.content || ''}
           onMount={handleEditorDidMount}
           options={{
+            readOnly: Boolean(readOnly),
             fontSize: settings.fontSize,
             fontFamily: settings.fontFamily || "'Fira Code', 'Cascadia Code', Consolas, monospace",
             minimap: { enabled: settings.minimap },

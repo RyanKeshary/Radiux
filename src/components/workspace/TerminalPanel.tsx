@@ -47,6 +47,7 @@ interface TerminalPanelProps {
   onPortDetected?: (port: number) => void;
   activeFileName?: string | null;
   theme?: string;
+  userRole?: 'owner' | 'editor' | 'visitor' | 'member';
 }
 
 const TERMINAL_THEMES: Record<string, any> = {
@@ -108,7 +109,13 @@ const TERMINAL_THEMES: Record<string, any> = {
   },
 };
 
-export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme = 'dark' }: TerminalPanelProps) {
+export function TerminalPanel({ 
+  projectId, 
+  onPortDetected, 
+  activeFileName, 
+  theme = 'dark',
+  userRole = 'editor'
+}: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Multi-session state
@@ -230,6 +237,7 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
       profileId: profileId || '',
       cols: String(term.cols || 80),
       rows: String(term.rows || 24),
+      role: userRole,
     });
 
     const ws = new WebSocket(wsUrl);
@@ -343,12 +351,13 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
     };
 
     term.onData((data) => {
+      if (userRole === 'visitor') return;
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'input', data }));
       }
     });
 
-  }, [projectId, theme, onPortDetected]);
+  }, [projectId, theme, onPortDetected, userRole]);
 
   // Initial connection on mount
   useEffect(() => {
@@ -356,6 +365,10 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
 
     const containerEl = containerRef.current;
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (userRole === 'visitor') {
+        e.preventDefault();
+        return;
+      }
       if (e.ctrlKey && e.key.toLowerCase() === 'v') {
         navigator.clipboard.readText().then((text) => {
           if (text && wsRef.current?.readyState === WebSocket.OPEN) {
@@ -476,6 +489,7 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
   };
 
   const handlePaste = async () => {
+    if (userRole === 'visitor') return;
     try {
       const text = await navigator.clipboard.readText();
       if (text && wsRef.current?.readyState === WebSocket.OPEN) {
@@ -485,6 +499,7 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
   };
 
   const handleRunCommand = (cmd: string) => {
+    if (userRole === 'visitor') return;
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'input', data: `${cmd}\r` }));
     } else {
@@ -523,6 +538,11 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
         color: 'var(--ide-text)',
       }}
     >
+      {userRole === 'visitor' && (
+        <div className="bg-amber-950/40 border-b border-amber-800/40 px-3 py-1 text-[11px] text-amber-300 flex items-center justify-between">
+          <span>Visitor mode: Terminal command execution is restricted.</span>
+        </div>
+      )}
       {/* VS Code Style Multi-Session Terminal Tab Bar */}
       <div 
         className="h-8 border-b px-2 flex items-center justify-between text-xs flex-shrink-0"

@@ -8,6 +8,7 @@ import { VoicePanel } from './VoicePanel';
 import { GitPanel } from './GitPanel';
 import { ProblemsPanel, ProblemItem } from './ProblemsPanel';
 import { OutputPanel, OutputLogEntry } from './OutputPanel';
+import { TestingPanel } from './TestingPanel';
 import { 
   Terminal, 
   MonitorPlay, 
@@ -17,6 +18,7 @@ import {
   FolderGit2,
   AlertCircle,
   FileText,
+  FlaskConical,
   X, 
   Maximize2, 
   Minimize2,
@@ -32,6 +34,7 @@ export type DockTab =
   | 'terminal' 
   | 'problems'
   | 'output'
+  | 'testing'
   | 'preview' 
   | 'git' 
   | 'chat' 
@@ -75,6 +78,9 @@ interface BottomDockProps {
   onNavigateToFile?: (filePath: string, line?: number) => void;
   theme?: string;
   onMoveToSidebar?: (tab: 'chat' | 'voice' | 'git') => void;
+  userRole?: 'owner' | 'editor' | 'visitor' | 'member';
+  onAskZodiacProblem?: (problem: ProblemItem) => void;
+  onAskZodiacTest?: (context: { command: string; error: string; file?: string; line?: number }) => void;
 }
 
 export function BottomDock({
@@ -111,6 +117,9 @@ export function BottomDock({
   onNavigateToFile,
   theme,
   onMoveToSidebar,
+  userRole = 'editor',
+  onAskZodiacProblem,
+  onAskZodiacTest,
 }: BottomDockProps) {
   const [internalActiveTab, setInternalActiveTab] = useState<DockTab>('terminal');
   const activeTab = externalActiveTab || internalActiveTab;
@@ -122,7 +131,7 @@ export function BottomDock({
 
   const [height, setHeight] = useState<number>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(`codecollab_dock_height_${userId || 'guest'}`);
+      const saved = localStorage.getItem(`radiux_dock_height_${userId || 'guest'}`) || localStorage.getItem(`codecollab_dock_height_${userId || 'guest'}`);
       if (saved) {
         const val = parseInt(saved, 10);
         if (!isNaN(val) && val >= 150 && val <= 1200) return val;
@@ -133,7 +142,7 @@ export function BottomDock({
 
   const [width, setWidth] = useState<number>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(`codecollab_dock_width_${userId || 'guest'}`);
+      const saved = localStorage.getItem(`radiux_dock_width_${userId || 'guest'}`) || localStorage.getItem(`codecollab_dock_width_${userId || 'guest'}`);
       if (saved) {
         const val = parseInt(saved, 10);
         if (!isNaN(val) && val >= 250 && val <= 1400) return val;
@@ -178,7 +187,7 @@ export function BottomDock({
       const finalHeight = Math.max(160, Math.min(maxHeight, startHeight + delta));
       setHeight(finalHeight);
       if (typeof window !== 'undefined') {
-        localStorage.setItem(`codecollab_dock_height_${userId || 'guest'}`, String(finalHeight));
+        localStorage.setItem(`radiux_dock_height_${userId || 'guest'}`, String(finalHeight));
       }
     };
 
@@ -206,7 +215,7 @@ export function BottomDock({
       const finalWidth = Math.max(280, Math.min(maxWidth, startWidth + delta));
       setWidth(finalWidth);
       if (typeof window !== 'undefined') {
-        localStorage.setItem(`codecollab_dock_width_${userId || 'guest'}`, String(finalWidth));
+        localStorage.setItem(`radiux_dock_width_${userId || 'guest'}`, String(finalWidth));
       }
     };
 
@@ -327,6 +336,23 @@ export function BottomDock({
           >
             <FileText className="w-3.5 h-3.5 text-sky-400" />
             <span>Output</span>
+          </button>
+
+          {/* Testing Tab (Level 7) */}
+          <button
+            onClick={() => setActiveTab('testing')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
+              activeTab === 'testing' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
+            }`}
+            style={{
+              backgroundColor: activeTab === 'testing' ? 'var(--ide-dock)' : undefined,
+              color: activeTab === 'testing' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
+              borderTopColor: activeTab === 'testing' ? 'var(--ide-accent)' : undefined,
+            }}
+            title="Automated Test Runner & Diagnostics"
+          >
+            <FlaskConical className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Testing</span>
           </button>
 
           {/* Web Preview Tab */}
@@ -529,6 +555,7 @@ export function BottomDock({
             onPortDetected={handlePortDetected} 
             activeFileName={activeFileName}
             theme={theme}
+            userRole={userRole}
           />
         )}
 
@@ -536,6 +563,7 @@ export function BottomDock({
           <ProblemsPanel
             problems={problems}
             onNavigateToProblem={onNavigateToProblem || (() => {})}
+            onAskZodiac={onAskZodiacProblem}
           />
         )}
 
@@ -543,6 +571,15 @@ export function BottomDock({
           <OutputPanel
             logs={outputLogs}
             onClearLogs={onClearOutputLogs}
+          />
+        )}
+
+        {activeTab === 'testing' && (
+          <TestingPanel
+            projectId={projectId}
+            userRole={userRole}
+            onAskZodiac={onAskZodiacTest}
+            onNavigateToFile={onNavigateToFile}
           />
         )}
 

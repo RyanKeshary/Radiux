@@ -235,6 +235,30 @@ export const CORE_AI_TOOLS: AITool[] = [
       },
     },
   },
+  {
+    name: 'inspect_project',
+    description: 'Inspect project structure, framework configuration, build scripts, and tech stack overview.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'inspect_package_json',
+    description: 'Inspect project dependencies, devDependencies, and npm scripts in package.json.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'inspect_environment_safely',
+    description: 'Inspect runtime platform, Node/Git versions, and available tooling safely without exposing secrets.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
 ];
 
 export class ToolRegistry {

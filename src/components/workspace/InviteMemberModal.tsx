@@ -14,6 +14,7 @@ interface InviteMemberModalProps {
   members: ProjectMember[];
   onMemberAdded: (member: ProjectMember) => void;
   onMemberRemoved: (userId: string) => void;
+  onRoleChanged?: (userId: string, newRole: 'editor' | 'visitor') => void;
 }
 
 export function InviteMemberModal({
@@ -23,9 +24,11 @@ export function InviteMemberModal({
   members,
   onMemberAdded,
   onMemberRemoved,
+  onRoleChanged,
 }: InviteMemberModalProps) {
   const { user } = useAuth();
   const [email, setEmail] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'editor' | 'visitor'>('editor');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
@@ -65,18 +68,53 @@ export function InviteMemberModal({
         return;
       }
 
-      // 3. Add to project
-      const added = await DataService.addMember(project.id, targetUser);
+      // 3. Add to project with selected role
+      const added = await DataService.addMember(project.id, targetUser, selectedRole);
       onMemberAdded(added);
 
+      // 4. Send persistent actionable notification to invited user
+      try {
+        const { NotificationService } = await import('@/lib/notifications/notification-service');
+        await NotificationService.sendNotification({
+          recipient_id: targetUser.id,
+          actor_id: user?.id,
+          actor_name: user?.full_name || 'Project Owner',
+          project_id: project.id,
+          project_name: project.name,
+          type: 'action',
+          category: 'project_invitation',
+          title: `Invited to ${project.name}`,
+          body: `${user?.full_name || 'A teammate'} invited you to join "${project.name}" as ${selectedRole === 'visitor' ? 'a Visitor (Read-only)' : 'an Editor'}.`,
+          metadata: {
+            dedup_key: `invite:${project.id}:${targetUser.id}`,
+            role: selectedRole,
+            projectId: project.id,
+            projectName: project.name,
+            senderEmail: user?.email,
+          },
+          action_state: 'pending',
+        });
+      } catch (e) {
+        console.warn('Could not send notification:', e);
+      }
 
-
-      setSuccessMsg(`Successfully added ${targetUser.full_name} (${targetUser.email}) to the project!`);
+      setSuccessMsg(`Successfully added ${targetUser.full_name} (${targetUser.email}) as ${selectedRole}!`);
       setEmail('');
     } catch (err: any) {
       setSearchError(err.message || 'Failed to add collaborator.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRoleChange = async (userId: string, newRole: 'editor' | 'visitor') => {
+    try {
+      await DataService.updateMemberRole(project.id, userId, newRole);
+      if (onRoleChanged) {
+        onRoleChanged(userId, newRole);
+      }
+    } catch (err) {
+      console.error('Failed to update role:', err);
     }
   };
 
@@ -103,21 +141,21 @@ export function InviteMemberModal({
         <div className="flex items-center justify-between pb-3 mb-4 border-b" style={{ borderColor: 'var(--ide-border)' }}>
           <div className="flex items-center gap-2 font-semibold text-base" style={{ color: 'var(--ide-text)' }}>
             <UserPlus className="w-5 h-5 text-sky-400" />
-            <span>Project Collaborators</span>
+            <span>Project Collaborators & Roles</span>
           </div>
           <button
             onClick={onClose}
             style={{ color: 'var(--ide-text-muted)' }}
-            className="p-1 rounded hover:opacity-80 transition-colors"
+            className="p-1 rounded hover:bg-white/[0.07] transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Share Link Section */}
-        <div className="mb-5">
-          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ide-text-muted)' }}>
-            Shareable Project URL
+        {/* Share Link */}
+        <div className="mb-4">
+          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ide-text)' }}>
+            Share Workspace Link
           </label>
           <div className="flex items-center gap-2">
             <input
@@ -127,36 +165,29 @@ export function InviteMemberModal({
               style={{
                 backgroundColor: 'var(--ide-input-bg)',
                 borderColor: 'var(--ide-border)',
-                color: 'var(--ide-text)',
+                color: 'var(--ide-text-muted)',
               }}
-              className="flex-1 border rounded-lg px-3 py-2 text-xs select-all outline-none font-mono"
+              className="w-full border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none"
             />
             <button
               onClick={handleCopyLink}
-              style={{
-                backgroundColor: 'var(--ide-input-bg)',
-                borderColor: 'var(--ide-border)',
-                color: 'var(--ide-text)',
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors border hover:opacity-90"
+              className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.08] hover:bg-white/[0.14] rounded-lg text-xs font-medium transition-colors flex-shrink-0"
+              style={{ color: 'var(--ide-text)' }}
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
-          <p className="text-[11px] mt-1" style={{ color: 'var(--ide-text-muted)' }}>
-            Note: Only added members can access this project link.
-          </p>
         </div>
 
         {/* Add User form (Only Owner can invite) */}
         {isOwner ? (
-          <form onSubmit={handleInviteUser} className="mb-5">
-            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ide-text)' }}>
-              Add Registered Collaborator by Email
-            </label>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
+          <form onSubmit={handleInviteUser} className="mb-5 space-y-3">
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ide-text)' }}>
+                Add Registered Collaborator by Email
+              </label>
+              <div className="relative">
                 <input
                   type="email"
                   placeholder="collaborator@example.com"
@@ -171,15 +202,70 @@ export function InviteMemberModal({
                 />
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5" style={{ color: 'var(--ide-text-muted)' }} />
               </div>
-              <button
-                type="submit"
-                disabled={loading || !email.trim()}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shadow-sm"
-              >
-                {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>Add Member</span>
-              </button>
             </div>
+
+            {/* Role Selector: Editor vs Visitor */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ide-text)' }}>
+                Collaborator Role
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label
+                  className={`flex flex-col p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    selectedRole === 'editor'
+                      ? 'border-sky-500 bg-sky-500/10 text-white'
+                      : 'border-white/[0.08] bg-white/[0.02] text-neutral-400 hover:border-white/[0.16]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold">Editor</span>
+                    <input
+                      type="radio"
+                      name="inviteRole"
+                      value="editor"
+                      checked={selectedRole === 'editor'}
+                      onChange={() => setSelectedRole('editor')}
+                      className="accent-sky-500"
+                    />
+                  </div>
+                  <span className="text-[10px] leading-tight text-neutral-400">
+                    Edit code, run terminal, Git, and Zodiac AI.
+                  </span>
+                </label>
+
+                <label
+                  className={`flex flex-col p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    selectedRole === 'visitor'
+                      ? 'border-sky-500 bg-sky-500/10 text-white'
+                      : 'border-white/[0.08] bg-white/[0.02] text-neutral-400 hover:border-white/[0.16]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold">Visitor</span>
+                    <input
+                      type="radio"
+                      name="inviteRole"
+                      value="visitor"
+                      checked={selectedRole === 'visitor'}
+                      onChange={() => setSelectedRole('visitor')}
+                      className="accent-sky-500"
+                    />
+                  </div>
+                  <span className="text-[10px] leading-tight text-neutral-400">
+                    Read-only code viewing and team chat.
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || !email.trim()}
+              className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shadow-sm"
+            >
+              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>Send Invitation & Add</span>
+            </button>
 
             {searchError && (
               <div className="mt-2 flex items-center gap-1.5 text-rose-400 text-xs">
@@ -197,7 +283,7 @@ export function InviteMemberModal({
           </form>
         ) : (
           <div className="mb-5 p-2.5 rounded bg-sky-500/10 border border-sky-500/20 text-xs text-sky-300">
-            You are a project member. Only the project owner can invite or remove members.
+            You are a project collaborator. Only the project owner can invite or remove members.
           </div>
         )}
 
@@ -211,6 +297,7 @@ export function InviteMemberModal({
               const isMemberOwner = m.role === 'owner' || m.user_id === project.owner_id;
               const name = m.profile?.full_name || m.user_id;
               const memberEmail = m.profile?.email || '';
+              const currentRole = m.role === 'visitor' ? 'visitor' : isMemberOwner ? 'owner' : 'editor';
 
               return (
                 <div
@@ -240,15 +327,35 @@ export function InviteMemberModal({
                     </div>
                   </div>
 
-                  {isOwner && !isMemberOwner && (
-                    <button
-                      onClick={() => handleRemove(m.user_id)}
-                      title="Remove member"
-                      className="p-1 rounded text-neutral-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* Role dropdown for Owner */}
+                    {isOwner && !isMemberOwner ? (
+                      <select
+                        value={currentRole}
+                        onChange={(e) => handleRoleChange(m.user_id, e.target.value as 'editor' | 'visitor')}
+                        className="text-[10px] px-2 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-200 focus:outline-none"
+                      >
+                        <option value="editor">Editor</option>
+                        <option value="visitor">Visitor</option>
+                      </select>
+                    ) : (
+                      !isMemberOwner && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/[0.06] text-neutral-400 capitalize">
+                          {currentRole}
+                        </span>
+                      )
+                    )}
+
+                    {isOwner && !isMemberOwner && (
+                      <button
+                        onClick={() => handleRemove(m.user_id)}
+                        title="Remove member"
+                        className="p-1 rounded text-neutral-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}

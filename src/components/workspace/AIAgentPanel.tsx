@@ -52,6 +52,8 @@ interface AIAgentPanelProps {
   onAcceptDiff: (proposal: DiffProposal) => void;
   onRejectDiff: (proposal: DiffProposal) => void;
   onReviewDiff: (proposal: DiffProposal) => void;
+  initialPrompt?: string | null;
+  onClearInitialPrompt?: () => void;
 }
 
 export function AIAgentPanel({
@@ -61,18 +63,25 @@ export function AIAgentPanel({
   onAcceptDiff,
   onRejectDiff,
   onReviewDiff,
+  initialPrompt,
+  onClearInitialPrompt,
 }: AIAgentPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
-      id: 'welcome',
+      id: 'init_welcome',
       role: 'assistant',
-      content: `Hello ${context.user.name || 'Developer'}! I'm your **Radiux AI Coding Agent**.\n\nI can inspect your workspace, search codebase symbols, propose surgical edits with diff previews, run terminal checks, and fix build errors.\n\nHow can I help you in **${context.project.name}** today?`,
+      content:
+        'Hello! I am **Zodiac 1.0**, your native AI coding agent. I can inspect your project, search files, run diagnostics, test builds, and propose structured code edits.',
     },
   ]);
 
   const [input, setInput] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [permissionMode, setPermissionMode] = useState<AIPermissionMode>('ASSISTED');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isMemoryOpen, setIsMemoryOpen] = useState(false);
+  const [projectMemoryText, setProjectMemoryText] = useState(
+    context.projectMemory?.coding_conventions || ''
+  );
   const [activeModel, setActiveModel] = useState('llama-3.3-70b-versatile');
   const [panelWidth, setPanelWidth] = useState(380);
   const [isDragging, setIsDragging] = useState(false);
@@ -81,6 +90,17 @@ export function AIAgentPanel({
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Sync initialPrompt into input if provided
+  useEffect(() => {
+    if (initialPrompt) {
+      setInput(initialPrompt);
+      if (onClearInitialPrompt) onClearInitialPrompt();
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 50);
+    }
+  }, [initialPrompt, onClearInitialPrompt]);
 
   // Auto-scroll on new message or stream token
   useEffect(() => {
@@ -319,55 +339,79 @@ export function AIAgentPanel({
           <div className="p-1 rounded bg-sky-500/10 text-sky-400">
             <Sparkles className="w-3.5 h-3.5" />
           </div>
-          <span className="text-xs font-semibold text-neutral-200">AI Agent</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.05] text-neutral-400 border border-white/[0.06]">
-            {activeModel.replace('-versatile', '')}
-          </span>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-neutral-100">ZODIAC 1.0</span>
+              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                agent
+              </span>
+            </div>
+            <div className="text-[10px] text-neutral-500 font-mono">
+              {activeModel.replace('-versatile', '')}
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Permission Mode Selector */}
-          <div className="relative group">
-            <button
-              className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 border border-white/[0.06]"
-              title={`Permission Mode: ${permissionMode}`}
-            >
-              {permissionMode === 'READ_ONLY' && <Shield className="w-2.5 h-2.5 text-neutral-400" />}
-              {permissionMode === 'ASSISTED' && <ShieldCheck className="w-2.5 h-2.5 text-sky-400" />}
-              {permissionMode === 'AUTONOMOUS' && <ShieldAlert className="w-2.5 h-2.5 text-amber-400" />}
-              <span>{permissionMode}</span>
-              <ChevronDown className="w-2.5 h-2.5 text-neutral-500" />
-            </button>
-            <div className="absolute right-0 top-full mt-1 hidden group-hover:block w-36 rounded-lg bg-neutral-900 border border-white/10 shadow-xl p-1 z-40 text-xs">
+          {/* Visitor restriction badge OR Permission Mode Selector */}
+          {context.user.role === 'visitor' ? (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700">
+              Visitor (Read-Only)
+            </span>
+          ) : (
+            <div className="relative group">
               <button
-                onClick={() => setPermissionMode('READ_ONLY')}
-                className={`w-full text-left px-2 py-1 rounded flex items-center gap-1.5 text-[11px] ${
-                  permissionMode === 'READ_ONLY' ? 'bg-sky-500/20 text-sky-300' : 'text-neutral-400 hover:text-white'
-                }`}
+                className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 border border-white/[0.06]"
+                title={`Permission Mode: ${permissionMode}`}
               >
-                <Shield className="w-3 h-3" />
-                <span>READ_ONLY</span>
+                {permissionMode === 'READ_ONLY' && <Shield className="w-2.5 h-2.5 text-neutral-400" />}
+                {permissionMode === 'ASSISTED' && <ShieldCheck className="w-2.5 h-2.5 text-sky-400" />}
+                {permissionMode === 'AUTONOMOUS' && <ShieldAlert className="w-2.5 h-2.5 text-amber-400" />}
+                <span>{permissionMode}</span>
+                <ChevronDown className="w-2.5 h-2.5 text-neutral-500" />
               </button>
-              <button
-                onClick={() => setPermissionMode('ASSISTED')}
-                className={`w-full text-left px-2 py-1 rounded flex items-center gap-1.5 text-[11px] ${
-                  permissionMode === 'ASSISTED' ? 'bg-sky-500/20 text-sky-300' : 'text-neutral-400 hover:text-white'
-                }`}
-              >
-                <ShieldCheck className="w-3 h-3 text-sky-400" />
-                <span>ASSISTED</span>
-              </button>
-              <button
-                onClick={() => setPermissionMode('AUTONOMOUS')}
-                className={`w-full text-left px-2 py-1 rounded flex items-center gap-1.5 text-[11px] ${
-                  permissionMode === 'AUTONOMOUS' ? 'bg-sky-500/20 text-sky-300' : 'text-neutral-400 hover:text-white'
-                }`}
-              >
-                <ShieldAlert className="w-3 h-3 text-amber-400" />
-                <span>AUTONOMOUS</span>
-              </button>
+              <div className="absolute right-0 top-full mt-1 hidden group-hover:block w-36 rounded-lg bg-neutral-900 border border-white/10 shadow-xl p-1 z-40 text-xs">
+                <button
+                  onClick={() => setPermissionMode('READ_ONLY')}
+                  className={`w-full text-left px-2 py-1 rounded flex items-center gap-1.5 text-[11px] ${
+                    permissionMode === 'READ_ONLY' ? 'bg-sky-500/20 text-sky-300' : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <Shield className="w-3 h-3" />
+                  <span>READ_ONLY</span>
+                </button>
+                <button
+                  onClick={() => setPermissionMode('ASSISTED')}
+                  className={`w-full text-left px-2 py-1 rounded flex items-center gap-1.5 text-[11px] ${
+                    permissionMode === 'ASSISTED' ? 'bg-sky-500/20 text-sky-300' : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <ShieldCheck className="w-3 h-3 text-sky-400" />
+                  <span>ASSISTED</span>
+                </button>
+                <button
+                  onClick={() => setPermissionMode('AUTONOMOUS')}
+                  className={`w-full text-left px-2 py-1 rounded flex items-center gap-1.5 text-[11px] ${
+                    permissionMode === 'AUTONOMOUS' ? 'bg-sky-500/20 text-sky-300' : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <ShieldAlert className="w-3 h-3 text-amber-400" />
+                  <span>AUTONOMOUS</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Project Memory Drawer Button */}
+          <button
+            onClick={() => setIsMemoryOpen(!isMemoryOpen)}
+            className={`p-1 rounded text-xs transition-colors ${
+              isMemoryOpen ? 'bg-sky-500/20 text-sky-300' : 'text-neutral-400 hover:text-white hover:bg-white/5'
+            }`}
+            title="Project AI Memory & Architecture Rules"
+          >
+            <Layers className="w-3.5 h-3.5" />
+          </button>
 
           <button
             onClick={handleNewChat}
@@ -393,6 +437,50 @@ export function AIAgentPanel({
         </div>
       </div>
 
+      {/* Project Memory Drawer */}
+      {isMemoryOpen && (
+        <div className="p-3 border-b border-white/10 bg-neutral-900/90 text-xs flex flex-col gap-2">
+          <div className="flex items-center justify-between font-semibold text-neutral-300">
+            <span>Project Memory & Instructions</span>
+            <button onClick={() => setIsMemoryOpen(false)} className="text-neutral-500 hover:text-white">
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+          <p className="text-[11px] text-neutral-400">
+            Persistent architecture notes, conventions, and constraints known to Zodiac.
+          </p>
+          <textarea
+            value={projectMemoryText}
+            onChange={(e) => setProjectMemoryText(e.target.value)}
+            placeholder="e.g. Always use Tailwind CSS, keep components small, avoid any in TypeScript..."
+            rows={3}
+            className="w-full p-2 rounded bg-neutral-950 border border-white/10 text-neutral-200 text-xs focus:outline-none focus:border-sky-500 font-mono"
+          />
+          <div className="flex justify-end">
+            <button
+              onClick={async () => {
+                try {
+                  await fetch('/api/ai/project-context', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      projectId: context.project.id,
+                      codingConventions: projectMemoryText,
+                    }),
+                  });
+                  setIsMemoryOpen(false);
+                } catch (e) {
+                  console.error(e);
+                }
+              }}
+              className="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-[11px] font-medium"
+            >
+              Save Memory
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Messages Thread */}
       <div className="flex-1 overflow-y-auto p-3 space-y-4 text-xs select-text">
         {messages.map((m) => (
@@ -409,7 +497,7 @@ export function AIAgentPanel({
               ) : (
                 <span className="flex items-center gap-1 text-sky-400 font-semibold">
                   <Sparkles className="w-2.5 h-2.5" />
-                  Radiux Agent
+                  Zodiac 1.0
                 </span>
               )}
             </div>

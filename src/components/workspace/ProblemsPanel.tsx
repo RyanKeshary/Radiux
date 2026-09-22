@@ -9,7 +9,8 @@ import {
   ChevronRight, 
   ChevronDown, 
   Search,
-  Filter
+  Filter,
+  Sparkles
 } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 
@@ -28,9 +29,10 @@ export interface ProblemItem {
 interface ProblemsPanelProps {
   problems: ProblemItem[];
   onNavigateToProblem: (fileId: string, line: number, col: number) => void;
+  onAskZodiac?: (problem: ProblemItem) => void;
 }
 
-export function ProblemsPanel({ problems, onNavigateToProblem }: ProblemsPanelProps) {
+export function ProblemsPanel({ problems, onNavigateToProblem, onAskZodiac }: ProblemsPanelProps) {
   const [filterText, setFilterText] = useState('');
   const [severityFilter, setSeverityFilter] = useState<'all' | 'error' | 'warning'>('all');
   const [collapsedFiles, setCollapsedFiles] = useState<Record<string, boolean>>({});
@@ -218,6 +220,20 @@ export function ProblemsPanel({ problems, onNavigateToProblem }: ProblemsPanelPr
                         <div className="text-[11px] flex-shrink-0 tabular-nums" style={{ color: 'var(--ide-text-muted)' }}>
                           Ln {item.startLineNumber}, Col {item.startColumn}
                         </div>
+
+                        {onAskZodiac && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAskZodiac(item);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-[10px] flex items-center gap-1 transition-all"
+                            title="Ask Zodiac to analyze and fix this problem"
+                          >
+                            <Sparkles className="w-2.5 h-2.5" />
+                            <span>Ask Zodiac</span>
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>

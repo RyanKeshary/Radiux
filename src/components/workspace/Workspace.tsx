@@ -5,7 +5,7 @@ import Link from 'next/link';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import dynamic from 'next/dynamic';
-import { Project, FileItem, ProjectMember, getUserColor, isMediaFile, UserProfile } from '@/lib/types';
+import { Project, FileItem, ProjectMember, WorkspaceRole, getUserColor, isMediaFile, UserProfile } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
 import { config } from '@/lib/config';
 import { useAuth } from '@/context/AuthContext';
@@ -68,6 +68,7 @@ import { VoicePanel } from './VoicePanel';
 import { AIAgentPanel } from './AIAgentPanel';
 import { DiffViewerModal } from './DiffViewerModal';
 import { DiffProposal, WorkspaceAIContext } from '@/lib/ai/types';
+import { NotificationCenter } from './NotificationCenter';
 
 
 import { 
@@ -128,7 +129,7 @@ const DEFAULT_SETTINGS: EditorSettings = {
 export function Workspace({ projectId }: WorkspaceProps) {
   const { user, loading: authLoading } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
-  const [role, setRole] = useState<'owner' | 'member' | null>(null);
+  const [role, setRole] = useState<WorkspaceRole | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
@@ -152,6 +153,21 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [activeDiffProposal, setActiveDiffProposal] = useState<DiffProposal | null>(null);
   const [isDiffViewerOpen, setIsDiffViewerOpen] = useState(false);
   const [currentSelectionContext, setCurrentSelectionContext] = useState<any>(null);
+  const [aiInitialPrompt, setAiInitialPrompt] = useState<string | null>(null);
+
+  const handleAskZodiacProblem = useCallback((problem: ProblemItem) => {
+    setAiInitialPrompt(
+      `Please help fix this problem in file "${problem.filePath}" at line ${problem.startLineNumber}:\n[${problem.severity.toUpperCase()}] ${problem.message}`
+    );
+    setIsAIPanelOpen(true);
+  }, []);
+
+  const handleAskZodiacTest = useCallback((ctx: { command: string; error: string; file?: string; line?: number }) => {
+    setAiInitialPrompt(
+      `Please analyze and fix this test failure when running "${ctx.command}":\n\n${ctx.error}`
+    );
+    setIsAIPanelOpen(true);
+  }, []);
 
 
   // Level 7: Diagnostics & Output Panels
@@ -244,7 +260,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [activeDockTab, setActiveDockTab] = useState<DockTab>('terminal');
   const [dockOrientation, setDockOrientation] = useState<DockOrientation>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('codecollab_dock_orientation');
+      const saved = localStorage.getItem('radiux_dock_orientation') || localStorage.getItem('codecollab_dock_orientation');
       if (saved === 'bottom' || saved === 'right' || saved === 'left' || saved === 'fullscreen') {
         return saved;
       }
@@ -255,7 +271,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const handleOrientationChange = (newOrientation: DockOrientation) => {
     setDockOrientation(newOrientation);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('codecollab_dock_orientation', newOrientation);
+      localStorage.setItem('radiux_dock_orientation', newOrientation);
     }
   };
 
@@ -302,7 +318,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
   // User-specific custom resizable sidebar width
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(`codecollab_sidebar_width_${user?.id || 'guest'}`);
+      const saved = localStorage.getItem(`radiux_sidebar_width_${user?.id || 'guest'}`) || localStorage.getItem(`codecollab_sidebar_width_${user?.id || 'guest'}`);
       if (saved) {
         const val = parseInt(saved, 10);
         if (!isNaN(val) && val >= 200 && val <= 900) return val;
@@ -313,7 +329,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && user?.id) {
-      const saved = localStorage.getItem(`codecollab_sidebar_width_${user.id}`);
+      const saved = localStorage.getItem(`radiux_sidebar_width_${user.id}`) || localStorage.getItem(`codecollab_sidebar_width_${user.id}`);
       if (saved) {
         const val = parseInt(saved, 10);
         if (!isNaN(val) && val >= 200 && val <= 900) {
@@ -343,7 +359,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
       const finalWidth = Math.max(220, Math.min(maxWidth, startWidth + delta));
       setSidebarWidth(finalWidth);
       if (typeof window !== 'undefined') {
-        localStorage.setItem(`codecollab_sidebar_width_${user?.id || 'guest'}`, String(finalWidth));
+        localStorage.setItem(`radiux_sidebar_width_${user?.id || 'guest'}`, String(finalWidth));
       }
     };
 
@@ -417,8 +433,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
       if (typeof window !== 'undefined' && projData) {
         localStorage.setItem('radiux_last_project_id', projData.id);
         localStorage.setItem('radiux_last_project_name', projData.name);
-        localStorage.setItem('codecollab_last_project_id', projData.id);
-        localStorage.setItem('codecollab_last_project_name', projData.name);
       }
       setFiles(filesData);
       setMembers(membersData);
@@ -433,10 +447,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
       } catch (e) {}
 
       // Workspace State Restoration (Level 7)
-      const storageKey = `codecollab_workspace_${projectId}`;
+      const storageKey = `radiux_workspace_${projectId}`;
       let restored = false;
       if (typeof window !== 'undefined') {
-        const savedRaw = localStorage.getItem(storageKey);
+        const savedRaw = localStorage.getItem(storageKey) || localStorage.getItem(`codecollab_workspace_${projectId}`);
         if (savedRaw) {
           try {
             const savedState = JSON.parse(savedRaw);
@@ -563,7 +577,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
   // Persist Workspace State (Debounced)
   useEffect(() => {
     if (!project || loading) return;
-    const storageKey = `codecollab_workspace_${projectId}`;
+    const storageKey = `radiux_workspace_${projectId}`;
     const timeout = setTimeout(() => {
       try {
         const stateToSave = {
@@ -1642,7 +1656,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
           {/* Separator */}
           <span className="w-px h-4 bg-white/[0.08] mx-0.5" />
 
-          {/* AI Agent Toggle Button */}
+          {/* Zodiac 1.0 AI Agent Toggle Button */}
           <button
             onClick={() => setIsAIPanelOpen(!isAIPanelOpen)}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
@@ -1650,10 +1664,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
                 : 'text-neutral-300 hover:text-white border border-white/[0.1] hover:border-white/[0.2] hover:bg-white/[0.07]'
             }`}
-            title="Toggle AI Coding Agent (Ctrl+I)"
+            title="Toggle Zodiac 1.0 AI Coding Agent (Ctrl+I)"
           >
             <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden sm:inline font-semibold">AI Agent</span>
+            <span className="hidden sm:inline font-semibold">Zodiac 1.0</span>
           </button>
 
           {/* Invite Teammates */}
@@ -1664,6 +1678,14 @@ export function Workspace({ projectId }: WorkspaceProps) {
             <UserPlus className="w-3 h-3" />
             <span className="hidden sm:inline">Invite</span>
           </button>
+
+          {/* Notification Center */}
+          <NotificationCenter
+            userId={user?.id || 'guest'}
+            onNavigateToProject={(id) => {
+              window.location.href = `/project/${id}`;
+            }}
+          />
 
 
 
@@ -1944,6 +1966,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onTabChange={setActiveDockTab}
                 onNavigateToFile={handleNavigateToLocation}
                 theme={settings.theme}
+                userRole={role || 'editor'}
+                onAskZodiacProblem={handleAskZodiacProblem}
+                onAskZodiacTest={handleAskZodiacTest}
               />
             )}
 
@@ -2041,6 +2066,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                             onAskAI={() => {
                               setIsAIPanelOpen(true);
                             }}
+                            readOnly={role === 'visitor'}
                           />
                         )
                       ) : (
@@ -2069,6 +2095,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onAcceptDiff={handleAcceptDiff}
                 onRejectDiff={handleRejectDiff}
                 onReviewDiff={handleReviewDiff}
+                initialPrompt={aiInitialPrompt}
+                onClearInitialPrompt={() => setAiInitialPrompt(null)}
               />
             )}
 
@@ -2166,6 +2194,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onTabChange={setActiveDockTab}
                 onNavigateToFile={handleNavigateToLocation}
                 theme={settings.theme}
+                userRole={role || 'editor'}
+                onAskZodiacProblem={handleAskZodiacProblem}
+                onAskZodiacTest={handleAskZodiacTest}
                 onMoveToSidebar={(tab) => {
                   setIsSidebarOpen(true);
                   setActiveActivityView(tab);
@@ -2214,6 +2245,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
               onTabChange={setActiveDockTab}
               onNavigateToFile={handleNavigateToLocation}
               theme={settings.theme}
+              userRole={role || 'editor'}
+              onAskZodiacProblem={handleAskZodiacProblem}
+              onAskZodiacTest={handleAskZodiacTest}
               onMoveToSidebar={(tab) => {
                 setIsSidebarOpen(true);
                 setActiveActivityView(tab);
@@ -2261,6 +2295,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
               onTabChange={setActiveDockTab}
               onNavigateToFile={handleNavigateToLocation}
               theme={settings.theme}
+              userRole={role || 'editor'}
+              onAskZodiacProblem={handleAskZodiacProblem}
+              onAskZodiacTest={handleAskZodiacTest}
               onMoveToSidebar={(tab) => {
                 setIsSidebarOpen(true);
                 setActiveActivityView(tab);
