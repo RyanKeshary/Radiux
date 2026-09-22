@@ -50,6 +50,7 @@ export interface EditorSettings {
   lineNumbers?: 'on' | 'off';
   autoSaveDelay?: number;
   soundEnabled?: boolean;
+  showCollaboratorCursors?: boolean;
 }
 
 export type SettingsSection = 
@@ -57,7 +58,6 @@ export type SettingsSection =
   | 'profile'
   | 'collaborators'
   | 'account'
-  | 'notifications'
   | 'shortcuts'
   | 'appearance'
   | 'privacy'
@@ -246,14 +246,13 @@ export function EditorSettingsModal({
     { id: 'profile', label: '2. Profile', icon: <User className="w-4 h-4 text-indigo-400" /> },
     { id: 'collaborators', label: '3. Collaborators', icon: <Users className="w-4 h-4 text-emerald-400" /> },
     { id: 'account', label: '4. Account', icon: <Shield className="w-4 h-4 text-amber-400" /> },
-    { id: 'notifications', label: '5. Notifications', icon: <Bell className="w-4 h-4 text-cyan-400" /> },
-    { id: 'shortcuts', label: '6. Keyboard Shortcuts', icon: <Keyboard className="w-4 h-4 text-purple-400" /> },
-    { id: 'appearance', label: '7. Appearance', icon: <Palette className="w-4 h-4 text-pink-400" /> },
-    { id: 'privacy', label: '8. Privacy', icon: <Lock className="w-4 h-4 text-teal-400" /> },
-    { id: 'github', label: '9. GitHub / Source Control', icon: <Github className="w-4 h-4 text-white" /> },
-    { id: 'extensions', label: '10. Extensions', icon: <Blocks className="w-4 h-4 text-emerald-400" /> },
-    { id: 'integrations', label: '11. Integrations', icon: <Share2 className="w-4 h-4 text-violet-400" /> },
-    { id: 'advanced', label: '12. Advanced', icon: <Cpu className="w-4 h-4 text-rose-400" /> },
+    { id: 'shortcuts', label: '5. Keyboard Shortcuts', icon: <Keyboard className="w-4 h-4 text-purple-400" /> },
+    { id: 'appearance', label: '6. Appearance', icon: <Palette className="w-4 h-4 text-pink-400" /> },
+    { id: 'privacy', label: '7. Privacy', icon: <Lock className="w-4 h-4 text-teal-400" /> },
+    { id: 'github', label: '8. GitHub / Source Control', icon: <Github className="w-4 h-4 text-white" /> },
+    { id: 'extensions', label: '9. Extensions', icon: <Blocks className="w-4 h-4 text-emerald-400" /> },
+    { id: 'integrations', label: '10. Integrations', icon: <Share2 className="w-4 h-4 text-violet-400" /> },
+    { id: 'advanced', label: '11. Advanced', icon: <Cpu className="w-4 h-4 text-rose-400" /> },
   ];
 
   return (
@@ -481,6 +480,25 @@ export function EditorSettingsModal({
                       soundManager.setEnabled(e.target.checked);
                       onUpdateSettings({ soundEnabled: e.target.checked });
                     }}
+                    className="w-4 h-4 accent-sky-500 cursor-pointer"
+                  />
+                </div>
+
+                {/* Show Collaborator Cursors Toggle */}
+                <div className="p-3.5 rounded-lg border flex items-center justify-between" style={{ borderColor: 'var(--ide-border)' }}>
+                  <div>
+                    <div className="font-semibold text-xs flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Show Collaborator Cursors</span>
+                    </div>
+                    <div className="text-[11px] opacity-70 mt-0.5">
+                      Display live shared cursors, name tags, and selection highlights of peers in the editor.
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.showCollaboratorCursors !== false}
+                    onChange={(e) => onUpdateSettings({ showCollaboratorCursors: e.target.checked })}
                     className="w-4 h-4 accent-sky-500 cursor-pointer"
                   />
                 </div>
@@ -823,36 +841,7 @@ export function EditorSettingsModal({
               </div>
             )}
 
-            {/* 5. Notifications */}
-            {activeSection === 'notifications' && (
-              <div className="space-y-5 max-w-xl">
-                <div>
-                  <h3 className="text-sm font-semibold mb-1">Notification Preferences</h3>
-                  <p className="text-[11px] opacity-70">
-                    Control how Radiux alerts you to incoming requests and events.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-lg border flex items-center justify-between" style={{ borderColor: 'var(--ide-border)' }}>
-                  <div>
-                    <p className="font-semibold">Notification Chime Sound</p>
-                    <p className="text-[11px] opacity-60">Synthesized audio alert on important notifications.</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const cur = soundManager.isEnabled();
-                      soundManager.setEnabled(!cur);
-                      onUpdateSettings({ soundEnabled: !cur });
-                    }}
-                    className={`px-3 py-1 rounded font-medium ${soundManager.isEnabled() ? 'bg-sky-600 text-white' : 'bg-white/10 text-neutral-400'}`}
-                  >
-                    {soundManager.isEnabled() ? 'Enabled' : 'Muted'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* 6. Keyboard Shortcuts */}
+            {/* 5. Keyboard Shortcuts */}
             {activeSection === 'shortcuts' && (
               <div className="space-y-4 max-w-xl">
                 <div>

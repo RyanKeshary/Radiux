@@ -104,6 +104,13 @@ export function useVoiceChat({
       }
     };
 
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') {
+        console.warn(`[WebRTC] ICE connection to peer ${peerId} failed. Direct P2P STUN traversal failed; TURN relay server required for restrictive NATs/firewalls.`);
+        closePeer(peerId);
+      }
+    };
+
     // If initiator, create and dispatch offer
     if (isInitiator) {
       pc.createOffer({ offerToReceiveAudio: true })
@@ -125,9 +132,10 @@ export function useVoiceChat({
     return pc;
   }, [closePeer]);
 
-  // Connect to signaling WebSocket
+  // Connect to signaling WebSocket only when actively participating in voice
   useEffect(() => {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    if (!isInVoice || !projectId) return;
+
     const wsUrl = config.buildWsUrl('/comm', { projectId });
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -139,6 +147,12 @@ export function useVoiceChat({
           userId,
           userName,
           userColor,
+        })
+      );
+      ws.send(
+        JSON.stringify({
+          type: 'voice_join',
+          isMuted: false,
         })
       );
     };
@@ -241,9 +255,15 @@ export function useVoiceChat({
     };
 
     return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: 'voice_leave' }));
+        } catch (e) {}
+      }
       ws.close();
+      wsRef.current = null;
     };
-  }, [projectId, userId, userName, userColor, closePeer, createPeerConnection]);
+  }, [isInVoice, projectId, userId, userName, userColor, closePeer, createPeerConnection]);
 
   // Join Voice Call
   const joinVoice = async () => {

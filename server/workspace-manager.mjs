@@ -32,6 +32,17 @@ export function getSanitizedEnv() {
   safeEnv.TERM = 'xterm-256color';
   safeEnv.COLORTERM = 'truecolor';
   safeEnv.LANG = process.env.LANG || 'en_US.UTF-8';
+
+  // Critical fix for Windows PowerShell: Bypass execution policy for current process and child runners (npm.ps1, npx.ps1)
+  if (os.platform() === 'win32') {
+    safeEnv.PSExecutionPolicyPreference = 'Bypass';
+    if (!safeEnv.PATHEXT) {
+      safeEnv.PATHEXT = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';
+    } else if (!safeEnv.PATHEXT.includes('.CMD')) {
+      safeEnv.PATHEXT = `${safeEnv.PATHEXT};.CMD;.BAT;.EXE`;
+    }
+  }
+
   return safeEnv;
 }
 
@@ -49,7 +60,8 @@ function commandExists(cmd) {
 }
 
 /**
- * Detect available terminal profiles on host operating system
+ * Detect available terminal profiles on host operating system dynamically.
+ * Only returns shells that are genuinely available on the system.
  */
 export function detectProfiles() {
   const isWindows = os.platform() === 'win32';
@@ -73,36 +85,42 @@ export function detectProfiles() {
 
     // 2. Windows PowerShell
     const hasPs = fs.existsSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe') || commandExists('powershell');
-    profiles.push({
-      id: 'powershell',
-      name: 'PowerShell',
-      executable: 'powershell.exe',
-      args: ['-ExecutionPolicy', 'Bypass', '-NoLogo'],
-      icon: 'terminal',
-      platform: 'win32',
-      available: hasPs,
-      isDefault: !hasPwsh,
-    });
+    if (hasPs) {
+      profiles.push({
+        id: 'powershell',
+        name: 'PowerShell',
+        executable: 'powershell.exe',
+        args: ['-ExecutionPolicy', 'Bypass', '-NoLogo'],
+        icon: 'terminal',
+        platform: 'win32',
+        available: true,
+        isDefault: !hasPwsh,
+      });
+    }
 
-    // 3. Command Prompt
+    // 3. Command Prompt (cmd)
     const hasCmd = fs.existsSync('C:\\Windows\\System32\\cmd.exe') || commandExists('cmd');
-    profiles.push({
-      id: 'cmd',
-      name: 'Command Prompt',
-      executable: 'cmd.exe',
-      args: [],
-      icon: 'cmd',
-      platform: 'win32',
-      available: hasCmd,
-      isDefault: false,
-    });
+    if (hasCmd) {
+      profiles.push({
+        id: 'cmd',
+        name: 'Command Prompt',
+        executable: 'cmd.exe',
+        args: [],
+        icon: 'cmd',
+        platform: 'win32',
+        available: true,
+        isDefault: false,
+      });
+    }
 
     // 4. Git Bash
     let gitBashPath = null;
     const gitBashCandidates = [
       'C:\\Program Files\\Git\\bin\\bash.exe',
+      'C:\\Program Files\\Git\\usr\\bin\\bash.exe',
       'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
       path.join(process.env.LOCALAPPDATA || '', 'Programs\\Git\\bin\\bash.exe'),
+      path.join(process.env.ProgramW6432 || '', 'Git\\bin\\bash.exe'),
     ];
     for (const cand of gitBashCandidates) {
       if (cand && fs.existsSync(cand)) {
@@ -123,19 +141,30 @@ export function detectProfiles() {
       });
     }
 
-    // 5. WSL
-    const hasWsl = fs.existsSync('C:\\Windows\\System32\\wsl.exe') || commandExists('wsl');
-    if (hasWsl) {
-      profiles.push({
-        id: 'wsl',
-        name: 'WSL',
-        executable: 'wsl.exe',
-        args: [],
-        icon: 'linux',
-        platform: 'win32',
-        available: true,
-        isDefault: false,
-      });
+    // 5. WSL (Verify WSL has an active distribution installed)
+    const hasWslExe = fs.existsSync('C:\\Windows\\System32\\wsl.exe') || commandExists('wsl');
+    if (hasWslExe) {
+      let wslUsable = false;
+      try {
+        const out = execSync('wsl.exe -l -q', { encoding: 'utf16le', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000 });
+        if (out && out.trim().length > 0) {
+          wslUsable = true;
+        }
+      } catch (e) {
+        wslUsable = false;
+      }
+      if (wslUsable) {
+        profiles.push({
+          id: 'wsl',
+          name: 'WSL',
+          executable: 'wsl.exe',
+          args: [],
+          icon: 'linux',
+          platform: 'win32',
+          available: true,
+          isDefault: false,
+        });
+      }
     }
   } else {
     // Linux / macOS / Render container environment
@@ -448,7 +477,7 @@ export const WorkspaceManager = {
             session.ptyProcess.write('\x03');
           }
         } else if (payload.type === 'restart') {
-          this.restartSession(session.id);
+          this.restartSession(session.id, payload.profileId);
         } else if (payload.type === 'rename' && payload.title) {
           this.renameSession(session.id, payload.title);
         }
@@ -456,6 +485,9 @@ export const WorkspaceManager = {
         // Raw keystroke fallback
         if (session.ptyProcess && session.status === 'running') {
           session.ptyProcess.write(message.toString());
+        } else if (session.status === 'exited' && (message.toString() === '\r' || message.toString() === '\n')) {
+          // Auto-restart on Enter key when exited
+          this.restartSession(session.id);
         }
       }
     });
@@ -474,12 +506,23 @@ export const WorkspaceManager = {
     });
   },
 
-  restartSession(sessionId) {
+  restartSession(sessionId, newProfileId = null) {
     const session = activeSessions.get(sessionId);
     if (!session) return null;
 
     if (session.ptyProcess) {
       this.killPtyProcess(session.ptyProcess);
+    }
+
+    if (newProfileId) {
+      const profiles = detectProfiles();
+      const profile = profiles.find(p => p.id === newProfileId);
+      if (profile) {
+        session.profileId = profile.id;
+        session.shell = profile.executable;
+        session.shellArgs = profile.args;
+        session.title = profile.name;
+      }
     }
 
     try {
@@ -513,14 +556,19 @@ export const WorkspaceManager = {
       });
 
       const restartMsg = JSON.stringify({
-        type: 'status',
+        type: 'session_updated',
         sessionId: session.id,
+        profileId: session.profileId,
+        title: session.title,
         running: true,
         pid: ptyProcess.pid,
         restarted: true,
       });
       session.clients.forEach((c) => {
-        if (c.readyState === 1) c.send(restartMsg);
+        if (c.readyState === 1) {
+          c.send(restartMsg);
+          c.send(JSON.stringify({ type: 'status', sessionId: session.id, running: true, pid: ptyProcess.pid, restarted: true }));
+        }
       });
 
       return session;

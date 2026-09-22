@@ -82,17 +82,7 @@ export const CORE_COMMANDS: CommandItem[] = [
     enabled: true,
     actionId: 'toggleDock',
   },
-  {
-    id: 'workbench.action.toggleNotifications',
-    title: 'Toggle Notifications Panel',
-    category: 'View',
-    description: 'Open or close the notifications center drawer',
-    defaultShortcut: 'Ctrl+Alt+B',
-    macShortcut: 'Cmd+Alt+B',
-    scope: 'Global',
-    enabled: true,
-    actionId: 'toggleNotifications',
-  },
+
 
   // Editor Tabs & Splitting
   {

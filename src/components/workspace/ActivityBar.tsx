@@ -10,13 +10,12 @@ import {
   Settings, 
   Keyboard, 
   User,
-  Bell,
   MessageSquare,
   Mic,
   Blocks,
   FileCode2,
   Share2,
-  GitPullRequest
+  GitPullRequest,
 } from 'lucide-react';
 
 export type ActivityView = 'explorer' | 'search' | 'git' | 'chat' | 'voice' | 'preview' | 'collaborators' | 'extensions' | 'comments';
@@ -26,13 +25,11 @@ interface ActivityBarProps {
   onSelectView: (view: ActivityView) => void;
   collaboratorCount?: number;
   gitChangedCount?: number;
-  unreadNotifications?: number;
   unreadChatCount?: number;
   isInVoice?: boolean;
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
   onOpenProfile: () => void;
-  onOpenNotifications: () => void;
   onOpenIntegrations?: () => void;
   onOpenReviews?: () => void;
   userAvatar?: string;
@@ -44,13 +41,11 @@ export function ActivityBar({
   onSelectView,
   collaboratorCount = 0,
   gitChangedCount = 0,
-  unreadNotifications = 0,
   unreadChatCount = 0,
   isInVoice = false,
   onOpenSettings,
   onOpenShortcuts,
   onOpenProfile,
-  onOpenNotifications,
   onOpenIntegrations,
   onOpenReviews,
   userAvatar,
@@ -166,24 +161,6 @@ export function ActivityBar({
 
       {/* Bottom Utility Actions */}
       <div className="flex flex-col items-center gap-1 w-full" style={{ color: 'var(--ide-text)' }}>
-        {/* Notifications Bell */}
-        <button
-          onClick={onOpenNotifications}
-          className="relative w-10 h-10 flex items-center justify-center rounded opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-all"
-          title="Notifications"
-          aria-label="Notifications"
-        >
-          <Bell className="w-5 h-5" />
-          {unreadNotifications > 0 && (
-            <span 
-              className="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-1 text-[9.5px] font-extrabold text-white bg-rose-500 rounded-full flex items-center justify-center leading-none shadow-md ring-2 ring-[var(--ide-activity)] animate-pulse"
-              title={`${unreadNotifications} unread notifications`}
-            >
-              {unreadNotifications > 9 ? '9+' : unreadNotifications}
-            </span>
-          )}
-        </button>
-
         {/* Keyboard Shortcuts */}
         <button
           onClick={onOpenShortcuts}

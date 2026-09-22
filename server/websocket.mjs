@@ -33,12 +33,12 @@ if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
     supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    console.log('[CodeCollab] Supabase admin client ready for WS auth verification');
+    console.log('[Radiux] Supabase admin client ready for WS auth verification');
   } catch (e) {
-    console.warn('[CodeCollab] Could not initialize Supabase admin client:', e.message);
+    console.warn('[Radiux] Could not initialize Supabase admin client:', e.message);
   }
 } else {
-  console.warn('[CodeCollab] SUPABASE_SERVICE_ROLE_KEY not set — WS auth verification disabled (dev mode)');
+  console.warn('[Radiux] SUPABASE_SERVICE_ROLE_KEY not set — WS auth verification disabled (dev mode)');
 }
 
 /**
@@ -182,122 +182,10 @@ function saveProjectMessage(projectId, message) {
   return message;
 }
 
-// Project Activities
-function getProjectActivities(projectId) {
-  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'activities.json');
-  return loadJsonFile(file, []);
-}
-
-function saveProjectActivity(projectId, activity) {
-  if (!activity || !activity.id) return activity;
-  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'activities.json');
-  const acts = loadJsonFile(file, []);
-  if (!acts.some(a => a.id === activity.id)) {
-    acts.unshift(activity);
-    if (acts.length > 500) acts.length = 500;
-    saveJsonFile(file, acts);
-  }
-  return activity;
-}
-
-// Global Notifications
-function getGlobalNotifications(userId) {
-  const file = path.join(DATA_ROOT, 'notifications.json');
-  const all = loadJsonFile(file, []);
-  if (!userId) return all;
-  return all.filter(n => n.user_id === userId);
-}
-
 // Project Inline Comments
 function getProjectComments(projectId) {
   const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'comments.json');
   return loadJsonFile(file, []);
-}
-
-function saveProjectComments(projectId, threads) {
-  if (!Array.isArray(threads)) return threads;
-  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'comments.json');
-  saveJsonFile(file, threads);
-  return threads;
-}
-
-// Project Code Reviews (Pull Requests)
-function getProjectReviews(projectId) {
-  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'reviews.json');
-  return loadJsonFile(file, []);
-}
-
-function saveProjectReviews(projectId, reviews) {
-  if (!Array.isArray(reviews)) return reviews;
-  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'reviews.json');
-  saveJsonFile(file, reviews);
-  return reviews;
-}
-
-function saveGlobalNotification(item) {
-  if (!item || !item.id) return item;
-  const file = path.join(DATA_ROOT, 'notifications.json');
-  const all = loadJsonFile(file, []);
-
-  // Strict idempotency check: deduplicate identical events (e.g. repeated partner requests, invites)
-  const itemKey = item.idempotency_key ||
-    (item.partner_request_id ? `${item.type}_${item.user_id}_${item.partner_request_id}` :
-     item.project_id ? `${item.type}_${item.user_id}_${item.project_id}` :
-     null);
-
-  const idx = all.findIndex(n => {
-    if (n.id === item.id) return true;
-    if (itemKey) {
-      const nKey = n.idempotency_key ||
-        (n.partner_request_id ? `${n.type}_${n.user_id}_${n.partner_request_id}` :
-         n.project_id ? `${n.type}_${n.user_id}_${n.project_id}` :
-         null);
-      if (nKey && nKey === itemKey) return true;
-    }
-    return false;
-  });
-
-  if (idx !== -1) {
-    // Update existing record rather than inserting a duplicate
-    all[idx] = { ...all[idx], ...item, id: all[idx].id };
-    saveJsonFile(file, all);
-    return all[idx];
-  } else {
-    all.unshift(item);
-    if (all.length > 1000) all.length = 1000;
-    saveJsonFile(file, all);
-    return item;
-  }
-}
-
-function markGlobalNotificationRead({ id, userId, all: markAll, partnerRequestId, actionStatus }) {
-  const file = path.join(DATA_ROOT, 'notifications.json');
-  const items = loadJsonFile(file, []);
-  items.forEach(n => {
-    if (markAll && userId && n.user_id === userId) {
-      n.read = true;
-    } else if (id && n.id === id) {
-      n.read = true;
-      if (actionStatus) n.action_status = actionStatus;
-    } else if (partnerRequestId && (n.partner_request_id === partnerRequestId || n.data?.partner_request_id === partnerRequestId)) {
-      n.read = true;
-      if (actionStatus) n.action_status = actionStatus;
-    }
-  });
-  saveJsonFile(file, items);
-}
-
-function deleteGlobalNotification({ id, userId, all: deleteAll, partnerRequestId }) {
-  const file = path.join(DATA_ROOT, 'notifications.json');
-  let items = loadJsonFile(file, []);
-  if (partnerRequestId) {
-    items = items.filter(n => n.partner_request_id !== partnerRequestId && n.data?.partner_request_id !== partnerRequestId);
-  } else if (deleteAll && userId) {
-    items = items.filter(n => n.user_id !== userId);
-  } else if (id) {
-    items = items.filter(n => n.id !== id);
-  }
-  saveJsonFile(file, items);
 }
 
 // Coding Partners
@@ -950,107 +838,7 @@ const server = http.createServer(async (request, response) => {
     }
   }
 
-  // 8. Activities API
-  if (parsedUrl.pathname === '/api/activities') {
-    if (request.method === 'GET') {
-      const projectId = parsedUrl.searchParams.get('projectId') || 'default';
-      const activities = getProjectActivities(projectId);
-      response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ activities }));
-      return;
-    }
-    if (request.method === 'POST') {
-      try {
-        const body = await readJsonBody(request);
-        const { projectId, activity } = body;
-        if (!projectId || !activity) {
-          response.writeHead(400, { 'Content-Type': 'application/json' });
-          response.end(JSON.stringify({ error: 'Missing projectId or activity' }));
-          return;
-        }
-        const saved = saveProjectActivity(projectId, activity);
-        const room = commRooms.get(projectId);
-        if (room) {
-          const actPayload = JSON.stringify({ type: 'activity_event', activity: saved });
-          room.forEach(c => {
-            if (c.ws.readyState === 1) c.ws.send(actPayload);
-          });
-        }
-        response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ success: true, activity: saved }));
-        return;
-      } catch (e) {
-        response.writeHead(500, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ error: e.message }));
-        return;
-      }
-    }
-  }
-
-  // 9. Notifications API (Cross-user notification delivery & persistence)
-  if (parsedUrl.pathname === '/api/notifications') {
-    if (request.method === 'GET') {
-      const userId = parsedUrl.searchParams.get('userId');
-      const notifications = getGlobalNotifications(userId);
-      response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ notifications }));
-      return;
-    }
-    if (request.method === 'POST') {
-      try {
-        const body = await readJsonBody(request);
-        const { notification } = body;
-        if (!notification || !notification.user_id) {
-          response.writeHead(400, { 'Content-Type': 'application/json' });
-          response.end(JSON.stringify({ error: 'Invalid notification payload' }));
-          return;
-        }
-        const saved = saveGlobalNotification(notification);
-        // Instant broadcast to recipient's connected WebSockets!
-        sendToUser(saved.user_id, {
-          type: 'notification',
-          notification: saved,
-        });
-        response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ success: true, notification: saved }));
-        return;
-      } catch (e) {
-        response.writeHead(500, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ error: e.message }));
-        return;
-      }
-    }
-    if (request.method === 'PATCH') {
-      try {
-        const body = await readJsonBody(request);
-        const { id, userId, all } = body;
-        markGlobalNotificationRead({ id, userId, all });
-        response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ success: true }));
-        return;
-      } catch (e) {
-        response.writeHead(500, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ error: e.message }));
-        return;
-      }
-    }
-    if (request.method === 'DELETE') {
-      try {
-        const body = await readJsonBody(request);
-        const { id, userId, all, partnerRequestId } = body;
-        deleteGlobalNotification({ id, userId, all, partnerRequestId });
-        response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ success: true }));
-        return;
-      } catch (e) {
-        response.writeHead(500, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ error: e.message }));
-        return;
-      }
-    }
-  }
-
-  // 10. Coding Partners API (Friend request persistence & sync)
+  // 8. Coding Partners API (Friend request persistence & sync)
   if (parsedUrl.pathname === '/api/partners') {
     if (request.method === 'GET') {
       const userId = parsedUrl.searchParams.get('userId');
@@ -1272,7 +1060,7 @@ const server = http.createServer(async (request, response) => {
   }
 
   response.writeHead(200, { 'Content-Type': 'text/plain' });
-  response.end('CodeCollab Real-time Sync & Workspace Server Active');
+  response.end('Radiux Real-time Sync & Workspace Server Active');
 });
 
 // ============================================================================
@@ -1343,41 +1131,13 @@ function handleCommConnection(ws, projectId, verifiedUser, queryUserId) {
         return;
       }
 
-      // 3. Activity event broadcast & automatic persistence
-      if (msg.type === 'activity_event') {
-        const savedAct = saveProjectActivity(projectId, msg.activity);
-        const actPayload = JSON.stringify({
-          type: 'activity_event',
-          activity: savedAct,
-        });
-        room.forEach((client) => {
-          if (client.ws.readyState === 1) {
-            client.ws.send(actPayload);
-          }
-        });
-        return;
-      }
-
-      // 3b. Partner request and notification live broadcast
+      // 3. Partner request live broadcast
       if (msg.type === 'partner_request') {
         if (msg.partner) saveCodingPartner(msg.partner);
-        if (msg.notification) saveGlobalNotification(msg.notification);
         if (msg.partner?.receiver_id) {
           sendToUser(msg.partner.receiver_id, {
             type: 'partner_request_received',
             partner: msg.partner,
-            notification: msg.notification,
-          });
-        }
-        return;
-      }
-
-      if (msg.type === 'notification') {
-        if (msg.notification) {
-          saveGlobalNotification(msg.notification);
-          sendToUser(msg.notification.user_id, {
-            type: 'notification',
-            notification: msg.notification,
           });
         }
         return;
@@ -1617,22 +1377,22 @@ server.on('upgrade', async (request, socket, head) => {
 wss.on('connection', setupWSConnection);
 
 server.listen(port, host, () => {
-  console.log(`[CodeCollab] Server running on ${host}:${port}`);
-  console.log(`[CodeCollab] Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`[CodeCollab] CORS origin: ${ALLOWED_ORIGIN || 'all (dev mode)'}`);
-  console.log(`[CodeCollab] WS auth: ${supabaseAdmin ? 'enabled' : 'disabled (dev mode)'}`);
+  console.log(`[Radiux] Server running on ${host}:${port}`);
+  console.log(`[Radiux] Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`[Radiux] CORS origin: ${ALLOWED_ORIGIN || 'all (dev mode)'}`);
+  console.log(`[Radiux] WS auth: ${supabaseAdmin ? 'enabled' : 'disabled (dev mode)'}`);
 });
 
 function gracefulShutdown(signal) {
-  console.log(`[CodeCollab] Received ${signal}, closing server gracefully...`);
+  console.log(`[Radiux] Received ${signal}, closing server gracefully...`);
   server.close(() => {
-    console.log('[CodeCollab] HTTP & WebSocket server closed.');
+    console.log('[Radiux] HTTP & WebSocket server closed.');
     WorkspaceManager.cleanupAllWorkspaces();
     process.exit(0);
   });
   // Force exit after 8s if sockets take too long
   setTimeout(() => {
-    console.error('[CodeCollab] Forcing shutdown after timeout.');
+    console.error('[Radiux] Forcing shutdown after timeout.');
     WorkspaceManager.cleanupAllWorkspaces();
     process.exit(1);
   }, 8000);

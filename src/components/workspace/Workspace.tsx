@@ -57,10 +57,6 @@ const ProjectSwitcherModal = dynamic(() => import('./ProjectSwitcherModal').then
 const KeyboardShortcutsModal = dynamic(() => import('./KeyboardShortcutsModal').then(m => m.KeyboardShortcutsModal), { ssr: false });
 const ReviewRequestsModal = dynamic(() => import('./ReviewRequestsModal').then(m => m.ReviewRequestsModal), { ssr: false });
 const IntegrationsModal = dynamic(() => import('./IntegrationsModal').then(m => m.IntegrationsModal), { ssr: false });
-const NotificationCenterPanel = dynamic(() => import('./NotificationCenterPanel').then(m => m.NotificationCenterPanel), { ssr: false });
-
-import { AppNotification } from './NotificationsPopover';
-import type { NotificationToastItem } from './NotificationToast';
 import { ProfilePreviewCard } from '@/components/profile/ProfilePreviewCard';
 import { useKeyboardManager } from '@/hooks/useKeyboardManager';
 import { InlineCommentsOverlay } from './InlineCommentsOverlay';
@@ -85,7 +81,6 @@ import {
   MonitorPlay,
   MessageSquare,
   Mic,
-  Activity,
   Download,
   FolderGit2,
   Github,
@@ -99,7 +94,6 @@ import {
   FolderOpen,
   FileCode,
   X,
-  Bell,
   CheckCircle2,
   ExternalLink,
   Users,
@@ -180,80 +174,21 @@ export function Workspace({ projectId }: WorkspaceProps) {
     line?: number;
   } | null>(null);
 
-  // Corner Pop-up Notification Toasts
-  const [toastList, setToastList] = useState<NotificationToastItem[]>([]);
-
-  // Refs to prevent duplicate initialization & refocus toast spam
+  // Refs to prevent duplicate initialization
   const userRef = useRef(user);
   useEffect(() => {
     userRef.current = user;
   }, [user]);
   const hasJoinedWorkspaceRef = useRef(false);
-  const hasShownInitialToastRef = useRef(false);
   const lastLoadedKeyRef = useRef<string | null>(null);
-  const recentToastKeysRef = useRef<Map<string, number>>(new Map());
-  // Track IDs of notifications shown at initial load so polling never re-toasts them
-  const shownNotifIdsRef = useRef<Set<string>>(new Set());
-
-  // Non-intrusive notification dispatcher (adds to notification state and indicator without obstructive popups)
-  const showToast = useCallback((item: Omit<NotificationToastItem, 'id'>) => {
-    const dedupKey = `${item.type || 'system'}::${item.title || ''}::${item.message || ''}::${item.partnerRequestId || ''}::${item.projectId || ''}`;
-    const now = Date.now();
-    const lastShownTime = recentToastKeysRef.current.get(dedupKey);
-    if (lastShownTime && now - lastShownTime < 30000) {
-      return;
-    }
-    recentToastKeysRef.current.set(dedupKey, now);
-
-    const id = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    setNotifications((prev) => {
-      if (prev.some(n => (n.title === item.title && n.message === item.message) || n.id === id)) {
-        return prev;
-      }
-      return [
-        {
-          id,
-          type: (item.type as any) || 'system',
-          title: item.title,
-          message: item.message,
-          read: false,
-          createdAt: item.createdAt || 'Just now',
-          projectId: item.projectId,
-          partnerRequestId: item.partnerRequestId,
-        },
-        ...prev,
-      ];
-    });
-  }, []);
 
   // Persistent Comm WebSocket Reference
   const commWsRef = useRef<WebSocket | null>(null);
   const previousPeersRef = useRef<Map<string, string>>(new Map());
   const initialPresenceLoadedRef = useRef(false);
 
-  // Activity Broadcast helper
-  const logAndBroadcastActivity = useCallback(async (actionType: any, details: string, targetObject?: string) => {
-    try {
-      const act = await DataService.logActivity(
-        projectId,
-        user?.id || 'guest',
-        user?.full_name || 'Anonymous Peer',
-        actionType,
-        details,
-        targetObject
-      );
-      if (commWsRef.current && commWsRef.current.readyState === WebSocket.OPEN) {
-        commWsRef.current.send(JSON.stringify({ type: 'activity_event', activity: act }));
-      } else {
-        const wsUrl = config.buildWsUrl('/comm', { projectId });
-        const tempWs = new WebSocket(wsUrl);
-        tempWs.onopen = () => {
-          tempWs.send(JSON.stringify({ type: 'activity_event', activity: act }));
-          setTimeout(() => tempWs.close(), 500);
-        };
-      }
-    } catch (e) {}
-  }, [projectId, user?.id, user?.full_name]);
+  // Activity Broadcast helper (no-op as Activity has been retired from product)
+  const logAndBroadcastActivity = useCallback((_actionType?: any, _details?: string, _targetObject?: string) => {}, []);
 
   // Append to Output Logs
   const appendOutputLog = useCallback((channel: 'system' | 'sync' | 'git' | 'runtime', message: string) => {
@@ -323,10 +258,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
   const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isReviewsOpen, setIsReviewsOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [currentGitBranch, setCurrentGitBranch] = useState('main');
 
   // Level 9: Profile Preview Card state & "Click again to view profile"
@@ -460,11 +393,10 @@ export function Workspace({ projectId }: WorkspaceProps) {
       setRole(access.role || 'member');
 
       // 2. Fetch data in parallel
-      const [projData, filesData, membersData, notifsData] = await Promise.all([
+      const [projData, filesData, membersData] = await Promise.all([
         DataService.getProject(projectId),
         DataService.getFiles(projectId),
         DataService.getMembers(projectId),
-        DataService.getNotifications(user.id),
       ]);
 
       setProject(projData);
@@ -476,21 +408,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
       }
       setFiles(filesData);
       setMembers(membersData);
-      const mappedNotifs: AppNotification[] = notifsData.map(n => ({
-        id: n.id,
-        type: n.type as any,
-        title: n.title,
-        message: n.message,
-        read: n.read,
-        createdAt: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        projectId: n.project_id || n.data?.project_id,
-        partnerRequestId: n.partner_request_id || n.data?.partner_request_id,
-      }));
-      setNotifications(mappedNotifs);
-
-      // Phase 24: Suppress historical notifications from displaying as new toasts on initial load/refresh
-      mappedNotifs.forEach(n => shownNotifIdsRef.current.add(n.id));
-      hasShownInitialToastRef.current = true;
 
       // Seed remote workspace disk with existing files
       try {
@@ -562,7 +479,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
     } finally {
       setLoading(false);
     }
-  }, [projectId, user, logAndBroadcastActivity, appendOutputLog, showToast]);
+  }, [projectId, user, logAndBroadcastActivity, appendOutputLog]);
 
   // Persistent Comm WebSocket for real-time notifications and activity
   useEffect(() => {
@@ -590,51 +507,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
-            if (msg.type === 'activity_event' && msg.activity) {
-              const myId = userRef.current?.id || user?.id;
-              const myName = userRef.current?.full_name || user?.full_name;
-              // Never display a toast to oneself for any activity
-              if (
-                msg.activity.user_id !== myId &&
-                (!myName || msg.activity.user_name !== myName)
-              ) {
-                appendOutputLog('system', `${msg.activity.user_name}: ${msg.activity.details}`);
-                showToast({
-                  type: msg.activity.action_type.startsWith('file_') || msg.activity.action_type.startsWith('folder_')
-                    ? 'file_event'
-                    : msg.activity.action_type.startsWith('member_')
-                    ? 'member_event'
-                    : 'system',
-                  title: msg.activity.user_name,
-                  message: msg.activity.details,
-                  projectId: msg.activity.project_id,
-                });
-              }
-            } else if (msg.type === 'notification' && msg.notification) {
-              if (!msg.notification.user_id || msg.notification.user_id === user?.id) {
-                const notif = msg.notification;
-                setNotifications(prev => {
-                  const exists = prev.some(p => p.id === notif.id);
-                  if (exists) {
-                    return prev.map(p => p.id === notif.id ? notif : p);
-                  }
-                  return [notif, ...prev];
-                });
-
-                if (!shownNotifIdsRef.current.has(notif.id)) {
-                  shownNotifIdsRef.current.add(notif.id);
-                  showToast({
-                    type: notif.type === 'partner_request' ? 'partner_request' : 'system',
-                    title: notif.title,
-                    message: notif.message,
-                    partnerRequestId: notif.partner_request_id || notif.partnerRequestId,
-                  });
-                  soundManager.playNotification();
-                }
-              }
-            } else if (msg.type === 'partner_request_received') {
-              // Canonical notification message handles reception and toast idempotently
-            } else if (msg.type === 'comments_update' && msg.threads) {
+            if (msg.type === 'comments_update' && msg.threads) {
               CommentService.handleRemoteCommentsUpdate(projectId, msg.threads);
             } else if (msg.type === 'reviews_update' && msg.reviews) {
               CommentService.handleRemoteReviewsUpdate(projectId, msg.reviews);
@@ -652,81 +525,16 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
     connect();
 
-    // Log member leaving on unload or unmount
-    const handleBeforeUnload = () => {
-      if (user?.id) {
-        logAndBroadcastActivity('member_left', `${user.full_name || 'A user'} left the workspace`, projectId);
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
     return () => {
       isMounted = false;
       clearTimeout(reconnectTimer);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      if (user?.id) {
-        logAndBroadcastActivity('member_left', `${user.full_name || 'A user'} left the workspace`, projectId);
-      }
       if (ws) {
         ws.onclose = null;
         ws.close();
       }
       commWsRef.current = null;
     };
-  }, [projectId, user?.id, user?.full_name, logAndBroadcastActivity, appendOutputLog, showToast]);
-
-  // Backend keepalive to keep container awake
-  useEffect(() => {
-    config.wakeUpBackend();
-    const keepAlive = setInterval(() => {
-      config.wakeUpBackend();
-    }, 8 * 60 * 1000);
-    return () => clearInterval(keepAlive);
-  }, []);
-
-  // Background Notifications Polling with Audio Chime & Corner Toast
-  useEffect(() => {
-    if (!user?.id) return;
-    const notifInterval = setInterval(async () => {
-      try {
-        const fresh = await DataService.getNotifications(user.id);
-        const mapped: AppNotification[] = fresh.map(n => ({
-          id: n.id,
-          type: n.type as any,
-          title: n.title,
-          message: n.message,
-          read: n.read,
-          createdAt: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          projectId: n.project_id || n.data?.project_id,
-          partnerRequestId: n.partner_request_id || n.data?.partner_request_id,
-        }));
-
-        setNotifications((prev) => {
-          const prevIds = new Set(prev.map(p => p.id));
-          // Only toast notifications that are truly brand new (not in prev AND not already shown at load)
-          const newUnreads = mapped.filter(
-            m => !m.read && !prevIds.has(m.id) && !shownNotifIdsRef.current.has(m.id)
-          );
-          if (newUnreads.length > 0) {
-            soundManager.playNotification();
-            newUnreads.forEach(nu => {
-              shownNotifIdsRef.current.add(nu.id);
-              showToast({
-                type: nu.type === 'partner_request' ? 'partner_request' : nu.type === 'project_invite' ? 'project_invite' : 'system',
-                title: nu.title,
-                message: nu.message,
-                partnerRequestId: nu.partnerRequestId,
-                projectId: nu.projectId,
-              });
-            });
-          }
-          return mapped;
-        });
-      } catch (err) {}
-    }, 10000);
-
-    return () => clearInterval(notifInterval);
-  }, [user?.id, showToast]);
+  }, [projectId, user?.id, user?.full_name]);
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -1057,7 +865,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
         return false;
       });
     },
-    onToggleNotifications: () => setIsNotificationsOpen((prev) => !prev),
     onCloseActiveTab: () => handleCloseActiveTab(),
     onSplitRight: () => handleSplitRight(),
     onCycleTabNext: () => handleCycleTab('next'),
@@ -1067,10 +874,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
     onEscape: () => {
       if (previewUserId) {
         setPreviewUserId(null);
-        return true;
-      }
-      if (isNotificationsOpen) {
-        setIsNotificationsOpen(false);
         return true;
       }
       if (isCommandPaletteOpen) {
@@ -1146,11 +949,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
         `Created ${isFolder ? 'folder' : 'file'} "${name}"`,
         name
       );
-      showToast({
-        type: 'file_event',
-        title: isFolder ? 'Folder Created' : 'File Created',
-        message: `Created "${name}"`,
-      });
       appendOutputLog('sync', `Created ${isFolder ? 'folder' : 'file'} "${name}"`);
     } catch (err) {
       console.error('Failed to create file:', err);
@@ -1170,12 +968,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
         }))
       );
       broadcastFileChange();
-      logAndBroadcastActivity('file_renamed', `Renamed to "${newName}"`, newName);
-      showToast({
-        type: 'file_event',
-        title: 'File Renamed',
-        message: `Renamed to "${newName}"`,
-      });
       appendOutputLog('sync', `Renamed file to "${newName}"`);
     } catch (err) {
       console.error('Failed to rename file:', err);
@@ -1208,11 +1000,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
       broadcastFileChange();
       if (fileToDelete) {
         logAndBroadcastActivity('file_deleted', `Deleted "${fileToDelete.name}"`, fileToDelete.name);
-        showToast({
-          type: 'file_event',
-          title: 'File Deleted',
-          message: `Deleted "${fileToDelete.name}"`,
-        });
         appendOutputLog('sync', `Deleted "${fileToDelete.name}"`);
       }
     } catch (err) {
@@ -1641,11 +1428,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 currentPeerMap.forEach((name, id) => {
                   if (id !== user?.id && !previousPeersRef.current.has(id)) {
                     logAndBroadcastActivity('member_joined', `${name} joined the workspace session`, name);
-                    showToast({
-                      type: 'member_event',
-                      title: 'Member Joined',
-                      message: `${name} joined the workspace`,
-                    });
                     soundManager.playNotification();
                   }
                 });
@@ -1653,11 +1435,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 previousPeersRef.current.forEach((name, id) => {
                   if (id !== user?.id && !currentPeerMap.has(id)) {
                     logAndBroadcastActivity('member_left', `${name} left the workspace session`, name);
-                    showToast({
-                      type: 'member_event',
-                      title: 'Member Left',
-                      message: `${name} left the workspace`,
-                    });
                   }
                 });
               } else {
@@ -1698,18 +1475,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
             <span className="hidden sm:inline">Invite</span>
           </button>
 
-          {/* Simple Notification Indicator in Header */}
-          <button
-            onClick={() => setIsNotificationsOpen(prev => !prev)}
-            className="relative p-1.5 rounded hover:bg-white/[0.07] text-neutral-400 hover:text-neutral-100 transition-colors"
-            title={`Notifications (${notifications.filter(n => !n.read).length} unread)`}
-            aria-label="Open Notifications"
-          >
-            <Bell className="w-3.5 h-3.5" />
-            {notifications.filter(n => !n.read).length > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-amber-400 rounded-full ring-2 ring-[var(--ide-dock-header)] animate-pulse" />
-            )}
-          </button>
+
 
           {/* User Account Menu */}
           <UserMenu 
@@ -1739,11 +1505,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
           onSelectView={handleSelectActivityView}
           collaboratorCount={members.length}
           gitChangedCount={0}
-          unreadNotifications={notifications.filter(n => !n.read).length}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
-          onOpenNotifications={() => setIsNotificationsOpen(prev => !prev)}
           onOpenIntegrations={() => setIsIntegrationsOpen(true)}
           onOpenReviews={() => setIsReviewsOpen(true)}
           userAvatar={user?.avatar_url}
@@ -1938,6 +1702,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 />
               </div>
             )}
+
+
           </div>
         )}
 
@@ -2055,11 +1821,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
                             onToggleDock={() => setIsDockOpen((prev) => !prev)}
                             onSave={() => {
                               logAndBroadcastActivity('file_saved', `Saved changes to "${groupActiveFile.name}"`, groupActiveFile.name);
-                              showToast({
-                                type: 'file_event',
-                                title: 'File Saved',
-                                message: `Saved "${groupActiveFile.name}"`,
-                              });
                               appendOutputLog('sync', `Saved "${groupActiveFile.name}"`);
                             }}
                             onContentSaved={(latestText) => {
@@ -2363,21 +2124,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
             <span>{members.length} Collaborator{members.length > 1 ? 's' : ''}</span>
           </span>
 
-          {/* Simple Notification Indicator in Status Bar */}
-          <button
-            onClick={() => setIsNotificationsOpen(prev => !prev)}
-            className="flex items-center gap-1.5 opacity-90 hover:opacity-100 hover:underline transition-colors"
-            title={`${notifications.filter(n => !n.read).length} unread notifications`}
-          >
-            <Bell className={`w-3 h-3 ${notifications.filter(n => !n.read).length > 0 ? 'text-amber-300' : 'opacity-70'}`} />
-            {notifications.filter(n => !n.read).length > 0 ? (
-              <span className="px-1 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px] leading-none">
-                {notifications.filter(n => !n.read).length}
-              </span>
-            ) : (
-              <span className="opacity-70 text-[10.5px]">0</span>
-            )}
-          </button>
+
         </div>
 
         <div className="flex items-center gap-4 opacity-90">
@@ -2392,58 +2139,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
         </div>
       </footer>
 
-      {/* Slide-in Notification Center (Requirements 2, 3, 4, 7) */}
-      <NotificationCenterPanel
-        isOpen={isNotificationsOpen}
-        onClose={() => setIsNotificationsOpen(false)}
-        notifications={notifications}
-        onMarkAllRead={() => {
-          if (user) DataService.markAllNotificationsRead(user.id);
-          setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-        }}
-        onMarkRead={(id) => {
-          if (user) DataService.markNotificationRead(id);
-          setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-        }}
-        onClearAll={() => {
-          if (user) DataService.clearAllNotifications(user.id);
-          setNotifications([]);
-        }}
-        onAcceptPartnerRequest={async (reqId, notifId) => {
-          await DataService.respondToPartnerRequest(reqId, true, notifId);
-          soundManager.playSuccess();
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId && n.id !== notifId));
-          showToast({
-            type: 'system',
-            title: 'Partner Accepted',
-            message: 'You are now coding partners!',
-          });
-          try {
-            const m = await DataService.getMembers(projectId);
-            setMembers(m);
-          } catch (e) {}
-        }}
-        onDeclinePartnerRequest={async (reqId, notifId) => {
-          await DataService.respondToPartnerRequest(reqId, false, notifId);
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId && n.id !== notifId));
-        }}
-        onIgnorePartnerRequest={async (reqId, notifId) => {
-          await DataService.respondToPartnerRequest(reqId, false, notifId);
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId && n.id !== notifId));
-        }}
-        onOpenProject={(pid) => {
-          setIsNotificationsOpen(false);
-          window.location.href = `/project/${pid}`;
-        }}
-        onDismissNotification={(id) => {
-          if (user) DataService.dismissNotification(id);
-          setNotifications(prev => prev.filter(n => n.id !== id));
-        }}
-        onUserClick={(uid) => {
-          setIsNotificationsOpen(false);
-          handleUserIdentityClick(uid);
-        }}
-      />
+
 
 
 
@@ -2573,6 +2269,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
         isOpen={isIntegrationsOpen}
         onClose={() => setIsIntegrationsOpen(false)}
       />
+
+
     </div>
   );
 }

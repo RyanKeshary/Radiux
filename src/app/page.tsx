@@ -16,8 +16,8 @@ import { useDebounce } from '@/hooks/useDebounce';
 const CreateProjectModal = dynamic(() => import('@/components/dashboard/CreateProjectModal').then(m => m.CreateProjectModal), { ssr: false });
 const ImportProjectModal = dynamic(() => import('@/components/dashboard/ImportProjectModal').then(m => m.ImportProjectModal), { ssr: false });
 const ImportWorkspaceModal = dynamic(() => import('@/components/dashboard/ImportWorkspaceModal').then(m => m.ImportWorkspaceModal), { ssr: false });
-const NotificationCenterPanel = dynamic(() => import('@/components/workspace/NotificationCenterPanel').then(m => m.NotificationCenterPanel), { ssr: false });
 const UserProfileModal = dynamic(() => import('@/components/workspace/UserProfileModal').then(m => m.UserProfileModal), { ssr: false });
+
 const EditorSettingsModal = dynamic(() => import('@/components/workspace/EditorSettingsModal').then(m => m.EditorSettingsModal), { ssr: false });
 const DeveloperDiscoveryModal = dynamic(() => import('@/components/profile/DeveloperDiscoveryModal').then(m => m.DeveloperDiscoveryModal), { ssr: false });
 import type { EditorSettings } from '@/components/workspace/EditorSettingsModal';
@@ -68,8 +68,6 @@ export default function DashboardPage() {
   const [profileModalTab, setProfileModalTab] = useState<'profile' | 'preferences' | 'partners' | 'account'>('profile');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCollaboratorsOpen, setIsCollaboratorsOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
 
   // Search & Filter State (debounced to avoid re-rendering on every keystroke)
   const [searchQuery, setSearchQuery] = useState('');
@@ -160,21 +158,7 @@ export default function DashboardPage() {
       const data = await DataService.getProjects(user.id);
       setProjects(data);
 
-      // Load user notifications
-      try {
-        const notifs = await DataService.getNotifications(user.id);
-        setNotifications(notifs.map(n => ({
-          id: n.id,
-          type: n.type as any,
-          title: n.title,
-          message: n.message,
-          read: n.read,
-          actionStatus: n.action_status,
-          createdAt: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          projectId: n.project_id || n.data?.project_id,
-          partnerRequestId: n.partner_request_id || n.data?.partner_request_id,
-        })));
-      } catch (e) {}
+
 
       if (typeof window !== 'undefined') {
         const lastId = localStorage.getItem('radiux_last_project_id') || localStorage.getItem('codecollab_last_project_id');
@@ -340,18 +324,7 @@ export default function DashboardPage() {
                 <span className="hidden sm:inline">Settings</span>
               </button>
 
-              <button
-                onClick={() => setIsNotificationsOpen(true)}
-                className="p-1.5 rounded-lg border border-transparent hover:border-white/10 hover:bg-white/5 relative transition-all text-amber-400 group cursor-pointer"
-                title="Notification Center"
-              >
-                <Bell className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                {notifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 text-[9px] font-bold text-white bg-rose-500 rounded-full flex items-center justify-center leading-none shadow ring-2 ring-[var(--ide-dock-header)] animate-pulse">
-                    {notifications.filter(n => !n.read).length > 9 ? '9+' : notifications.filter(n => !n.read).length}
-                  </span>
-                )}
-              </button>
+
             </div>
           )}
 
@@ -574,18 +547,7 @@ export default function DashboardPage() {
                       >
                         <Settings className="w-3.5 h-3.5" />
                       </button>
-                      <button
-                        onClick={() => setIsNotificationsOpen(true)}
-                        className="p-1.5 rounded-md hover:bg-white/10 opacity-70 hover:opacity-100 text-amber-400 transition-colors relative"
-                        title="Notification Center"
-                      >
-                        <Bell className="w-3.5 h-3.5" />
-                        {notifications.filter(n => !n.read).length > 0 && (
-                          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 text-[8.5px] font-bold text-white bg-rose-500 rounded-full flex items-center justify-center leading-none">
-                            {notifications.filter(n => !n.read).length > 9 ? '9+' : notifications.filter(n => !n.read).length}
-                          </span>
-                        )}
-                      </button>
+
                     </div>
                   </div>
                 )}
@@ -954,31 +916,7 @@ export default function DashboardPage() {
       {/* Direct Level 9 Modals for Dashboard */}
       {user && (
         <>
-          <NotificationCenterPanel
-            isOpen={isNotificationsOpen}
-            onClose={() => setIsNotificationsOpen(false)}
-            notifications={notifications}
-            onMarkAllRead={() => {
-              DataService.markAllNotificationsRead(user.id);
-              setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-            }}
-            onAcceptPartnerRequest={async (reqId) => {
-              await DataService.respondToPartnerRequest(reqId, true);
-              soundManager.playSuccess();
-              setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
-            }}
-            onIgnorePartnerRequest={async (reqId) => {
-              await DataService.respondToPartnerRequest(reqId, false);
-              setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
-            }}
-            onOpenProject={(pid) => {
-              setIsNotificationsOpen(false);
-              window.location.href = `/project/${pid}`;
-            }}
-            onDismissNotification={(id) => {
-              setNotifications(prev => prev.filter(n => n.id !== id));
-            }}
-          />
+
 
           <UserProfileModal
             isOpen={isProfileModalOpen}

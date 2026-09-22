@@ -89,6 +89,64 @@ body {
   opacity: 0.85;
 }
 
+/* Collaborator Cursors & Content Widgets (Requirement 4) */
+.radiux-remote-cursor-widget {
+  position: absolute;
+  pointer-events: none;
+  z-index: 50;
+  transition: transform 0.05s ease-out;
+}
+
+.radiux-remote-caret {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 18px;
+  border-radius: 1px;
+}
+
+.radiux-remote-dot {
+  position: absolute;
+  left: -1px;
+  top: -2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.radiux-remote-name-tag {
+  position: absolute;
+  left: 0;
+  top: -18px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  padding: 1px 5px;
+  border-radius: 3px 3px 3px 0;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  user-select: none;
+  line-height: 13px;
+  letter-spacing: 0.02em;
+}
+
+.radiux-remote-selection {
+  border-radius: 2px;
+}
+
+/* User-controlled collaborator cursors toggle */
+.hide-remote-cursors .radiux-remote-cursor-widget,
+.hide-remote-cursors .radiux-remote-selection,
+.hide-remote-cursors .yRemoteSelection,
+.hide-remote-cursors .yRemoteSelectionHead,
+.hide-remote-cursors [class*="yRemoteSelection"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
 /* Xterm.js full-height viewport fixes for full-bleed rendering */
 .terminal.xterm {
   height: 100% !important;

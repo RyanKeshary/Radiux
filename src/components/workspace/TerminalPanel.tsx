@@ -116,6 +116,7 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
   const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [availableProfiles, setAvailableProfiles] = useState<TerminalProfile[]>([]);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isShellSelectorOpen, setIsShellSelectorOpen] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   
@@ -303,6 +304,19 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
           term.writeln(`\r\n\x1b[1;33m[Process Exited (code ${payload.code})]\x1b[0m`);
         } else if (payload.type === 'session_renamed') {
           setSessions((prev) => prev.map(s => s.id === payload.sessionId ? { ...s, title: payload.title } : s));
+        } else if (payload.type === 'session_updated') {
+          setSessions((prev) => prev.map(s => {
+            if (s.id === payload.sessionId) {
+              return {
+                ...s,
+                title: payload.title || s.title,
+                profileId: payload.profileId || s.profileId,
+                status: payload.running ? 'running' : s.status,
+                pid: payload.pid,
+              };
+            }
+            return s;
+          }));
         } else if (payload.type === 'session_closed') {
           setSessions((prev) => prev.filter(s => s.id !== payload.sessionId));
         }
@@ -447,11 +461,13 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
     }
   };
 
-  const handleRestart = () => {
+  const handleRestart = (profileId?: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       xtermRef.current?.clear();
       xtermRef.current?.writeln('\x1b[1;33m[Restarting PTY Session...]\x1b[0m');
-      wsRef.current.send(JSON.stringify({ type: 'restart' }));
+      wsRef.current.send(JSON.stringify({ type: 'restart', profileId }));
+    } else {
+      connectToSession(activeSessionId, profileId);
     }
   };
 
@@ -579,9 +595,12 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
           {/* New Terminal Dropdown Button */}
           <div className="relative">
             <button
-              onClick={() => setIsProfileMenuOpen(prev => !prev)}
-              className="flex items-center gap-0.5 px-1.5 py-1 rounded text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-              title="New Terminal Profile"
+              onClick={() => {
+                setIsProfileMenuOpen(prev => !prev);
+                setIsShellSelectorOpen(false);
+              }}
+              className="flex items-center gap-0.5 px-1.5 py-1 rounded text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+              title="New Terminal Tab (Select Profile)"
             >
               <Plus className="w-3.5 h-3.5" />
               <ChevronDown className="w-2.5 h-2.5 opacity-60" />
@@ -596,14 +615,17 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
                 }}
               >
                 <div className="px-2.5 py-1 text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">
-                  Select Shell Profile
+                  New Terminal Profile
                 </div>
-                {availableProfiles.length > 0 ? (
-                  availableProfiles.map((prof) => (
+                {availableProfiles.filter(p => p.available).length > 0 ? (
+                  availableProfiles.filter(p => p.available).map((prof) => (
                     <button
                       key={prof.id}
-                      onClick={() => handleCreateSession(prof.id)}
-                      className="w-full text-left px-2.5 py-1.5 text-xs text-neutral-200 hover:bg-sky-500/20 hover:text-white flex items-center justify-between group transition-colors"
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        handleCreateSession(prof.id);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 text-xs text-neutral-200 hover:bg-sky-500/20 hover:text-white flex items-center justify-between group transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
                         <TerminalIcon className="w-3 h-3 text-sky-400 group-hover:scale-110 transition-transform" />
@@ -616,12 +638,76 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
                   ))
                 ) : (
                   <button
-                    onClick={() => handleCreateSession()}
-                    className="w-full text-left px-2.5 py-1.5 text-xs text-neutral-200 hover:bg-sky-500/20 flex items-center gap-2"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      handleCreateSession();
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 text-xs text-neutral-200 hover:bg-sky-500/20 flex items-center gap-2 cursor-pointer"
                   >
                     <TerminalIcon className="w-3 h-3 text-sky-400" />
                     <span>Default Shell</span>
                   </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Dedicated Shell / Profile Switcher for Current Session (Requirement 3C) */}
+          <div className="relative ml-1">
+            <button
+              onClick={() => {
+                setIsShellSelectorOpen(prev => !prev);
+                setIsProfileMenuOpen(false);
+              }}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border border-neutral-700/80 bg-neutral-850 hover:bg-neutral-800 text-neutral-300 hover:text-white transition-all cursor-pointer shadow-xs"
+              title="Switch Active Shell for this Terminal Session (restarts PTY with selected shell)"
+            >
+              <TerminalIcon className="w-3 h-3 text-sky-400" />
+              <span>Shell: {availableProfiles.find(p => p.id === currentSession?.profileId)?.name || 'PowerShell'}</span>
+              <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+            </button>
+
+            {isShellSelectorOpen && (
+              <div 
+                className="absolute left-0 top-full mt-1 w-56 rounded-md shadow-2xl border py-1 z-50 animate-in fade-in-50 zoom-in-95 duration-100"
+                style={{
+                  backgroundColor: 'var(--ide-card-bg)',
+                  borderColor: 'var(--ide-border)',
+                }}
+              >
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-neutral-800 mb-1">
+                  Switch Shell (Restarts PTY)
+                </div>
+                {availableProfiles.filter(p => p.available).length > 0 ? (
+                  availableProfiles.filter(p => p.available).map((prof) => {
+                    const isCurrent = prof.id === (currentSession?.profileId || (availableProfiles.find(p => p.isDefault)?.id));
+                    return (
+                      <button
+                        key={prof.id}
+                        onClick={() => {
+                          setIsShellSelectorOpen(false);
+                          handleRestart(prof.id);
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 text-xs flex items-center justify-between group transition-colors cursor-pointer ${
+                          isCurrent 
+                            ? 'bg-sky-500/20 text-sky-300 font-semibold' 
+                            : 'text-neutral-200 hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <TerminalIcon className={`w-3 h-3 ${isCurrent ? 'text-sky-400' : 'text-neutral-400 group-hover:text-neutral-200'}`} />
+                          <span>{prof.name}</span>
+                        </div>
+                        {isCurrent && (
+                          <Check className="w-3 h-3 text-sky-400" />
+                        )}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="px-2.5 py-1.5 text-xs text-neutral-400">
+                    No other shells available
+                  </div>
                 )}
               </div>
             )}
@@ -661,7 +747,7 @@ export function TerminalPanel({ projectId, onPortDetected, activeFileName, theme
           </button>
 
           <button
-            onClick={handleRestart}
+            onClick={() => handleRestart()}
             title="Restart Terminal Session"
             className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
           >

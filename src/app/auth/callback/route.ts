@@ -100,9 +100,17 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        await supabase.from('profiles').upsert([profilePayload]);
+        if (!existingProfile) {
+          await supabase.from('profiles').insert([profilePayload]);
+        } else {
+          // Remove ID from update payload to prevent primary key mutability warnings
+          const { id, ...updateFields } = profilePayload;
+          if (Object.keys(updateFields).length > 1) { // more than just updated_at
+            await supabase.from('profiles').update(updateFields).eq('id', data.user.id);
+          }
+        }
       } catch (profileErr) {
-        console.warn('[Auth Callback] Profile upsert warning:', profileErr);
+        console.warn('[Auth Callback] Profile sync warning:', profileErr);
       }
 
       // Password reset redirect

@@ -9,7 +9,6 @@ export interface KeyboardActions {
   onGlobalSearch?: () => void;
   onToggleSidebar?: () => void;
   onToggleDock?: () => void;
-  onToggleNotifications?: () => void;
   onCloseActiveTab?: () => void;
   onSplitRight?: () => void;
   onSaveFile?: () => void;
@@ -92,7 +91,6 @@ export function useKeyboardManager(actions: KeyboardActions) {
           globalSearch: actions.onGlobalSearch,
           toggleSidebar: actions.onToggleSidebar,
           toggleDock: actions.onToggleDock,
-          toggleNotifications: actions.onToggleNotifications,
           closeActiveTab: actions.onCloseActiveTab,
           splitRight: actions.onSplitRight,
           saveFile: actions.onSaveFile,

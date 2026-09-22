@@ -18,7 +18,6 @@ import {
   GitHubRemote,
   WorkspaceExportManifest,
   CodingPartner,
-  NotificationItem,
   DirectMessage,
   ContributionDay
 } from './types';
@@ -1541,19 +1540,6 @@ export const DataService = {
       read: false,
     };
     StorageMock.saveDirectMessage(msg);
-
-    // Send notification to recipient
-    StorageMock.saveNotification({
-      id: `notif-${Date.now()}`,
-      user_id: receiverId,
-      type: 'mention',
-      title: 'Direct Message',
-      message: `${sender.full_name || 'A developer'}: "${content.slice(0, 50)}${content.length > 50 ? '...' : ''}"`,
-      read: false,
-      created_at: new Date().toISOString(),
-      data: { senderId: sender.id },
-    });
-
     return msg;
   },
 
@@ -1670,18 +1656,6 @@ export const DataService = {
 
     StorageMock.saveCodingPartner(createdPartner);
 
-    // Real persistent notification for recipient
-    await this.createNotification(target.id, {
-      type: 'partner_request',
-      title: 'New Coding Partner Request',
-      message: `${requester.full_name || requester.username || 'A developer'} sent you a coding partner request.`,
-      sender_id: requester.id,
-      sender_name: requester.full_name || requester.username || 'Developer',
-      sender_avatar: requester.avatar_url || '',
-      partner_request_id: createdPartner.id,
-      action_status: 'pending',
-    });
-
     return { 
       success: true, 
       message: `Partner request sent to ${target.full_name || target.username || 'developer'}!`,
@@ -1691,8 +1665,7 @@ export const DataService = {
 
   async respondToPartnerRequest(
     requestId: string, 
-    action: 'accept' | 'ignore' | 'reject' | 'cancel' | boolean,
-    notificationId?: string
+    action: 'accept' | 'ignore' | 'reject' | 'cancel' | boolean
   ): Promise<void> {
     let status: 'accepted' | 'ignored' | 'rejected' | 'cancelled' | 'declined';
     if (typeof action === 'boolean') {
@@ -1725,47 +1698,6 @@ export const DataService = {
     } catch (e) {}
 
     StorageMock.updateCodingPartner(requestId, status);
-
-    if (notificationId) {
-      if (isSupabaseConfigured && supabase) {
-        try {
-          await supabase
-            .from('notifications')
-            .update({ action_status: status, read: true })
-            .eq('id', notificationId);
-        } catch (err) {}
-      }
-      StorageMock.updateNotificationAction(notificationId, status);
-    }
-
-    // If accepted, notify the original requester
-    if (status === 'accepted') {
-      try {
-        let partnerData: any = null;
-        if (isSupabaseConfigured && supabase) {
-          const { data } = await supabase.from('coding_partners').select('*').eq('id', requestId).single();
-          partnerData = data;
-        }
-        if (!partnerData) {
-          const all = await this.getCodingPartners('');
-          partnerData = all.find((p: any) => p.id === requestId);
-        }
-
-        if (partnerData) {
-          const receiver = await this.findUser(partnerData.receiver_id) || StorageMock.getProfile(partnerData.receiver_id);
-          await this.createNotification(partnerData.requester_id, {
-            type: 'partner_accepted',
-            title: 'Partner Request Accepted!',
-            message: `${receiver?.full_name || receiver?.username || 'Your peer'} accepted your coding partner request.`,
-            sender_id: receiver?.id,
-            sender_name: receiver?.full_name || receiver?.username || 'Developer',
-            sender_avatar: receiver?.avatar_url || '',
-            partner_request_id: requestId,
-            action_status: 'completed',
-          });
-        }
-      } catch (e) {}
-    }
   },
 
   async removePartner(partnerId: string): Promise<void> {
@@ -1788,7 +1720,6 @@ export const DataService = {
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('coding_partners').delete().eq('id', partnerRequestId);
-        await supabase.from('notifications').delete().eq('partner_request_id', partnerRequestId);
       } catch (err) {}
     }
 
@@ -1801,150 +1732,7 @@ export const DataService = {
     } catch (e) {}
 
     StorageMock.removeCodingPartner(partnerRequestId);
-    StorageMock.removeNotificationByPartnerRequestId(partnerRequestId);
     return { success: true, message: 'Friend request unsent successfully.' };
-  },
-
-  // Level 7: Notifications
-  async getNotifications(userId: string): Promise<NotificationItem[]> {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false });
-        if (!error && data && data.length > 0) return data;
-      } catch (err) {}
-    }
-
-    // Fallback to Backend API (cross-user persistent store)
-    try {
-      const res = await fetch(buildApiUrl('/api/notifications', { userId }));
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json.notifications) && json.notifications.length > 0) {
-          json.notifications.forEach((n: NotificationItem) => StorageMock.saveNotification(n));
-          return json.notifications;
-        }
-      }
-    } catch (e) {}
-
-    return StorageMock.getNotifications(userId);
-  },
-
-  async markNotificationRead(notificationId: string): Promise<void> {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('notifications').update({ read: true }).eq('id', notificationId);
-      } catch (err) {}
-    }
-    try {
-      await fetch(buildApiUrl('/api/notifications'), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: notificationId }),
-      });
-    } catch (e) {}
-    StorageMock.markNotificationRead(notificationId);
-  },
-
-  async markAllNotificationsRead(userId: string): Promise<void> {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
-      } catch (err) {}
-    }
-    try {
-      await fetch(buildApiUrl('/api/notifications'), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, all: true }),
-      });
-    } catch (e) {}
-    StorageMock.markAllNotificationsRead(userId);
-  },
-
-  async dismissNotification(notificationId: string): Promise<void> {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('notifications').delete().eq('id', notificationId);
-      } catch (err) {}
-    }
-    try {
-      await fetch(buildApiUrl('/api/notifications'), {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: notificationId }),
-      });
-    } catch (e) {}
-    StorageMock.dismissNotification(notificationId);
-  },
-
-  async clearAllNotifications(userId: string): Promise<void> {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('notifications').delete().eq('user_id', userId);
-      } catch (err) {}
-    }
-    try {
-      await fetch(buildApiUrl('/api/notifications'), {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, all: true }),
-      });
-    } catch (e) {}
-    StorageMock.clearAllNotifications(userId);
-  },
-
-  async createNotification(
-    userId: string,
-    notification: Omit<NotificationItem, 'id' | 'created_at' | 'read' | 'user_id'>
-  ): Promise<NotificationItem> {
-    const idempotencyKey = `${notification.type}_${notification.sender_id || ''}_${userId}_${notification.partner_request_id || ''}`;
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        let query = supabase
-          .from('notifications')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('type', notification.type);
-        if (notification.partner_request_id) {
-          query = query.eq('partner_request_id', notification.partner_request_id);
-        }
-        const { data: existing } = await query;
-        if (existing && existing.length > 0) {
-          return existing[0] as NotificationItem;
-        }
-      } catch (err) {}
-    }
-
-    const item: NotificationItem = {
-      ...notification,
-      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      user_id: userId,
-      read: false,
-      created_at: new Date().toISOString(),
-      idempotency_key: idempotencyKey,
-    } as any;
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('notifications').insert(item);
-      } catch (err) {}
-    }
-
-    try {
-      await fetch(buildApiUrl('/api/notifications'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notification: item }),
-      });
-    } catch (e) {}
-
-    StorageMock.saveNotification(item);
-    return item;
   },
 };
 

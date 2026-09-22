@@ -69,22 +69,7 @@ export function InviteMemberModal({
       const added = await DataService.addMember(project.id, targetUser);
       onMemberAdded(added);
 
-      // Log activity to project timeline
-      try {
-        const act = await DataService.logActivity(
-          project.id,
-          user?.id || 'guest',
-          user?.full_name || 'Project Owner',
-          'member_joined',
-          `Added ${targetUser.full_name} (${targetUser.email}) to the project`
-        );
-        const wsUrl = config.buildWsUrl('/comm', { projectId: project.id });
-        const ws = new WebSocket(wsUrl);
-        ws.onopen = () => {
-          ws.send(JSON.stringify({ type: 'activity_event', activity: act }));
-          setTimeout(() => ws.close(), 300);
-        };
-      } catch (e) {}
+
 
       setSuccessMsg(`Successfully added ${targetUser.full_name} (${targetUser.email}) to the project!`);
       setEmail('');

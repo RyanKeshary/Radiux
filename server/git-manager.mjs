@@ -46,7 +46,7 @@ export const GitManager = {
   /**
    * Initialize a git repository with default branch 'main' and basic safe author configs.
    */
-  async init(projectId, userName = 'CodeCollab User', userEmail = 'user@codecollab.dev') {
+  async init(projectId, userName = 'Radiux Developer', userEmail = 'developer@radiux.dev') {
     const res = await runGit(projectId, ['init', '-b', 'main']);
     if (res.success) {
       await runGit(projectId, ['config', 'user.name', userName]);
@@ -223,7 +223,7 @@ export const GitManager = {
   /**
    * Commit staged changes with message and author.
    */
-  async commit(projectId, message, authorName = 'CodeCollab User', authorEmail = 'user@codecollab.dev') {
+  async commit(projectId, message, authorName = 'Radiux Developer', authorEmail = 'developer@radiux.dev') {
     if (!message || !message.trim()) {
       return { success: false, stderr: 'Commit message cannot be empty' };
     }

@@ -5,7 +5,6 @@ import { TerminalPanel } from './TerminalPanel';
 import { PreviewPanel } from './PreviewPanel';
 import { ChatPanel } from './ChatPanel';
 import { VoicePanel } from './VoicePanel';
-import { ActivityFeed } from './ActivityFeed';
 import { GitPanel } from './GitPanel';
 import { ProblemsPanel, ProblemItem } from './ProblemsPanel';
 import { OutputPanel, OutputLogEntry } from './OutputPanel';
@@ -15,7 +14,6 @@ import {
   Columns, 
   MessageSquare, 
   Mic, 
-  Activity, 
   FolderGit2,
   AlertCircle,
   FileText,
@@ -38,7 +36,6 @@ export type DockTab =
   | 'git' 
   | 'chat' 
   | 'voice' 
-  | 'activity' 
   | 'split';
 
 interface BottomDockProps {
@@ -437,22 +434,6 @@ export function BottomDock({
               </span>
             )}
           </button>
-
-          {/* Project Activity Feed Tab */}
-          <button
-            onClick={() => setActiveTab('activity')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5 ${
-              activeTab === 'activity' ? 'border-t-2 font-semibold' : 'opacity-80 hover:opacity-100'
-            }`}
-            style={{
-              backgroundColor: activeTab === 'activity' ? 'var(--ide-dock)' : undefined,
-              color: activeTab === 'activity' ? 'var(--ide-text)' : 'var(--ide-text-muted)',
-              borderTopColor: activeTab === 'activity' ? 'var(--ide-accent)' : undefined,
-            }}
-          >
-            <Activity className="w-3.5 h-3.5 text-amber-400" />
-            <span>Activity</span>
-          </button>
         </div>
 
         {/* DevTools-Style Dock Orientation Switchers & Controls */}
@@ -608,10 +589,6 @@ export function BottomDock({
             onLeaveVoice={onLeaveVoice}
             onToggleMute={onToggleMute}
           />
-        )}
-
-        {activeTab === 'activity' && (
-          <ActivityFeed projectId={projectId} />
         )}
 
         {activeTab === 'split' && (
