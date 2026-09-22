@@ -60,7 +60,7 @@ const IntegrationsModal = dynamic(() => import('./IntegrationsModal').then(m => 
 const NotificationCenterPanel = dynamic(() => import('./NotificationCenterPanel').then(m => m.NotificationCenterPanel), { ssr: false });
 
 import { AppNotification } from './NotificationsPopover';
-import { NotificationToastContainer, NotificationToastItem } from './NotificationToast';
+import type { NotificationToastItem } from './NotificationToast';
 import { ProfilePreviewCard } from '@/components/profile/ProfilePreviewCard';
 import { useKeyboardManager } from '@/hooks/useKeyboardManager';
 import { InlineCommentsOverlay } from './InlineCommentsOverlay';
@@ -195,38 +195,34 @@ export function Workspace({ projectId }: WorkspaceProps) {
   // Track IDs of notifications shown at initial load so polling never re-toasts them
   const shownNotifIdsRef = useRef<Set<string>>(new Set());
 
+  // Non-intrusive notification dispatcher (adds to notification state and indicator without obstructive popups)
   const showToast = useCallback((item: Omit<NotificationToastItem, 'id'>) => {
-    // Generate dedup key to prevent double popups from concurrent WebSocket / polling events
     const dedupKey = `${item.type || 'system'}::${item.title || ''}::${item.message || ''}::${item.partnerRequestId || ''}::${item.projectId || ''}`;
     const now = Date.now();
     const lastShownTime = recentToastKeysRef.current.get(dedupKey);
     if (lastShownTime && now - lastShownTime < 30000) {
-      // Suppress duplicate toast within 30-second window
       return;
     }
     recentToastKeysRef.current.set(dedupKey, now);
 
-    // Housekeeping: purge entries older than 60s
-    if (recentToastKeysRef.current.size > 40) {
-      recentToastKeysRef.current.forEach((time, k) => {
-        if (now - time > 60000) {
-          recentToastKeysRef.current.delete(k);
-        }
-      });
-    }
-
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    const newToast: NotificationToastItem = {
-      ...item,
-      id,
-      createdAt: item.createdAt || 'Just now',
-    };
-    setToastList((prev) => {
-      // Prevent duplicate identical entries in current toast list
-      if (prev.some(t => (t.title === item.title && t.message === item.message) || t.id === id)) {
+    const id = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    setNotifications((prev) => {
+      if (prev.some(n => (n.title === item.title && n.message === item.message) || n.id === id)) {
         return prev;
       }
-      return [newToast, ...prev.slice(0, 2)];
+      return [
+        {
+          id,
+          type: (item.type as any) || 'system',
+          title: item.title,
+          message: item.message,
+          read: false,
+          createdAt: item.createdAt || 'Just now',
+          projectId: item.projectId,
+          partnerRequestId: item.partnerRequestId,
+        },
+        ...prev,
+      ];
     });
   }, []);
 
@@ -1702,6 +1698,19 @@ export function Workspace({ projectId }: WorkspaceProps) {
             <span className="hidden sm:inline">Invite</span>
           </button>
 
+          {/* Simple Notification Indicator in Header */}
+          <button
+            onClick={() => setIsNotificationsOpen(prev => !prev)}
+            className="relative p-1.5 rounded hover:bg-white/[0.07] text-neutral-400 hover:text-neutral-100 transition-colors"
+            title={`Notifications (${notifications.filter(n => !n.read).length} unread)`}
+            aria-label="Open Notifications"
+          >
+            <Bell className="w-3.5 h-3.5" />
+            {notifications.filter(n => !n.read).length > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-amber-400 rounded-full ring-2 ring-[var(--ide-dock-header)] animate-pulse" />
+            )}
+          </button>
+
           {/* User Account Menu */}
           <UserMenu 
             onOpenProfileModal={(tab) => {
@@ -2353,6 +2362,22 @@ export function Workspace({ projectId }: WorkspaceProps) {
             <CheckCircle2 className="w-3 h-3 text-emerald-300" />
             <span>{members.length} Collaborator{members.length > 1 ? 's' : ''}</span>
           </span>
+
+          {/* Simple Notification Indicator in Status Bar */}
+          <button
+            onClick={() => setIsNotificationsOpen(prev => !prev)}
+            className="flex items-center gap-1.5 opacity-90 hover:opacity-100 hover:underline transition-colors"
+            title={`${notifications.filter(n => !n.read).length} unread notifications`}
+          >
+            <Bell className={`w-3 h-3 ${notifications.filter(n => !n.read).length > 0 ? 'text-amber-300' : 'opacity-70'}`} />
+            {notifications.filter(n => !n.read).length > 0 ? (
+              <span className="px-1 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px] leading-none">
+                {notifications.filter(n => !n.read).length}
+              </span>
+            ) : (
+              <span className="opacity-70 text-[10.5px]">0</span>
+            )}
+          </button>
         </div>
 
         <div className="flex items-center gap-4 opacity-90">
@@ -2420,34 +2445,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
         }}
       />
 
-      {/* Pop-up Notification Showcase & Toast Container */}
-      <NotificationToastContainer
-        toasts={toastList}
-        onDismiss={(id) => setToastList(prev => prev.filter(t => t.id !== id))}
-        onAcceptPartner={async (reqId, notifId) => {
-          await DataService.respondToPartnerRequest(reqId, true, notifId);
-          soundManager.playSuccess();
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
-          showToast({
-            type: 'system',
-            title: 'Partner Accepted',
-            message: 'You are now coding partners!',
-          });
-          try {
-            const m = await DataService.getMembers(projectId);
-            setMembers(m);
-          } catch (e) {}
-        }}
-        onDeclinePartner={async (reqId, notifId) => {
-          await DataService.respondToPartnerRequest(reqId, false, notifId);
-          setNotifications(prev => prev.filter(n => n.partnerRequestId !== reqId));
-        }}
-        onOpenCenter={() => setIsNotificationsOpen(true)}
-        onOpenTimeline={() => {
-          setIsDockOpen(true);
-          setActiveDockTab('activity');
-        }}
-      />
+
 
       {/* Compact Profile Preview Card (Requirements 17, 18) */}
       <ProfilePreviewCard
