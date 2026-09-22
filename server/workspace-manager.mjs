@@ -628,6 +628,36 @@ export const WorkspaceManager = {
     }
   },
 
+  /**
+   * Execute a one-off command inside the sandboxed project workspace
+   */
+  async runCommand(projectId, command, options = {}) {
+    const cleanId = this.sanitizeProjectId(projectId);
+    const wsDir = this.getWorkspaceDir(cleanId);
+    const timeout = options.timeout || 30000;
+    const safeEnv = getSanitizedEnv();
+
+    const { exec } = await import('child_process');
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      exec(command, {
+        cwd: wsDir,
+        timeout,
+        env: { ...process.env, ...safeEnv },
+        maxBuffer: 1024 * 1024 * 4,
+      }, (error, stdout, stderr) => {
+        const duration = Date.now() - startTime;
+        resolve({
+          exitCode: error ? (error.code ?? 1) : 0,
+          stdout: (stdout || '').trim(),
+          stderr: (stderr || '').trim(),
+          duration,
+          timedOut: error?.killed && error?.signal === 'SIGTERM',
+        });
+      });
+    });
+  },
+
   cleanupAllWorkspaces() {
     console.log(`[WorkspaceManager] Cleaning up ${activeSessions.size} active terminal sessions...`);
     for (const [sessionId, session] of activeSessions.entries()) {
@@ -642,3 +672,4 @@ export const WorkspaceManager = {
     projectSessions.clear();
   },
 };
+

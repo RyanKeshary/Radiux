@@ -16,7 +16,9 @@ import {
   FileCode2,
   Share2,
   GitPullRequest,
+  Sparkles,
 } from 'lucide-react';
+
 
 export type ActivityView = 'explorer' | 'search' | 'git' | 'chat' | 'voice' | 'preview' | 'collaborators' | 'extensions' | 'comments';
 
@@ -32,9 +34,12 @@ interface ActivityBarProps {
   onOpenProfile: () => void;
   onOpenIntegrations?: () => void;
   onOpenReviews?: () => void;
+  onToggleAI?: () => void;
+  isAIOpen?: boolean;
   userAvatar?: string;
   userName?: string;
 }
+
 
 export function ActivityBar({
   activeView,
@@ -48,9 +53,12 @@ export function ActivityBar({
   onOpenProfile,
   onOpenIntegrations,
   onOpenReviews,
+  onToggleAI,
+  isAIOpen,
   userAvatar,
   userName = 'User',
 }: ActivityBarProps) {
+
   const navItems: { id: ActivityView; label: string; icon: React.ReactNode; shortcut: string; badge?: number; indicator?: boolean }[] = [
     {
       id: 'explorer',
@@ -117,7 +125,27 @@ export function ActivityBar({
     >
       {/* Primary Navigation Views */}
       <div className="flex flex-col items-center gap-1 w-full">
+        {/* AI Coding Agent Trigger */}
+        {onToggleAI && (
+          <button
+            onClick={onToggleAI}
+            className={`relative w-10 h-10 flex items-center justify-center rounded transition-all mb-1 ${
+              isAIOpen
+                ? 'bg-sky-500/20 text-sky-400 font-semibold border border-sky-500/30'
+                : 'text-neutral-400 hover:text-white hover:bg-white/[0.06]'
+            }`}
+            title="AI Coding Agent (Ctrl+I)"
+            aria-label="AI Coding Agent"
+          >
+            <Sparkles className="w-5 h-5 text-sky-400" />
+            {isAIOpen && (
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-sky-400 rounded-r" />
+            )}
+          </button>
+        )}
+
         {navItems.map((item) => {
+
           const isActive = activeView === item.id;
           return (
             <button

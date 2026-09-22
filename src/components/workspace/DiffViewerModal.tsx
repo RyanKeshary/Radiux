@@ -1,14 +1,21 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { X, FileText, Plus, Minus, Check, Copy } from 'lucide-react';
+import React from 'react';
+import { DiffEditor } from '@monaco-editor/react';
+import { DiffProposal } from '@/lib/ai/types';
+import { Check, X, FileCode2, GitBranch } from 'lucide-react';
 
-interface DiffViewerModalProps {
+export interface DiffViewerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  filePath: string;
-  diff: string;
+  // Git diff mode props
+  filePath?: string;
+  diff?: string;
   isStaged?: boolean;
+  // AI diff mode props
+  proposal?: DiffProposal | null;
+  onAccept?: (proposal: DiffProposal) => void;
+  onReject?: (proposal: DiffProposal) => void;
 }
 
 export function DiffViewerModal({
@@ -16,208 +23,133 @@ export function DiffViewerModal({
   onClose,
   filePath,
   diff,
-  isStaged = false,
+  isStaged,
+  proposal,
+  onAccept,
+  onReject,
 }: DiffViewerModalProps) {
-  const [copied, setCopied] = useState(false);
-
-  // Parse git unified diff into structured lines with line numbers
-  const parsedDiff = useMemo(() => {
-    if (!diff) return [];
-    const rawLines = diff.split('\n');
-    let oldLine = 0;
-    let newLine = 0;
-    const lines = [];
-
-    for (const raw of rawLines) {
-      if (raw.startsWith('@@')) {
-        // Parse hunk header: @@ -oldStart,oldLen +newStart,newLen @@
-        const match = raw.match(/@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
-        if (match) {
-          oldLine = parseInt(match[1], 10) - 1;
-          newLine = parseInt(match[2], 10) - 1;
-        }
-        lines.push({ type: 'header', text: raw, oldNum: null, newNum: null });
-      } else if (raw.startsWith('+') && !raw.startsWith('+++')) {
-        newLine++;
-        lines.push({ type: 'add', text: raw.substring(1), oldNum: null, newNum: newLine });
-      } else if (raw.startsWith('-') && !raw.startsWith('---')) {
-        oldLine++;
-        lines.push({ type: 'del', text: raw.substring(1), oldNum: oldLine, newNum: null });
-      } else if (raw.startsWith('diff --git') || raw.startsWith('index ') || raw.startsWith('---') || raw.startsWith('+++')) {
-        // Metadata header
-        lines.push({ type: 'meta', text: raw, oldNum: null, newNum: null });
-      } else {
-        // Context line
-        oldLine++;
-        newLine++;
-        lines.push({ type: 'context', text: raw.startsWith(' ') ? raw.substring(1) : raw, oldNum: oldLine, newNum: newLine });
-      }
-    }
-    return lines;
-  }, [diff]);
-
   if (!isOpen) return null;
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(diff);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const isAIMode = !!proposal;
+  const displayPath = proposal ? proposal.path : filePath || 'file';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-      <div
-        style={{
-          backgroundColor: 'var(--ide-bg)',
-          borderColor: 'var(--ide-border)',
-          color: 'var(--ide-text)',
-        }}
-        className="border rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div 
+        className="w-full max-w-5xl h-[85vh] flex flex-col rounded-xl border border-white/10 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        style={{ backgroundColor: 'var(--ide-bg, #1e1e1e)' }}
       >
         {/* Header */}
-        <div
-          style={{
-            backgroundColor: 'var(--ide-dock-header)',
-            borderColor: 'var(--ide-border)',
-          }}
-          className="px-5 py-3.5 border-b flex items-center justify-between"
-        >
-          <div className="flex items-center gap-2.5">
-            <FileText className="w-4 h-4 text-sky-400" />
-            <span className="font-semibold text-sm" style={{ color: 'var(--ide-text)' }}>{filePath || 'Changes Diff'}</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
-              isStaged ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-            }`}>
-              {isStaged ? 'STAGED' : 'WORKING TREE'}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-neutral-900/60">
+          <div className="flex items-center gap-2">
+            {isAIMode ? (
+              <FileCode2 className="w-4 h-4 text-sky-400" />
+            ) : (
+              <GitBranch className="w-4 h-4 text-emerald-400" />
+            )}
+            <span className="text-xs font-semibold text-neutral-200">
+              {isAIMode ? 'AI Proposed Diff:' : (isStaged ? 'Staged Git Changes:' : 'Unstaged Git Changes:')}{' '}
+              <span className="font-mono text-sky-300">{displayPath}</span>
             </span>
+            {proposal?.summary && (
+              <span className="text-[11px] text-neutral-400 font-normal">
+                ({proposal.summary})
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopy}
-              style={{
-                backgroundColor: 'var(--ide-input-bg)',
-                borderColor: 'var(--ide-border)',
-                color: 'var(--ide-text)',
-              }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors hover:opacity-90"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Copied' : 'Copy Diff'}</span>
-            </button>
+            {isAIMode && proposal && onAccept && (
+              <button
+                onClick={() => {
+                  onAccept(proposal);
+                  onClose();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow-sm transition-colors"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Accept Changes</span>
+              </button>
+            )}
+            {isAIMode && proposal && onReject && (
+              <button
+                onClick={() => {
+                  onReject(proposal);
+                  onClose();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-600/80 hover:bg-red-500 text-white text-xs font-medium shadow-sm transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Reject</span>
+              </button>
+            )}
             <button
               onClick={onClose}
-              style={{ color: 'var(--ide-text-muted)' }}
-              className="p-1 rounded hover:opacity-80 transition-colors"
+              className="p-1.5 text-neutral-400 hover:text-white rounded hover:bg-white/5 transition-colors ml-2"
+              title="Close Diff Preview"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Diff content view */}
-        <div
-          style={{
-            backgroundColor: 'var(--ide-bg)',
-            color: 'var(--ide-text)',
-          }}
-          className="flex-1 overflow-auto font-mono text-xs p-2 select-text"
-        >
-          {parsedDiff.length === 0 ? (
-            <div className="p-8 text-center" style={{ color: 'var(--ide-text-muted)' }}>
-              No differences detected for this file.
+        {/* Diff Content Area */}
+        {isAIMode && proposal ? (
+          <>
+            <div className="flex items-center justify-between px-4 py-1.5 bg-neutral-950/40 text-[11px] text-neutral-400 border-b border-white/5 font-mono">
+              <span>Original (Current file)</span>
+              <span>Proposed (AI Agent modifications)</span>
             </div>
-          ) : (
-            <table className="w-full border-collapse">
-              <tbody>
-                {parsedDiff.map((line, idx) => {
-                  if (line.type === 'meta') {
-                    return (
-                      <tr key={idx} style={{ color: 'var(--ide-text-muted)' }} className="opacity-75">
-                        <td className="w-10 px-2 py-0.5 text-right select-none opacity-50">...</td>
-                        <td className="w-10 px-2 py-0.5 text-right select-none opacity-50">...</td>
-                        <td className="px-3 py-0.5 font-semibold">{line.text}</td>
-                      </tr>
-                    );
-                  }
-                  if (line.type === 'header') {
-                    return (
-                      <tr key={idx} className="bg-sky-950/40 text-sky-400 border-y border-sky-900/40">
-                        <td className="w-10 px-2 py-1 text-right select-none text-sky-600">@@</td>
-                        <td className="w-10 px-2 py-1 text-right select-none text-sky-600">@@</td>
-                        <td className="px-3 py-1 font-bold">{line.text}</td>
-                      </tr>
-                    );
-                  }
-                  if (line.type === 'add') {
-                    return (
-                      <tr key={idx} className="bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/30">
-                        <td className="w-10 px-2 py-0.5 text-right select-none opacity-40"></td>
-                        <td className="w-10 px-2 py-0.5 text-right select-none text-emerald-500 font-mono">{line.newNum}</td>
-                        <td className="px-3 py-0.5 whitespace-pre">
-                          <span className="inline-block text-emerald-400 mr-2 select-none">+</span>
-                          {line.text}
-                        </td>
-                      </tr>
-                    );
-                  }
-                  if (line.type === 'del') {
-                    return (
-                      <tr key={idx} className="bg-red-950/40 text-red-300 hover:bg-red-900/30">
-                        <td className="w-10 px-2 py-0.5 text-right select-none text-red-500 font-mono">{line.oldNum}</td>
-                        <td className="w-10 px-2 py-0.5 text-right select-none opacity-40"></td>
-                        <td className="px-3 py-0.5 whitespace-pre">
-                          <span className="inline-block text-red-400 mr-2 select-none">-</span>
-                          {line.text}
-                        </td>
-                      </tr>
-                    );
-                  }
-                  return (
-                    <tr key={idx} className="hover:opacity-80" style={{ color: 'var(--ide-text)' }}>
-                      <td className="w-10 px-2 py-0.5 text-right select-none opacity-40 font-mono">{line.oldNum}</td>
-                      <td className="w-10 px-2 py-0.5 text-right select-none opacity-40 font-mono">{line.newNum}</td>
-                      <td className="px-3 py-0.5 whitespace-pre">
-                        <span className="inline-block text-transparent mr-2 select-none">&nbsp;</span>
-                        {line.text}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+            <div className="flex-1 w-full overflow-hidden">
+              <DiffEditor
+                original={proposal.originalContent}
+                modified={proposal.proposedContent}
+                language={proposal.path.endsWith('.tsx') || proposal.path.endsWith('.ts') ? 'typescript' : 'javascript'}
+                theme="vs-dark"
+                options={{
+                  readOnly: true,
+                  renderSideBySide: true,
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  fontSize: 12,
+                  lineNumbers: 'on',
+                  folding: true,
+                }}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 w-full overflow-auto p-4 font-mono text-xs text-neutral-200 bg-neutral-950 whitespace-pre leading-relaxed">
+            {diff ? (
+              diff.split('\n').map((line, idx) => {
+                const isAdd = line.startsWith('+') && !line.startsWith('+++');
+                const isDel = line.startsWith('-') && !line.startsWith('---');
+                const isHunk = line.startsWith('@@');
 
-        {/* Footer */}
-        <div
-          style={{
-            backgroundColor: 'var(--ide-dock-header)',
-            borderColor: 'var(--ide-border)',
-            color: 'var(--ide-text-muted)',
-          }}
-          className="px-5 py-2.5 border-t flex items-center justify-between text-xs"
-        >
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded bg-emerald-500/80 inline-block"></span> Added
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded bg-red-500/80 inline-block"></span> Removed
-            </span>
+                let color = 'text-neutral-300';
+                let bg = 'transparent';
+                if (isAdd) {
+                  color = 'text-emerald-400';
+                  bg = 'rgba(16, 185, 129, 0.1)';
+                } else if (isDel) {
+                  color = 'text-red-400';
+                  bg = 'rgba(239, 68, 68, 0.1)';
+                } else if (isHunk) {
+                  color = 'text-sky-400 font-semibold';
+                  bg = 'rgba(56, 189, 248, 0.05)';
+                }
+
+                return (
+                  <div key={idx} style={{ backgroundColor: bg }} className={`px-2 py-0.5 ${color}`}>
+                    {line || ' '}
+                  </div>
+                );
+              })
+            ) : (
+              <span className="text-neutral-500">No diff changes to display.</span>
+            )}
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              backgroundColor: 'var(--ide-input-bg)',
-              borderColor: 'var(--ide-border)',
-              color: 'var(--ide-text)',
-            }}
-            className="px-3 py-1 rounded border text-xs transition-colors hover:opacity-90"
-          >
-            Close
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );

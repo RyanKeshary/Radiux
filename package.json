@@ -19,6 +19,7 @@
     "@xterm/xterm": "^6.0.0",
     "autoprefixer": "^10.6.0",
     "clsx": "^2.1.1",
+    "groq-sdk": "^1.6.0",
     "jszip": "^3.10.2",
     "lucide-react": "^0.447.0",
     "monaco-editor": "^0.51.0",

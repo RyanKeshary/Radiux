@@ -65,6 +65,10 @@ import { CommentService } from '@/lib/collaboration/comment-service';
 import { soundManager } from '@/lib/sound';
 import { ChatPanel } from './ChatPanel';
 import { VoicePanel } from './VoicePanel';
+import { AIAgentPanel } from './AIAgentPanel';
+import { DiffViewerModal } from './DiffViewerModal';
+import { DiffProposal, WorkspaceAIContext } from '@/lib/ai/types';
+
 
 import { 
   ChevronLeft, 
@@ -97,8 +101,11 @@ import {
   CheckCircle2,
   ExternalLink,
   Users,
-  User
+  User,
+  Sparkles,
+  Bot
 } from 'lucide-react';
+
 
 interface WorkspaceProps {
   projectId: string;
@@ -139,6 +146,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
   // Level 7: Activity Bar & Sidebar Views
   const [activeActivityView, setActiveActivityView] = useState<ActivityView | null>('explorer');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // AI Agent & Workspace Intelligence Layer
+  const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
+  const [activeDiffProposal, setActiveDiffProposal] = useState<DiffProposal | null>(null);
+  const [isDiffViewerOpen, setIsDiffViewerOpen] = useState(false);
+  const [currentSelectionContext, setCurrentSelectionContext] = useState<any>(null);
+
 
   // Level 7: Diagnostics & Output Panels
   const [problems, setProblems] = useState<ProblemItem[]>([]);
@@ -850,8 +864,21 @@ export function Workspace({ projectId }: WorkspaceProps) {
     };
   }, []);
 
+  // Global Shortcut for AI Coding Agent: Ctrl+I
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        setIsAIPanelOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Level 9 Centralized Scoped Keyboard Manager (Requirements 8, 9, 10, 11, 12)
   useKeyboardManager({
+
     onCommandPalette: () => setIsCommandPaletteOpen((prev) => !prev),
     onQuickOpen: () => setIsQuickOpen((prev) => !prev),
     onGlobalSearch: () => setIsGlobalSearchOpen((prev) => !prev),
@@ -1144,8 +1171,156 @@ export function Workspace({ projectId }: WorkspaceProps) {
     }
   };
 
+  // AI Diff Accept / Reject / Review Handlers
+  const handleAcceptDiff = async (proposal: DiffProposal) => {
+    try {
+      const targetFile = files.find(f => f.name === proposal.path || f.name.endsWith(proposal.path) || proposal.path.endsWith(f.name));
+
+      if (targetFile) {
+        await DataService.updateFileContent(targetFile.id, proposal.proposedContent);
+        syncFileToWorkspace(targetFile.name, proposal.proposedContent);
+
+        setFiles((prev) =>
+          prev.map((f) => (f.id === targetFile.id ? { ...f, content: proposal.proposedContent } : f))
+        );
+
+        setEditorGroups((prev) =>
+          prev.map((g) => ({
+            ...g,
+            openFiles: g.openFiles.map((f) => (f.id === targetFile.id ? { ...f, content: proposal.proposedContent } : f)),
+          }))
+        );
+      } else {
+        const newFile = await DataService.createFile(projectId, null, proposal.path, false, proposal.proposedContent);
+        setFiles((prev) => [...prev, newFile]);
+        syncFileToWorkspace(newFile.name, proposal.proposedContent);
+      }
+
+      broadcastFileChange();
+      appendOutputLog('sync', `Applied AI diff changes to "${proposal.path}".`);
+      logAndBroadcastActivity('file_saved', `Applied AI changes to "${proposal.path}"`, proposal.path);
+    } catch (err: any) {
+      console.error('Failed to apply AI diff:', err);
+      appendOutputLog('system', `Error applying AI changes: ${err.message}`);
+    }
+  };
+
+  const handleRejectDiff = (proposal: DiffProposal) => {
+    appendOutputLog('system', `Rejected AI proposal for "${proposal.path}".`);
+  };
+
+  const handleReviewDiff = (proposal: DiffProposal) => {
+    setActiveDiffProposal(proposal);
+    setIsDiffViewerOpen(true);
+  };
+
+  // Construct Progressive Workspace AI Context
+  const currentActiveGroup = getActiveGroup();
+  const currentActiveFile = currentActiveGroup.openFiles.find(f => f.id === currentActiveGroup.activeFileId) || null;
+
+  const workspaceAIContext: WorkspaceAIContext = {
+    user: {
+      id: user?.id || 'guest',
+      name: user?.full_name || user?.display_name || 'Developer',
+      email: user?.email,
+      role: role || undefined,
+    },
+    project: {
+      id: projectId,
+      name: project?.name || 'Workspace',
+      description: project?.description,
+    },
+    activeFile: currentActiveFile ? {
+      id: currentActiveFile.id,
+      path: currentActiveFile.name,
+      language: currentActiveFile.language,
+      content: currentActiveFile.content,
+      selection: currentSelectionContext,
+    } : null,
+    openTabs: currentActiveGroup.openFiles.map(f => f.name),
+    git: {
+      branch: currentGitBranch,
+    },
+    diagnostics: problems.length > 0
+      ? problems.map(p => `${p.filePath}:${p.startLineNumber || 1} [${p.severity}] ${p.message}`).join('\n')
+      : undefined,
+  };
+
   // Command palette actions
   const commands: CommandItem[] = [
+    {
+      id: 'ai-open-agent',
+      title: 'AI: Open Agent',
+      subtitle: 'Open the Radiux AI coding assistant panel',
+      shortcut: 'Ctrl+I',
+      category: 'AI',
+      icon: <Sparkles className="w-4 h-4 text-sky-400" />,
+      action: () => setIsAIPanelOpen(true),
+    },
+    {
+      id: 'ai-explain-selection',
+      title: 'AI: Explain Selection',
+      subtitle: 'Ask AI to explain current code selection',
+      category: 'AI',
+      icon: <Sparkles className="w-4 h-4 text-sky-400" />,
+      action: () => setIsAIPanelOpen(true),
+    },
+    {
+      id: 'ai-fix-selection',
+      title: 'AI: Fix Selection',
+      subtitle: 'Analyze and fix issues in selected code',
+      category: 'AI',
+      icon: <Sparkles className="w-4 h-4 text-emerald-400" />,
+      action: () => setIsAIPanelOpen(true),
+    },
+    {
+      id: 'ai-refactor-selection',
+      title: 'AI: Refactor Selection',
+      subtitle: 'Refactor code to be cleaner and more efficient',
+      category: 'AI',
+      icon: <Sparkles className="w-4 h-4 text-purple-400" />,
+      action: () => setIsAIPanelOpen(true),
+    },
+    {
+      id: 'ai-generate-tests',
+      title: 'AI: Generate Tests',
+      subtitle: 'Generate comprehensive unit tests for current code',
+      category: 'AI',
+      icon: <Sparkles className="w-4 h-4 text-sky-400" />,
+      action: () => setIsAIPanelOpen(true),
+    },
+    {
+      id: 'ai-generate-docs',
+      title: 'AI: Generate Documentation',
+      subtitle: 'Add documentation and type comments',
+      category: 'AI',
+      icon: <Sparkles className="w-4 h-4 text-neutral-400" />,
+      action: () => setIsAIPanelOpen(true),
+    },
+    {
+      id: 'ai-review-file',
+      title: 'AI: Review Current File',
+      subtitle: 'Review open file for bugs and security issues',
+      category: 'AI',
+      icon: <Sparkles className="w-4 h-4 text-amber-400" />,
+      action: () => setIsAIPanelOpen(true),
+    },
+    {
+      id: 'ai-review-changes',
+      title: 'AI: Review Changes',
+      subtitle: 'Inspect uncommitted git modifications',
+      category: 'AI',
+      icon: <Sparkles className="w-4 h-4 text-sky-400" />,
+      action: () => setIsAIPanelOpen(true),
+    },
+    {
+      id: 'ai-explain-error',
+      title: 'AI: Explain Error',
+      subtitle: 'Troubleshoot and fix compiler or runtime errors',
+      category: 'AI',
+      icon: <Sparkles className="w-4 h-4 text-red-400" />,
+      action: () => setIsAIPanelOpen(true),
+    },
     {
       id: 'quick-open',
       title: 'Quick Open...',
@@ -1155,6 +1330,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
       icon: <FileSearch className="w-4 h-4 text-sky-400" />,
       action: () => setIsQuickOpen(true),
     },
+
     {
       id: 'global-search',
       title: 'Global Search',
@@ -1466,6 +1642,20 @@ export function Workspace({ projectId }: WorkspaceProps) {
           {/* Separator */}
           <span className="w-px h-4 bg-white/[0.08] mx-0.5" />
 
+          {/* AI Agent Toggle Button */}
+          <button
+            onClick={() => setIsAIPanelOpen(!isAIPanelOpen)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
+              isAIPanelOpen
+                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
+                : 'text-neutral-300 hover:text-white border border-white/[0.1] hover:border-white/[0.2] hover:bg-white/[0.07]'
+            }`}
+            title="Toggle AI Coding Agent (Ctrl+I)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline font-semibold">AI Agent</span>
+          </button>
+
           {/* Invite Teammates */}
           <button
             onClick={() => setIsInviteOpen(true)}
@@ -1474,6 +1664,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
             <UserPlus className="w-3 h-3" />
             <span className="hidden sm:inline">Invite</span>
           </button>
+
 
 
 
@@ -1510,9 +1701,12 @@ export function Workspace({ projectId }: WorkspaceProps) {
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenIntegrations={() => setIsIntegrationsOpen(true)}
           onOpenReviews={() => setIsReviewsOpen(true)}
+          onToggleAI={() => setIsAIPanelOpen(!isAIPanelOpen)}
+          isAIOpen={isAIPanelOpen}
           userAvatar={user?.avatar_url}
           userName={user?.full_name || 'User'}
         />
+
 
         {/* Collapsible Sidebar */}
         {isSidebarOpen && activeActivityView && (
@@ -1844,6 +2038,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
                                 return [...filtered, ...newProblems];
                               });
                             }}
+                            onAskAI={() => {
+                              setIsAIPanelOpen(true);
+                            }}
                           />
                         )
                       ) : (
@@ -1862,6 +2059,19 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 );
               })}
             </div>
+
+            {/* AI Agent Panel (Collapsible & Resizable right panel) */}
+            {isAIPanelOpen && (
+              <AIAgentPanel
+                isOpen={isAIPanelOpen}
+                onClose={() => setIsAIPanelOpen(false)}
+                context={workspaceAIContext}
+                onAcceptDiff={handleAcceptDiff}
+                onRejectDiff={handleRejectDiff}
+                onReviewDiff={handleReviewDiff}
+              />
+            )}
+
 
             {/* Contextual Chat Toast Notification in Editor */}
             {chatToast && (
@@ -2166,11 +2376,21 @@ export function Workspace({ projectId }: WorkspaceProps) {
         onMemberRemoved={(uid) => setMembers((prev) => prev.filter((m) => m.user_id !== uid))}
       />
 
+      {/* AI Diff Viewer Modal */}
+      <DiffViewerModal
+        isOpen={isDiffViewerOpen}
+        onClose={() => setIsDiffViewerOpen(false)}
+        proposal={activeDiffProposal}
+        onAccept={handleAcceptDiff}
+        onReject={handleRejectDiff}
+      />
+
       <CommandPalette
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
         commands={commands}
       />
+
 
       <QuickOpenModal
         isOpen={isQuickOpen}

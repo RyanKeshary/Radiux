@@ -556,7 +556,32 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  // 3b. AI Agent Workspace Command Execution
+  if (parsedUrl.pathname === '/api/workspace/exec' && request.method === 'POST') {
+    let body = '';
+    request.on('data', chunk => body += chunk);
+    request.on('end', async () => {
+      try {
+        const { projectId, command, options } = JSON.parse(body);
+        if (projectId && command) {
+          const result = await WorkspaceManager.runCommand(projectId, command, options);
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(result));
+          return;
+        }
+      } catch (e) {
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: e.message }));
+        return;
+      }
+      response.writeHead(400, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: 'Invalid payload. Missing projectId or command.' }));
+    });
+    return;
+  }
+
   // 4. Port connectivity probe endpoint (/api/check-port?port=5000)
+
   if (parsedUrl.pathname === '/api/check-port') {
     const probePort = parseInt(parsedUrl.searchParams.get('port') || '0', 10);
     if (!probePort) {

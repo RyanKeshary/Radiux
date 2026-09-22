@@ -13,6 +13,7 @@ import { registerMonacoThemes, THEMES, ThemeId } from '@/lib/themes';
 import { ProblemItem } from './ProblemsPanel';
 import { config } from '@/lib/config';
 import { Loader2, Wifi, WifiOff, CheckCircle2 } from 'lucide-react';
+import { InlineAIPrompt } from './InlineAIPrompt';
 
 interface MonacoEditorWrapperProps {
   projectId: string;
@@ -28,7 +29,9 @@ interface MonacoEditorWrapperProps {
   onToggleSidebar?: () => void;
   onToggleDock?: () => void;
   onSave?: () => void;
+  onAskAI?: (prompt: string) => void;
 }
+
 
 // Remote Collaborator Cursor Content Widget for Monaco Editor (Requirement 4)
 class RemoteCursorWidget {
@@ -147,13 +150,17 @@ export function MonacoEditorWrapper({
   onToggleSidebar,
   onToggleDock,
   onSave,
+  onAskAI,
 }: MonacoEditorWrapperProps) {
   const { user } = useAuth();
   const [synced, setSynced] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [editorReady, setEditorReady] = useState(false);
+  const [isInlineAIPromptOpen, setIsInlineAIPromptOpen] = useState(false);
+  const [inlineAISelectedText, setInlineAISelectedText] = useState('');
 
   const editorRef = useRef<any>(null);
+
   const monacoRef = useRef<Monaco | null>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
   const ytextRef = useRef<Y.Text | null>(null);
@@ -659,6 +666,47 @@ export function MonacoEditorWrapper({
       });
     }
 
+    // Ctrl+K for Inline AI transformation
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
+      const sel = editor.getSelection();
+      const model = editor.getModel();
+      let text = '';
+      if (model && sel) {
+        text = model.getValueInRange(sel);
+        if (!text) {
+          text = model.getLineContent(sel.positionLineNumber);
+        }
+      }
+      setInlineAISelectedText(text);
+      setIsInlineAIPromptOpen(true);
+    });
+
+    // Context Menu AI Actions
+    const addAIAction = (id: string, label: string, promptPrefix: string) => {
+      editor.addAction({
+        id: `radiux.ai.${id}`,
+        label: `AI: ${label}`,
+        contextMenuGroupId: '1_ai',
+        contextMenuOrder: 1,
+        precondition: 'editorHasSelection',
+        run: (ed: any) => {
+          const sel = ed.getSelection();
+          const model = ed.getModel();
+          const selText = model ? model.getValueInRange(sel) : '';
+          if (onAskAI) {
+            onAskAI(`${promptPrefix} for file ${file.name}:\n\`\`\`${file.language || ''}\n${selText}\n\`\`\``);
+          }
+        },
+      });
+    };
+
+    addAIAction('explain', 'Explain Selection', 'Explain this code in detail and highlight any potential risks');
+    addAIAction('fix', 'Fix Bugs in Selection', 'Identify any bugs or issues in this code selection and provide a fix');
+    addAIAction('refactor', 'Refactor Selection', 'Refactor this code to be cleaner, more maintainable, and idiomatic');
+    addAIAction('optimize', 'Optimize Selection', 'Optimize this code selection for better performance and efficiency');
+    addAIAction('tests', 'Generate Unit Tests', 'Generate comprehensive unit tests for this code selection');
+    addAIAction('document', 'Document Selection', 'Add clean, complete documentation / JSDoc for this code selection');
+
     // Direct keydown intercept for KeyW inside Monaco
     editor.onKeyDown((e: any) => {
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
@@ -669,6 +717,21 @@ export function MonacoEditorWrapper({
       }
     });
   };
+
+  const handleApplyInlineEdit = (replacement: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const sel = editor.getSelection();
+    if (!sel) return;
+    editor.executeEdits('inline-ai', [
+      {
+        range: sel,
+        text: replacement,
+        forceMoveMarkers: true,
+      },
+    ]);
+  };
+
 
   const currentThemeConfig = THEMES[settings.theme as ThemeId];
   const activeMonacoTheme = currentThemeConfig ? currentThemeConfig.monacoTheme : settings.theme;
@@ -750,6 +813,17 @@ export function MonacoEditorWrapper({
           }
         />
       </div>
+
+      {/* Monaco Inline AI Transformation Prompt (Ctrl+K) */}
+      <InlineAIPrompt
+        isOpen={isInlineAIPromptOpen}
+        onClose={() => setIsInlineAIPromptOpen(false)}
+        selectedText={inlineAISelectedText}
+        filePath={file.name}
+        language={file.language || 'plaintext'}
+        onAccept={handleApplyInlineEdit}
+      />
     </div>
   );
 }
+
