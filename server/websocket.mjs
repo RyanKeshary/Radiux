@@ -188,6 +188,24 @@ function getProjectComments(projectId) {
   return loadJsonFile(file, []);
 }
 
+function saveProjectComments(projectId, threads) {
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'comments.json');
+  saveJsonFile(file, Array.isArray(threads) ? threads : []);
+  return threads;
+}
+
+// Project Code Reviews (Pull Requests)
+function getProjectReviews(projectId) {
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'reviews.json');
+  return loadJsonFile(file, []);
+}
+
+function saveProjectReviews(projectId, reviews) {
+  const file = path.join(WorkspaceManager.getWorkspaceDir(projectId), 'reviews.json');
+  saveJsonFile(file, Array.isArray(reviews) ? reviews : []);
+  return reviews;
+}
+
 // Coding Partners
 function getCodingPartners(userId) {
   const file = path.join(DATA_ROOT, 'coding_partners.json');
@@ -1063,7 +1081,6 @@ const server = http.createServer(async (request, response) => {
 
           // If a new review or update notification was provided
           if (body.notification && body.notification.user_id) {
-            saveGlobalNotification(body.notification);
             sendToUser(body.notification.user_id, {
               type: 'notification',
               notification: body.notification,
