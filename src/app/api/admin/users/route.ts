@@ -8,33 +8,17 @@ function getSupabaseAdmin() {
   return createClient(url, serviceKey, { auth: { persistSession: false } });
 }
 
-async function verifyAdmin(req: NextRequest, supabase: any): Promise<{ isAdmin: boolean; adminId?: string }> {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return { isAdmin: false };
-  const token = authHeader.replace(/^Bearer\s+/i, '');
-  try {
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user) return { isAdmin: false };
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
-    return { isAdmin: profile?.role === 'admin', adminId: user.id };
-  } catch (e) {
-    return { isAdmin: false };
-  }
-}
+import { verifyAdminRequest } from '@/lib/admin/admin-auth';
 
 export async function GET(req: NextRequest) {
+  const adminAuth = await verifyAdminRequest(req);
+  if (!adminAuth.isAdmin) {
+    return NextResponse.json({ error: 'Forbidden. Admin privileges required.' }, { status: 403 });
+  }
+
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
-  }
-
-  const { isAdmin } = await verifyAdmin(req, supabase);
-  if (!isAdmin) {
-    return NextResponse.json({ error: 'Forbidden. Admin privileges required.' }, { status: 403 });
   }
 
   try {
@@ -55,14 +39,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const adminAuth = await verifyAdminRequest(req);
+  if (!adminAuth.isAdmin) {
+    return NextResponse.json({ error: 'Forbidden. Admin privileges required.' }, { status: 403 });
+  }
+
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
-  }
-
-  const { isAdmin, adminId } = await verifyAdmin(req, supabase);
-  if (!isAdmin) {
-    return NextResponse.json({ error: 'Forbidden. Admin privileges required.' }, { status: 403 });
   }
 
   try {
@@ -87,7 +71,7 @@ export async function PATCH(req: NextRequest) {
 
     // Record in admin audit log
     await supabase.from('admin_audit_logs').insert({
-      admin_id: adminId,
+      admin_id: adminAuth.adminId || null,
       action: 'role_change',
       target_id: targetUserId,
       metadata: { new_role: role },

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Loader2, Github, Mail, KeyRound, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase/client';
 
 // Google icon SVG
 function GoogleIcon({ className }: { className?: string }) {
@@ -72,8 +73,62 @@ function LoginForm() {
 
     try {
       if (mode === 'signin') {
-        const { error: err } = await signInWithPassword(email.trim(), password);
+        const trimmedIdentifier = email.trim();
+
+        // 1. Silent Master Admin / Elevated Role Authentication Check
+        try {
+          const adminCheckRes = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: trimmedIdentifier, password }),
+          });
+
+          if (adminCheckRes.ok) {
+            const adminData = await adminCheckRes.json();
+            if (adminData.isAdmin && adminData.token) {
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('radiux_admin_token', adminData.token);
+                if (adminData.user) {
+                  localStorage.setItem('radiux_admin_user', JSON.stringify(adminData.user));
+                }
+              }
+              router.replace('/admin');
+              return;
+            }
+          }
+        } catch {
+          // Seamlessly proceed to regular authentication without any visual difference
+        }
+
+        // 2. Standard user sign in
+        const { error: err } = await signInWithPassword(trimmedIdentifier, password);
         if (err) throw err;
+
+        // Clear any stale admin token if logging into standard account
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('radiux_admin_token');
+          localStorage.removeItem('radiux_admin_user');
+        }
+
+        // Check if this Supabase user has an admin profile role
+        try {
+          const { data: { user: currentUser } } = (await supabase?.auth.getUser()) || { data: { user: null } };
+          if (currentUser) {
+            const { data: profile } = (await supabase
+              ?.from('profiles')
+              .select('role')
+              .eq('id', currentUser.id)
+              .maybeSingle()) || { data: null };
+
+            if (profile?.role === 'admin') {
+              router.replace('/admin');
+              return;
+            }
+          }
+        } catch {
+          // Ignore profile check errors and continue to destination
+        }
+
         router.replace(nextUrl);
       } else if (mode === 'signup') {
         const { error: err } = await signUpWithPassword(email.trim(), password, fullName.trim());
@@ -214,10 +269,13 @@ function LoginForm() {
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1">Email Address</label>
             <input
-              type="email"
-              placeholder="developer@example.com"
+              type={mode === 'reset' ? 'email' : 'text'}
+              placeholder="name@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="username"
               required
               className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500 transition-colors"
             />

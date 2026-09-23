@@ -37,12 +37,40 @@ export default function AdminDashboardPage() {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // Helper to retrieve token from Supabase session or Master Admin local storage
+  const getAdminToken = async (): Promise<string | null> => {
+    try {
+      const { data: { session } } = (await supabase?.auth.getSession()) || { data: { session: null } };
+      if (session?.access_token) return session.access_token;
+    } catch {
+      // ignore
+    }
+    if (typeof window !== 'undefined') {
+      const localToken = localStorage.getItem('radiux_admin_token');
+      if (localToken) return localToken;
+    }
+    return null;
+  };
+
+  const handleAdminSignOut = async () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('radiux_admin_token');
+      localStorage.removeItem('radiux_admin_user');
+    }
+    try {
+      await supabase?.auth.signOut();
+    } catch {
+      // ignore
+    }
+    window.location.href = '/login';
+  };
+
   // 1. Server-Side Admin Auth Verification
   useEffect(() => {
     const checkAdminAuth = async () => {
       try {
-        const { data: { session } } = await supabase?.auth.getSession() || { data: { session: null } };
-        if (!session?.access_token) {
+        const token = await getAdminToken();
+        if (!token) {
           setIsAdmin(false);
           setIsLoading(false);
           return;
@@ -50,7 +78,7 @@ export default function AdminDashboardPage() {
 
         const res = await fetch('/api/admin/auth', {
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
         });
 
@@ -74,10 +102,10 @@ export default function AdminDashboardPage() {
 
   // 2. Fetch Data When Authorized
   const fetchDashboardData = async () => {
-    const { data: { session } } = await supabase?.auth.getSession() || { data: { session: null } };
-    if (!session?.access_token) return;
+    const token = await getAdminToken();
+    if (!token) return;
 
-    const headers = { Authorization: `Bearer ${session.access_token}` };
+    const headers = { Authorization: `Bearer ${token}` };
 
     try {
       // Metrics
@@ -133,15 +161,15 @@ export default function AdminDashboardPage() {
   // Role Change Action
   const handleRoleChange = async (userId: string, currentRole: string) => {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
-    const { data: { session } } = await supabase?.auth.getSession() || { data: { session: null } };
-    if (!session?.access_token) return;
+    const token = await getAdminToken();
+    if (!token) return;
 
     try {
       const res = await fetch('/api/admin/users', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ targetUserId: userId, role: newRole }),
       });
@@ -157,15 +185,15 @@ export default function AdminDashboardPage() {
 
   // Save AI Setting
   const handleSaveSetting = async (key: string, value: any) => {
-    const { data: { session } } = await supabase?.auth.getSession() || { data: { session: null } };
-    if (!session?.access_token) return;
+    const token = await getAdminToken();
+    if (!token) return;
 
     try {
       const res = await fetch('/api/admin/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ key, value }),
       });
@@ -202,13 +230,21 @@ export default function AdminDashboardPage() {
             You do not have administrative privileges to access the Radiux Administrative Console.
             This attempt has been logged for security auditing.
           </p>
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Return to Workspace Dashboard</span>
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Login</span>
+            </Link>
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-medium transition-colors"
+            >
+              <span>Workspace Dashboard</span>
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -261,6 +297,15 @@ export default function AdminDashboardPage() {
           >
             <RefreshCw className="w-3 h-3" />
             <span>Refresh</span>
+          </button>
+
+          <button
+            onClick={handleAdminSignOut}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs transition-colors border border-rose-500/20"
+            title="Sign Out of Admin Console"
+          >
+            <Lock className="w-3 h-3" />
+            <span>Sign Out</span>
           </button>
         </div>
       </header>

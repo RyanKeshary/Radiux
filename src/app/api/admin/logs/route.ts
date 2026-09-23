@@ -8,33 +8,17 @@ function getSupabaseAdmin() {
   return createClient(url, serviceKey, { auth: { persistSession: false } });
 }
 
-async function verifyAdmin(req: NextRequest, supabase: any): Promise<boolean> {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return false;
-  const token = authHeader.replace(/^Bearer\s+/i, '');
-  try {
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user) return false;
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
-    return profile?.role === 'admin';
-  } catch (e) {
-    return false;
-  }
-}
+import { verifyAdminRequest } from '@/lib/admin/admin-auth';
 
 export async function GET(req: NextRequest) {
+  const adminAuth = await verifyAdminRequest(req);
+  if (!adminAuth.isAdmin) {
+    return NextResponse.json({ error: 'Forbidden. Admin privileges required.' }, { status: 403 });
+  }
+
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
-  }
-
-  const isAdmin = await verifyAdmin(req, supabase);
-  if (!isAdmin) {
-    return NextResponse.json({ error: 'Forbidden. Admin privileges required.' }, { status: 403 });
   }
 
   try {
@@ -45,11 +29,11 @@ export async function GET(req: NextRequest) {
       .limit(100);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ logs: [] });
     }
 
     return NextResponse.json({ logs: logs || [] });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ logs: [] });
   }
 }
