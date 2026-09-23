@@ -27,8 +27,7 @@ import {
   CheckCircle2,
   AlertCircle,
   FolderGit2,
-  Blocks,
-  Share2
+  Blocks
 } from 'lucide-react';
 import { ThemeId, THEMES, applyThemeVariables } from '@/lib/themes';
 import { useAuth } from '@/context/AuthContext';
@@ -37,7 +36,6 @@ import { UserProfile, CodingPartner } from '@/lib/types';
 import { soundManager } from '@/lib/sound';
 import { CommandRegistry, CommandItem } from '@/lib/commands';
 import { ExtensionsPanel } from './ExtensionsPanel';
-import { IntegrationManager } from '@/lib/integrations/integration-manager';
 
 export interface EditorSettings {
   theme: ThemeId | 'vs-dark' | 'vs' | 'hc-black';
@@ -63,7 +61,6 @@ export type SettingsSection =
   | 'privacy'
   | 'github'
   | 'extensions'
-  | 'integrations'
   | 'advanced';
 
 interface EditorSettingsModalProps {
@@ -251,8 +248,7 @@ export function EditorSettingsModal({
     { id: 'privacy', label: '7. Privacy', icon: <Lock className="w-4 h-4 text-teal-400" /> },
     { id: 'github', label: '8. GitHub / Source Control', icon: <Github className="w-4 h-4 text-white" /> },
     { id: 'extensions', label: '9. Extensions', icon: <Blocks className="w-4 h-4 text-emerald-400" /> },
-    { id: 'integrations', label: '10. Integrations', icon: <Share2 className="w-4 h-4 text-violet-400" /> },
-    { id: 'advanced', label: '11. Advanced', icon: <Cpu className="w-4 h-4 text-rose-400" /> },
+    { id: 'advanced', label: '10. Advanced', icon: <Cpu className="w-4 h-4 text-rose-400" /> },
   ];
 
   return (
@@ -996,40 +992,6 @@ export function EditorSettingsModal({
                 </div>
                 <div className="h-[400px] border rounded-lg overflow-hidden" style={{ borderColor: 'var(--ide-border)' }}>
                   <ExtensionsPanel isCompact />
-                </div>
-              </div>
-            )}
-
-            {/* 11. Integrations */}
-            {activeSection === 'integrations' && (
-              <div className="space-y-5 max-w-xl">
-                <div>
-                  <h3 className="text-sm font-semibold mb-1">Platform Integrations</h3>
-                  <p className="text-[11px] opacity-70">
-                    Connect external source control, communication, and project management tools.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {IntegrationManager.getIntegrations().slice(0, 6).map((item) => (
-                    <div 
-                      key={item.provider}
-                      className="p-3.5 rounded-lg border space-y-1.5"
-                      style={{ borderColor: 'var(--ide-border)', backgroundColor: 'var(--ide-card-bg)' }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-xs text-neutral-200">{item.name}</span>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          item.status === 'connected' 
-                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                            : 'bg-white/5 text-neutral-400 border border-white/10'
-                        }`}>
-                          {item.status === 'connected' ? 'Connected' : 'Disconnected'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] opacity-70 line-clamp-2">{item.description}</p>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}

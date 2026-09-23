@@ -107,6 +107,7 @@ export interface WorkspaceAIContext {
     recentDiff?: string;
   };
   diagnostics?: string;
+  targetFiles?: { path: string; content?: string }[];
   projectMemory?: {
     framework?: string;
     language?: string;

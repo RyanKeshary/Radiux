@@ -53,12 +53,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing userMessage in request.' }, { status: 400 });
     }
 
-    // 2. Validate Groq API Key is configured on server
-    if (!AIConfig.groqApiKey) {
+    // 2. Validate Groq API Key (from process.env or x-groq-api-key header or body)
+    const clientProvidedKey = (req.headers.get('x-groq-api-key') || body.groqApiKey || '').trim();
+    const effectiveApiKey = clientProvidedKey || AIConfig.groqApiKey;
+
+    if (!effectiveApiKey) {
       return NextResponse.json(
         {
           error:
-            'GROQ_API_KEY is not configured in the server environment. Please configure your Groq API key in your server deployment settings.',
+            'GROQ_API_KEY is not configured in the server environment. Please click the Key icon in Zodiac to configure your Groq API key.',
+          needsApiKey: true,
         },
         { status: 503 }
       );
@@ -86,6 +90,7 @@ export async function POST(req: NextRequest) {
             context: clientContext as WorkspaceAIContext,
             permissionMode,
             confirmedActionIds,
+            apiKey: effectiveApiKey,
             onEvent: (event) => {
               if (event.type === 'token') {
                 totalTokens++;

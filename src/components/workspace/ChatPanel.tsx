@@ -416,27 +416,6 @@ export function ChatPanel({
                     isMe ? 'flex-row-reverse' : 'flex-row'
                   }`}
                 >
-                  {!isMe && (
-                    <div 
-                      className="w-7 h-7 rounded-full border flex items-center justify-center text-xs font-semibold flex-shrink-0 overflow-hidden"
-                      style={{
-                        backgroundColor: 'var(--ide-card-bg)',
-                        borderColor: 'var(--ide-border)',
-                        color: 'var(--ide-text)',
-                      }}
-                    >
-                      {msg.user_avatar ? (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={msg.user_avatar}
-                          alt={msg.user_name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        msg.user_name[0]?.toUpperCase() || '?'
-                      )}
-                    </div>
-                  )}
 
                   <div
                     className={`px-3 py-2 rounded-2xl text-xs leading-relaxed break-words shadow-sm flex flex-col gap-2 ${

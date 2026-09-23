@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { providerRegistry } from '@/lib/ai/provider';
+import { GroqProvider } from '@/lib/ai/groq-provider';
 import { buildInlineAIPrompt } from '@/lib/ai/prompts';
 import { AIConfig } from '@/lib/ai/config';
 
 export async function POST(req: NextRequest) {
   try {
-    if (!AIConfig.groqApiKey) {
+    const clientProvidedKey = (req.headers.get('x-groq-api-key') || '').trim();
+    const effectiveApiKey = clientProvidedKey || AIConfig.groqApiKey;
+
+    if (!effectiveApiKey) {
       return NextResponse.json(
-        { error: 'GROQ_API_KEY is not configured on the server.' },
+        { error: 'GROQ_API_KEY is not configured on the server. Please configure your Groq API key in Zodiac settings.' },
         { status: 503 }
       );
     }
@@ -29,7 +33,7 @@ export async function POST(req: NextRequest) {
       userInstruction
     );
 
-    const provider = providerRegistry.get();
+    const provider = clientProvidedKey ? new GroqProvider(clientProvidedKey) : providerRegistry.get();
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({

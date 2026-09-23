@@ -12,6 +12,7 @@ import { defaultToolRegistry } from './tool-registry';
 import { ToolExecutor } from './tool-executor';
 import { PermissionEngine } from './permissions';
 import { buildSystemPrompt } from '../prompts';
+import { GroqProvider } from '../groq-provider';
 
 export interface AgentLoopOptions {
   userMessage: string;
@@ -21,6 +22,7 @@ export interface AgentLoopOptions {
   confirmedActionIds?: string[]; // IDs of user-approved confirmations
   onEvent: (event: AgentStreamEvent) => void;
   maxSteps?: number;
+  apiKey?: string;
 }
 
 export interface AgentLoopResult {
@@ -40,9 +42,10 @@ export class AgentExecutionLoop {
       confirmedActionIds = [],
       onEvent,
       maxSteps = AIConfig.maxAgentSteps,
+      apiKey,
     } = options;
 
-    const provider = providerRegistry.get();
+    const provider = apiKey ? new GroqProvider(apiKey) : providerRegistry.get();
     const systemPrompt = buildSystemPrompt(context);
     const tools = defaultToolRegistry.getAll();
     const diffProposals: DiffProposal[] = [];

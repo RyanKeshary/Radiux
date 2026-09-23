@@ -15,12 +15,19 @@ export class GroqProvider implements AIProvider {
   name = 'Groq Cloud';
 
   private client: Groq | null = null;
+  private customApiKey?: string;
+
+  constructor(apiKey?: string) {
+    if (apiKey) {
+      this.customApiKey = apiKey;
+    }
+  }
 
   private getClient(): Groq {
-    const apiKey = AIConfig.groqApiKey;
+    const apiKey = this.customApiKey || AIConfig.groqApiKey;
     if (!apiKey) {
       throw new Error(
-        'Groq API key is not configured on the server. Please set GROQ_API_KEY in the server environment variables.'
+        'Groq API key is not configured on the server. Please set GROQ_API_KEY in the server environment variables or configure it in Zodiac settings.'
       );
     }
     if (!this.client) {

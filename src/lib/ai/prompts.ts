@@ -48,6 +48,25 @@ YOUR WORKFLOW & CORE DIRECTIVES:
     }
   }
 
+  // Explicitly linked target files for editing
+  if (context.targetFiles && context.targetFiles.length > 0) {
+    const list = context.targetFiles.map((f) => `- ${f.path}`).join('\n');
+    parts.push(`\nTARGET FILES SPECIFICALLY LINKED FOR EDIT (HIGHEST PRIORITY):
+The user explicitly linked the following file(s) by clicking '+' to specifically inspect and edit:
+${list}
+
+CRITICAL DIRECTIVE: You MUST inspect these target file(s) and apply your code edits/diffs directly to them according to the user's request.`);
+
+    context.targetFiles.forEach((tf) => {
+      if (tf.content) {
+        parts.push(`\n--- CONTENT OF LINKED TARGET FILE: ${tf.path} ---
+\`\`\`
+${tf.content}
+\`\`\``);
+      }
+    });
+  }
+
   // Active Editor File & Selection
   if (context.activeFile) {
     parts.push(`\nCURRENT OPEN EDITOR FILE:

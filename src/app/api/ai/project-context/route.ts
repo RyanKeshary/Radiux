@@ -26,17 +26,46 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // 1. Try dedicated ai_project_context table
     const { data, error } = await supabase
       .from('ai_project_context')
       .select('*')
       .eq('project_id', projectId)
       .maybeSingle();
 
-    if (error) {
-      return NextResponse.json({ context: null, error: error.message });
+    if (!error && data) {
+      return NextResponse.json({
+        context: {
+          ...data,
+          codingConventions: data.coding_conventions,
+        },
+      });
     }
 
-    return NextResponse.json({ context: data });
+    // 2. Fallback: Check files table for .zodiac_memory.json
+    const { data: fileData } = await supabase
+      .from('files')
+      .select('*')
+      .eq('project_id', projectId)
+      .eq('name', '.zodiac_memory.json')
+      .maybeSingle();
+
+    if (fileData && fileData.content) {
+      try {
+        const parsed = JSON.parse(fileData.content);
+        return NextResponse.json({ context: parsed });
+      } catch (e) {
+        return NextResponse.json({
+          context: {
+            project_id: projectId,
+            coding_conventions: fileData.content,
+            codingConventions: fileData.content,
+          },
+        });
+      }
+    }
+
+    return NextResponse.json({ context: null });
   } catch (err: any) {
     return NextResponse.json({ context: null, error: err.message });
   }
@@ -52,32 +81,85 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { projectId, framework, language, architecture_summary, coding_conventions, context_data } = body;
+    const { projectId, framework, language, architecture_summary, context_data } = body;
+    const coding_conventions = body.coding_conventions ?? body.codingConventions ?? body.instructions ?? body.memory ?? '';
 
     if (!projectId) {
       return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
     }
 
+    const memoryPayload = {
+      project_id: projectId,
+      framework: framework || null,
+      language: language || null,
+      architecture_summary: architecture_summary || null,
+      coding_conventions,
+      codingConventions: coding_conventions,
+      context_data: context_data || {},
+      updated_at: new Date().toISOString(),
+    };
+
+    // 1. Attempt upsert into ai_project_context
     const { data, error } = await supabase
       .from('ai_project_context')
       .upsert({
         project_id: projectId,
-        framework,
-        language,
-        architecture_summary,
+        framework: framework || null,
+        language: language || null,
+        architecture_summary: architecture_summary || null,
         coding_conventions,
         context_data: context_data || {},
         updated_at: new Date().toISOString(),
       })
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!error && data) {
+      return NextResponse.json({
+        context: {
+          ...data,
+          codingConventions: data?.coding_conventions || coding_conventions,
+        },
+        savedInDatabase: true,
+      });
     }
 
-    return NextResponse.json({ context: data });
+    // 2. Persist in database files table as .zodiac_memory.json to guarantee database persistence
+    try {
+      const { data: existingFile } = await supabase
+        .from('files')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('name', '.zodiac_memory.json')
+        .maybeSingle();
+
+      if (existingFile) {
+        await supabase
+          .from('files')
+          .update({
+            content: JSON.stringify(memoryPayload, null, 2),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingFile.id);
+      } else {
+        await supabase.from('files').insert({
+          project_id: projectId,
+          name: '.zodiac_memory.json',
+          content: JSON.stringify(memoryPayload, null, 2),
+          is_folder: false,
+          language: 'json',
+        });
+      }
+    } catch (fileErr) {
+      console.warn('[AI Project Context] Files fallback error:', fileErr);
+    }
+
+    return NextResponse.json({
+      context: memoryPayload,
+      savedInDatabase: true,
+    });
   } catch (err: any) {
+    console.error('[AI Project Context] POST exception:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

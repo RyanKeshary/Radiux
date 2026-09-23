@@ -56,7 +56,6 @@ const DeveloperDiscoveryModal = dynamic(() => import('@/components/profile/Devel
 const ProjectSwitcherModal = dynamic(() => import('./ProjectSwitcherModal').then(m => m.ProjectSwitcherModal), { ssr: false });
 const KeyboardShortcutsModal = dynamic(() => import('./KeyboardShortcutsModal').then(m => m.KeyboardShortcutsModal), { ssr: false });
 const ReviewRequestsModal = dynamic(() => import('./ReviewRequestsModal').then(m => m.ReviewRequestsModal), { ssr: false });
-const IntegrationsModal = dynamic(() => import('./IntegrationsModal').then(m => m.IntegrationsModal), { ssr: false });
 import { ProfilePreviewCard } from '@/components/profile/ProfilePreviewCard';
 import { useKeyboardManager } from '@/hooks/useKeyboardManager';
 import { InlineCommentsOverlay } from './InlineCommentsOverlay';
@@ -289,8 +288,29 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isReviewsOpen, setIsReviewsOpen] = useState(false);
-  const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
   const [currentGitBranch, setCurrentGitBranch] = useState('main');
+  const [projectMemory, setProjectMemory] = useState<string>('');
+
+  useEffect(() => {
+    if (!projectId) return;
+    const fetchMemory = async () => {
+      try {
+        const res = await fetch(`/api/ai/project-context?projectId=${projectId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.context?.coding_conventions) {
+            setProjectMemory(data.context.coding_conventions);
+          }
+        }
+      } catch (e) {
+        if (typeof window !== 'undefined') {
+          const local = localStorage.getItem(`radiux_project_memory_${projectId}`);
+          if (local) setProjectMemory(local);
+        }
+      }
+    };
+    fetchMemory();
+  }, [projectId]);
 
   // Level 9: Profile Preview Card state & "Click again to view profile"
   const [previewUserId, setPreviewUserId] = useState<string | null>(null);
@@ -1258,6 +1278,9 @@ export function Workspace({ projectId }: WorkspaceProps) {
     diagnostics: problems.length > 0
       ? problems.map(p => `${p.filePath}:${p.startLineNumber || 1} [${p.severity}] ${p.message}`).join('\n')
       : undefined,
+    projectMemory: projectMemory ? {
+      coding_conventions: projectMemory,
+    } : undefined,
   };
 
   // Command palette actions
@@ -1721,7 +1744,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
-          onOpenIntegrations={() => setIsIntegrationsOpen(true)}
           onOpenReviews={() => setIsReviewsOpen(true)}
           onToggleAI={() => setIsAIPanelOpen(!isAIPanelOpen)}
           isAIOpen={isAIPanelOpen}
@@ -2097,6 +2119,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onReviewDiff={handleReviewDiff}
                 initialPrompt={aiInitialPrompt}
                 onClearInitialPrompt={() => setAiInitialPrompt(null)}
+                files={files}
               />
             )}
 
@@ -2522,10 +2545,6 @@ export function Workspace({ projectId }: WorkspaceProps) {
         currentBranch={currentGitBranch}
       />
 
-      <IntegrationsModal
-        isOpen={isIntegrationsOpen}
-        onClose={() => setIsIntegrationsOpen(false)}
-      />
 
 
     </div>

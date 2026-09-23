@@ -32,7 +32,6 @@ interface ActivityBarProps {
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
   onOpenProfile: () => void;
-  onOpenIntegrations?: () => void;
   onOpenReviews?: () => void;
   onToggleAI?: () => void;
   isAIOpen?: boolean;
@@ -51,7 +50,6 @@ export function ActivityBar({
   onOpenSettings,
   onOpenShortcuts,
   onOpenProfile,
-  onOpenIntegrations,
   onOpenReviews,
   onToggleAI,
   isAIOpen,
@@ -211,17 +209,6 @@ export function ActivityBar({
           </button>
         )}
 
-        {/* Platform Integrations */}
-        {onOpenIntegrations && (
-          <button
-            onClick={onOpenIntegrations}
-            className="w-10 h-10 flex items-center justify-center rounded opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-all"
-            title="Integrations (GitHub, GitLab, Slack, Linear...)"
-            aria-label="Integrations"
-          >
-            <Share2 className="w-5 h-5 text-violet-400" />
-          </button>
-        )}
 
         {/* IDE Preferences & Settings */}
         <button
