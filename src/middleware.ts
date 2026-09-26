@@ -35,6 +35,31 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
+  // Strict Email Verification Enforcement:
+  // If user signed up via email but has not confirmed their email, block access to main tool routes
+  const isEmailUnconfirmed = Boolean(
+    user &&
+    user.app_metadata?.provider === 'email' &&
+    !user.email_confirmed_at &&
+    !(user as any).confirmed_at
+  );
+
+  const isMainToolRoute =
+    pathname === '/' ||
+    pathname.startsWith('/project') ||
+    pathname.startsWith('/settings') ||
+    pathname.startsWith('/profile');
+
+  if (isEmailUnconfirmed && isMainToolRoute) {
+    const unconfirmedUrl = request.nextUrl.clone();
+    unconfirmedUrl.pathname = '/login';
+    unconfirmedUrl.searchParams.set('unconfirmed', 'true');
+    if (user?.email) {
+      unconfirmedUrl.searchParams.set('email', user.email);
+    }
+    return NextResponse.redirect(unconfirmedUrl);
+  }
+
   // Define route protection rules
   const isPublicProject = pathname.startsWith('/project/') && pathname.endsWith('/public');
   const isPrivateProject = pathname.startsWith('/project/') && !isPublicProject;

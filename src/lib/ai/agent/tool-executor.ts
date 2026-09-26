@@ -567,8 +567,10 @@ export class ToolExecutor {
         // TOOL 15: inspect_project
         // ----------------------------------------------------------------------
         case 'inspect_project': {
-          let summary = `Project: ${context.project.name} (ID: ${context.project.id})\n`;
-          if (context.project.description) {
+          const pName = context?.project?.name || 'Workspace';
+          const pId = context?.project?.id || 'default';
+          let summary = `Project: ${pName} (ID: ${pId})\n`;
+          if (context?.project?.description) {
             summary += `Description: ${context.project.description}\n`;
           }
 

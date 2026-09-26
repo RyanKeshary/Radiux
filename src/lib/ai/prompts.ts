@@ -32,9 +32,14 @@ YOUR WORKFLOW & CORE DIRECTIVES:
    - Never output, inspect, or log secret tokens or private keys.`);
 
   // Workspace Metadata
+  const projectName = context?.project?.name || 'Workspace';
+  const projectId = context?.project?.id || 'default';
+  const userName = context?.user?.name || context?.user?.email || 'Developer';
+  const userEmail = context?.user?.email || '';
+
   parts.push(`\nCURRENT WORKSPACE CONTEXT:
-- Project Name: ${context.project.name} (ID: ${context.project.id})
-- Active User: ${context.user.name} (${context.user.email || 'authenticated user'})`);
+- Project Name: ${projectName} (ID: ${projectId})
+- Active User: ${userName} ${userEmail ? `(${userEmail})` : ''}`);
 
   if (context.projectMemory) {
     const mem = context.projectMemory;

@@ -34,23 +34,56 @@ function LoginForm() {
   const [oauthLoading, setOauthLoading] = useState<'google' | 'github' | null>(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [canResendEmail, setCanResendEmail] = useState('');
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
 
   const nextUrl = searchParams.get('next') || '/';
 
   // Read any auth errors passed from callback or middleware
   useEffect(() => {
+    const unconfirmed = searchParams.get('unconfirmed');
+    const paramEmail = searchParams.get('email');
+    if (unconfirmed === 'true') {
+      setError('Email verification required. Please click the confirmation link sent to your inbox to access Radiux.');
+      if (paramEmail) {
+        setEmail(paramEmail);
+        setCanResendEmail(paramEmail);
+      }
+    }
     const err = searchParams.get('auth_error');
     if (err) {
       setError(decodeURIComponent(err));
     }
   }, [searchParams]);
 
-  // If already authenticated, redirect to destination
+  // If already authenticated, redirect to destination (only if confirmed or OAuth)
   useEffect(() => {
     if (!authLoading && user) {
+      if (user.provider === 'email' && !user.email_confirmed_at) {
+        // Prevent unconfirmed users from accessing the main tool
+        return;
+      }
       router.replace(nextUrl);
     }
   }, [user, authLoading, router, nextUrl]);
+
+  const handleResendConfirmation = async () => {
+    if (!canResendEmail || !supabase) return;
+    setResendLoading(true);
+    try {
+      const { error: resendErr } = await supabase.auth.resend({
+        type: 'signup',
+        email: canResendEmail,
+      });
+      if (resendErr) throw resendErr;
+      setResendSuccess(true);
+    } catch (e: any) {
+      setError(e.message || 'Failed to resend confirmation email.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
 
   const clearState = () => {
     setError('');
@@ -103,6 +136,22 @@ function LoginForm() {
         // 2. Standard user sign in
         const { error: err } = await signInWithPassword(trimmedIdentifier, password);
         if (err) throw err;
+
+        // Strict Email Verification Check:
+        // Do not allow users who registered with email to enter until they confirm their email address
+        const { data: { user: currentUser } } = (await supabase?.auth.getUser()) || { data: { user: null } };
+        if (
+          currentUser &&
+          currentUser.app_metadata?.provider === 'email' &&
+          !currentUser.email_confirmed_at &&
+          !(currentUser as any).confirmed_at
+        ) {
+          await supabase?.auth.signOut();
+          setError('Email verification required. Please check your inbox and verify your email before entering Radiux.');
+          setCanResendEmail(trimmedIdentifier);
+          setLoading(false);
+          return;
+        }
 
         // Clear any stale admin token if logging into standard account
         if (typeof window !== 'undefined') {
@@ -206,8 +255,22 @@ function LoginForm() {
 
         {/* Error message */}
         {error && (
-          <div className="mb-4 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
-            {error}
+          <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex flex-col gap-2">
+            <span>{error}</span>
+            {canResendEmail && (
+              <button
+                type="button"
+                onClick={handleResendConfirmation}
+                disabled={resendLoading || resendSuccess}
+                className="text-left text-xs font-semibold text-sky-400 hover:text-sky-300 underline underline-offset-2 transition-colors disabled:opacity-50"
+              >
+                {resendLoading
+                  ? 'Sending...'
+                  : resendSuccess
+                  ? '✓ Confirmation email resent! Please check your inbox.'
+                  : 'Resend confirmation email →'}
+              </button>
+            )}
           </div>
         )}
 

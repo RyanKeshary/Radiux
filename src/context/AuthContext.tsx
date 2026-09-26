@@ -83,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         provider: normalized.provider,
         providers: normalized.providers,
         identities: sessionUser.identities || [],
+        email_confirmed_at: (sessionUser as any).email_confirmed_at || (sessionUser as any).confirmed_at || null,
         created_at: profile?.created_at || sessionUser.created_at,
         updated_at: profile?.updated_at || sessionUser.updated_at,
       };

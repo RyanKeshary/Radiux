@@ -16,7 +16,7 @@ export const AIConfig = {
 
   // Configured default model (Groq coding & tool capable)
   get defaultModel(): string {
-    return process.env.AI_MODEL || 'llama-3.3-70b-versatile';
+    return process.env.AI_MODEL || 'openai/gpt-oss-120b';
   },
 
   // Maximum iterative tool steps per agent execution
@@ -32,8 +32,8 @@ export const AIConfig = {
   },
 
   get maxOutputTokens(): number {
-    const val = parseInt(process.env.AI_MAX_OUTPUT || '8192', 10);
-    return isNaN(val) || val <= 0 ? 8192 : val;
+    const val = parseInt(process.env.AI_MAX_OUTPUT || '500', 10);
+    return isNaN(val) || val <= 0 ? 500 : Math.min(val, 600);
   },
 
   // Default security permission mode

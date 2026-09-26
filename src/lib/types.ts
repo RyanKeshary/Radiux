@@ -51,6 +51,7 @@ export interface UserProfile {
   provider?: string;
   providers?: string[];
   identities?: any[];
+  email_confirmed_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }
