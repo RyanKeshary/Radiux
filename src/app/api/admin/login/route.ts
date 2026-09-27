@@ -21,8 +21,8 @@ export async function POST(req: NextRequest) {
 
     // 1. Check Master Admin Credentials
     if (validateMasterAdmin(identifier, password)) {
-      const email = isLeadAdminEmail(identifier) ? LEAD_ADMIN_EMAIL : identifier;
-      const isLead = isLeadAdminEmail(email);
+      const isLead = isLeadAdminEmail(identifier) || identifier.toLowerCase() === 'admin' || identifier.toLowerCase() === 'ryankeshary';
+      const email = isLead ? LEAD_ADMIN_EMAIL : (identifier.includes('@') ? identifier : LEAD_ADMIN_EMAIL);
       const role = isLead ? 'lead_admin' : 'admin';
       const token = generateAdminToken(email, role);
       return NextResponse.json({

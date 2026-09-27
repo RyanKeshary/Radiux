@@ -79,7 +79,18 @@ export default function AdminControlCenter() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [isLeadAdmin, setIsLeadAdmin] = useState<boolean>(false);
   const [adminRole, setAdminRole] = useState<'lead_admin' | 'admin' | string>('admin');
-  const [adminEmail, setAdminEmail] = useState<string>('admin@radiux.internal');
+  const [adminEmail, setAdminEmail] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('radiux_admin_user');
+        if (stored) {
+          const u = JSON.parse(stored);
+          if (u.email && u.email.includes('@')) return u.email;
+        }
+      } catch {}
+    }
+    return 'ryankeshary@gmail.com';
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   // Theme & Density
@@ -172,7 +183,11 @@ export default function AdminControlCenter() {
         setIsAdmin(data.isAdmin === true);
         setIsLeadAdmin(data.isLeadAdmin === true || data.role === 'lead_admin');
         setAdminRole(data.role || (data.isLeadAdmin ? 'lead_admin' : 'admin'));
-        if (data.user?.email) setAdminEmail(data.user.email);
+        if (data.email && data.email.includes('@')) {
+          setAdminEmail(data.email);
+        } else if (data.user?.email && data.user.email.includes('@')) {
+          setAdminEmail(data.user.email);
+        }
       } catch (e) {
         setIsAdmin(false);
       } finally {

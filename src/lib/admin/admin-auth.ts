@@ -253,10 +253,11 @@ export function verifyMasterAdminToken(
     }
 
     const isLead = isLeadAdminEmail(payload.email) || payload.role === 'lead_admin';
+    const resolvedEmail = payload.email && payload.email.includes('@') && payload.email !== 'admin@radiux.internal' ? payload.email : LEAD_ADMIN_EMAIL;
     return {
       valid: true,
       role: isLead ? 'lead_admin' : 'admin',
-      email: payload.email,
+      email: resolvedEmail,
       userId: payload.userId,
     };
   } catch (e) {
@@ -290,13 +291,14 @@ export async function verifyAdminRequest(
   const masterCheck = verifyMasterAdminToken(token);
   if (masterCheck.valid && masterCheck.role) {
     const isLead = masterCheck.role === 'lead_admin' || isLeadAdminEmail(masterCheck.email);
+    const resolvedEmail = masterCheck.email && masterCheck.email.includes('@') && masterCheck.email !== 'admin@radiux.internal' ? masterCheck.email : LEAD_ADMIN_EMAIL;
     return {
       isAdmin: true,
       isLeadAdmin: isLead,
       userId: masterCheck.userId || 'admin-master-root',
       adminId: masterCheck.userId || 'admin-master-root',
       role: isLead ? 'lead_admin' : 'admin',
-      email: masterCheck.email || LEAD_ADMIN_EMAIL,
+      email: resolvedEmail,
     };
   }
 

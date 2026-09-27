@@ -8,7 +8,7 @@ function getSupabaseAdmin() {
   return createClient(url, serviceKey, { auth: { persistSession: false } });
 }
 
-import { verifyAdminRequest, suspendUserAccount, restoreUserAccount, isUserSuspended } from '@/lib/admin/admin-auth';
+import { verifyAdminRequest, suspendUserAccount, restoreUserAccount, isUserSuspended, LEAD_ADMIN_EMAIL } from '@/lib/admin/admin-auth';
 
 export async function GET(req: NextRequest) {
   const adminAuth = await verifyAdminRequest(req);
@@ -58,10 +58,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'suspend') {
-      await suspendUserAccount(userId, reason || 'Suspended by administrator', adminAuth.email || 'admin@radiux.internal');
+      await suspendUserAccount(userId, reason || 'Suspended by administrator', adminAuth.email || LEAD_ADMIN_EMAIL);
       return NextResponse.json({ success: true, message: 'User suspended successfully' });
     } else {
-      await restoreUserAccount(userId, adminAuth.email || 'admin@radiux.internal');
+      await restoreUserAccount(userId, adminAuth.email || LEAD_ADMIN_EMAIL);
       return NextResponse.json({ success: true, message: 'User account restored successfully' });
     }
   } catch (err: any) {
