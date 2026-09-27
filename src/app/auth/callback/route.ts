@@ -2,6 +2,11 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizeOAuthUser } from '@/lib/supabase/profile-utils';
+import {
+  generateAdminToken,
+  isLeadAdminEmail,
+  isUserAdminEmail,
+} from '@/lib/admin/admin-auth';
 
 /**
  * OAuth Callback Handler
@@ -122,6 +127,36 @@ export async function GET(request: NextRequest) {
       const forwardedHost = request.headers.get('x-forwarded-host');
       const isLocalEnv = process.env.NODE_ENV === 'development';
       const redirectBase = isLocalEnv ? origin : (forwardedHost ? `https://${forwardedHost}` : origin);
+
+      // Check if user is an Admin or Lead Admin (for Google & GitHub OAuth dual tab opening)
+      const userEmail = data.user.email?.toLowerCase() || '';
+      const isLead = isLeadAdminEmail(userEmail);
+      const isEmailAdmin = isUserAdminEmail(userEmail);
+
+      let isAdminUser = isLead || isEmailAdmin;
+      if (!isAdminUser) {
+        try {
+          const { data: dbProfile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', data.user.id)
+            .maybeSingle();
+          if (dbProfile?.role === 'admin' || dbProfile?.role === 'lead_admin') {
+            isAdminUser = true;
+          }
+        } catch {}
+      }
+
+      if (isAdminUser) {
+        const role = isLead ? 'lead_admin' : 'admin';
+        const adminToken = generateAdminToken(userEmail, role);
+        const redirectUrl = new URL(`${redirectBase}${next}`);
+        redirectUrl.searchParams.set('dual_admin', '1');
+        redirectUrl.searchParams.set('admin_token', adminToken);
+        redirectUrl.searchParams.set('admin_role', role);
+        return NextResponse.redirect(redirectUrl.toString());
+      }
+
       return NextResponse.redirect(`${redirectBase}${next}`);
     }
   }

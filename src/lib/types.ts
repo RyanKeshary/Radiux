@@ -31,9 +31,12 @@ export interface UserProfile {
   full_name: string;
   display_name?: string;
   avatar_url?: string;
+  banner_url?: string;
+  banner_gradient?: string;
   username?: string;
   bio?: string;
-  role?: string;
+  role?: 'lead_admin' | 'admin' | 'user' | string;
+  system_role?: 'lead_admin' | 'admin' | 'user';
   location?: string;
   education?: string;
   skills?: string[];

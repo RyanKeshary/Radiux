@@ -1,6 +1,4 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, CodingPartner } from '@/lib/types';
 import { THEMES, ThemeId } from '@/lib/themes';
 import { EditorSettings } from './EditorSettingsModal';
@@ -21,7 +19,10 @@ import {
   CheckCheck,
   Github,
   ExternalLink,
-  CheckCircle2
+  CheckCircle2,
+  Upload,
+  Image as ImageIcon,
+  Sparkles
 } from 'lucide-react';
 
 interface UserProfileModalProps {
@@ -51,6 +52,10 @@ export function UserProfileModal({
   const [username, setUsername] = useState(currentUser.username || currentUser.email.split('@')[0]);
   const [bio, setBio] = useState(currentUser.bio || '');
   const [avatarUrl, setAvatarUrl] = useState(currentUser.avatar_url || '');
+  const [bannerUrl, setBannerUrl] = useState(currentUser.banner_url || '');
+  const [bannerGradient, setBannerGradient] = useState(
+    currentUser.banner_gradient || 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)'
+  );
   const [githubUser, setGithubUser] = useState(currentUser.github_username || '');
   const [skills, setSkills] = useState<string[]>(currentUser.skills || ['TypeScript', 'React', 'Node.js']);
   const [skillInput, setSkillInput] = useState('');
@@ -60,6 +65,49 @@ export function UserProfileModal({
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [linkingProvider, setLinkingProvider] = useState<'google' | 'github' | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
+
+  const avatarFileRef = useRef<HTMLInputElement>(null);
+  const bannerFileRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        const newAvatar = reader.result;
+        setAvatarUrl(newAvatar);
+        // Instantly sync across session, AuthContext and DataService
+        updateCurrentUserProfile({ avatar_url: newAvatar }).catch(console.error);
+        DataService.updateProfile(currentUser.id, { avatar_url: newAvatar })
+          .then((up) => {
+            if (onProfileUpdated) onProfileUpdated(up);
+          })
+          .catch(console.error);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleBannerFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        const newBanner = reader.result;
+        setBannerUrl(newBanner);
+        // Instantly sync banner across session, AuthContext, and DataService
+        updateCurrentUserProfile({ banner_url: newBanner, banner_gradient: '' }).catch(console.error);
+        DataService.updateProfile(currentUser.id, { banner_url: newBanner, banner_gradient: '' })
+          .then((up) => {
+            if (onProfileUpdated) onProfileUpdated(up);
+          })
+          .catch(console.error);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Coding Partners
   const [partners, setPartners] = useState<CodingPartner[]>([]);
@@ -100,12 +148,14 @@ export function UserProfileModal({
         username,
         bio,
         avatar_url: avatarUrl,
+        banner_url: bannerUrl,
+        banner_gradient: bannerGradient,
         github_username: githubUser,
         skills,
         languages,
       };
       const updated = await DataService.updateProfile(currentUser.id, updates);
-      // Also sync to AuthContext so header/avatar update immediately
+      // Also sync to AuthContext so header/avatar/banner update immediately
       try { await updateCurrentUserProfile(updates); } catch (e) {}
       if (onProfileUpdated) onProfileUpdated(updated);
       setSavedSuccess(true);
@@ -277,22 +327,143 @@ export function UserProfileModal({
           {/* 1. Profile Tab */}
           {activeTab === 'profile' && (
             <form onSubmit={handleSaveProfile} className="space-y-4">
-              <div className="flex items-center gap-4 pb-2">
+              {/* Hidden file inputs for direct local uploads */}
+              <input
+                type="file"
+                ref={avatarFileRef}
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarFile}
+              />
+              <input
+                type="file"
+                ref={bannerFileRef}
+                accept="image/*"
+                className="hidden"
+                onChange={handleBannerFile}
+              />
+
+              {/* Avatar Section */}
+              <div className="flex items-center gap-4 pb-1">
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt="" className="w-14 h-14 rounded-full ring-2 ring-sky-500 object-cover" />
+                  <img src={avatarUrl} alt="" className="w-14 h-14 rounded-full ring-2 ring-sky-500 object-cover shrink-0" />
                 ) : (
-                  <div className="w-14 h-14 rounded-full bg-sky-600 flex items-center justify-center text-lg font-bold text-white uppercase">
+                  <div className="w-14 h-14 rounded-full bg-sky-600 flex items-center justify-center text-lg font-bold text-white uppercase shrink-0">
                     {fullName.charAt(0) || 'U'}
                   </div>
                 )}
-                <div className="flex-1">
-                  <label className="block text-[11px] mb-1" style={{ color: 'var(--ide-text-muted)' }}>Avatar Image URL</label>
+                <div className="flex-1 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px]" style={{ color: 'var(--ide-text-muted)' }}>Avatar Photo</label>
+                    <button
+                      type="button"
+                      onClick={() => avatarFileRef.current?.click()}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-sky-400 hover:text-sky-300 transition-colors"
+                    >
+                      <Upload className="w-3 h-3" />
+                      <span>Upload Image</span>
+                    </button>
+                  </div>
                   <input
                     type="url"
                     value={avatarUrl}
                     onChange={(e) => setAvatarUrl(e.target.value)}
-                    placeholder="https://example.com/avatar.jpg"
-                    className="w-full border rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                    placeholder="https://example.com/avatar.jpg or click Upload Image above"
+                    className="w-full border rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500 font-mono"
+                    style={{
+                      backgroundColor: 'var(--ide-input-bg)',
+                      borderColor: 'var(--ide-border)',
+                      color: 'var(--ide-text)',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Custom Banner Section */}
+              <div className="p-3.5 rounded-xl border space-y-2.5" style={{ borderColor: 'var(--ide-border)', backgroundColor: 'var(--ide-card-bg)' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-sky-400" />
+                    <span className="text-xs font-semibold" style={{ color: 'var(--ide-text)' }}>Custom Profile Banner</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => bannerFileRef.current?.click()}
+                    className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border hover:bg-white/10 transition-colors"
+                    style={{ borderColor: 'var(--ide-border)', color: 'var(--ide-text)' }}
+                  >
+                    <Upload className="w-3 h-3 text-sky-400" />
+                    <span>Upload Banner</span>
+                  </button>
+                </div>
+
+                {/* Banner Live Preview */}
+                <div
+                  className="h-16 w-full rounded-lg overflow-hidden relative flex items-center px-3 shadow-inner"
+                  style={{
+                    background: bannerUrl ? `url(${bannerUrl}) center/cover no-repeat` : bannerGradient,
+                  }}
+                >
+                  <div className="absolute inset-0 bg-black/25 backdrop-blur-[0.5px]" />
+                  <div className="relative flex items-center gap-2 text-white">
+                    <div className="w-7 h-7 rounded-full overflow-hidden ring-1 ring-white/50 bg-black/40 flex items-center justify-center text-xs font-bold">
+                      {avatarUrl ? <img src={avatarUrl} alt="" className="w-full h-full object-cover" /> : fullName.charAt(0) || 'U'}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold leading-tight drop-shadow">{fullName || 'Your Name'}</div>
+                      <div className="text-[10px] opacity-80 font-mono drop-shadow">@{username || 'handle'}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preset Gradients */}
+                <div>
+                  <label className="block text-[10.5px] mb-1.5 opacity-75" style={{ color: 'var(--ide-text-muted)' }}>
+                    Or select an ambient gradient preset:
+                  </label>
+                  <div className="grid grid-cols-6 gap-1.5">
+                    {[
+                      { name: 'Sky Indigo', val: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)' },
+                      { name: 'Purple Neon', val: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)' },
+                      { name: 'Cyber Emerald', val: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)' },
+                      { name: 'Sunset Amber', val: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)' },
+                      { name: 'Dark Nebula', val: 'linear-gradient(135deg, #18181b 0%, #312e81 100%)' },
+                      { name: 'Onyx Slate', val: 'linear-gradient(135deg, #09090b 0%, #27272a 100%)' },
+                    ].map((g, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setBannerUrl('');
+                          setBannerGradient(g.val);
+                          updateCurrentUserProfile({ banner_url: '', banner_gradient: g.val }).catch(console.error);
+                          DataService.updateProfile(currentUser.id, { banner_url: '', banner_gradient: g.val })
+                            .then((up) => {
+                              if (onProfileUpdated) onProfileUpdated(up);
+                            })
+                            .catch(console.error);
+                        }}
+                        className={`h-6 rounded border transition-all ${
+                          !bannerUrl && bannerGradient === g.val ? 'ring-2 ring-sky-400 scale-105' : 'hover:opacity-90'
+                        }`}
+                        style={{
+                          background: g.val,
+                          borderColor: !bannerUrl && bannerGradient === g.val ? '#38bdf8' : 'rgba(255,255,255,0.1)',
+                        }}
+                        title={g.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Optional Custom Image URL input */}
+                <div>
+                  <input
+                    type="url"
+                    value={bannerUrl}
+                    onChange={(e) => setBannerUrl(e.target.value)}
+                    placeholder="Or enter banner image URL (https://...)"
+                    className="w-full border rounded px-2.5 py-1 text-xs focus:outline-none focus:border-sky-500 font-mono"
                     style={{
                       backgroundColor: 'var(--ide-input-bg)',
                       borderColor: 'var(--ide-border)',

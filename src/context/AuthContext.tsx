@@ -66,8 +66,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         avatar_url: avatarUrl,
         username: username,
         github_username: githubUser,
-        bio: profile?.bio !== undefined ? profile.bio : (mockProfile?.bio || ''),
-        role: profile?.role || mockProfile?.role || 'Developer',
+        role: (sessionUser.email?.toLowerCase() === 'ryankeshary@gmail.com')
+          ? 'lead_admin'
+          : (profile?.role === 'lead_admin' ? 'lead_admin' : (profile?.role || mockProfile?.role || 'Developer')),
+        banner_url: profile?.banner_url || mockProfile?.banner_url || undefined,
+        banner_gradient: profile?.banner_gradient || mockProfile?.banner_gradient || undefined,
         location: profile?.location || mockProfile?.location || '',
         education: profile?.education || mockProfile?.education || '',
         skills: profile?.skills || mockProfile?.skills || ['TypeScript', 'React', 'Node.js'],
@@ -317,6 +320,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             full_name: merged.full_name,
             display_name: merged.display_name || merged.full_name,
             avatar_url: merged.avatar_url,
+            banner_url: merged.banner_url,
+            banner_gradient: merged.banner_gradient,
             username: merged.username,
             bio: merged.bio,
             github_username: merged.github_username,
@@ -344,7 +349,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'skills', 'languages', 'technologies', 'website',
           'github_username', 'linkedin_url', 'other_links',
           'collaboration_interests', 'readme_markdown',
-          'pinned_project_ids', 'privacy', 'preferences', 'avatar_url', 'full_name', 'display_name'
+          'pinned_project_ids', 'privacy', 'preferences',
+          'avatar_url', 'banner_url', 'banner_gradient',
+          'full_name', 'display_name'
         ];
         metaFields.forEach((key) => {
           if ((updates as any)[key] !== undefined) {

@@ -17,6 +17,7 @@ import {
   Share2,
   GitPullRequest,
   Sparkles,
+  ShieldAlert,
 } from 'lucide-react';
 
 
@@ -33,6 +34,7 @@ interface ActivityBarProps {
   onOpenShortcuts: () => void;
   onOpenProfile: () => void;
   onOpenReviews?: () => void;
+  onOpenReportIssue?: () => void;
   onToggleAI?: () => void;
   isAIOpen?: boolean;
   userAvatar?: string;
@@ -51,6 +53,7 @@ export function ActivityBar({
   onOpenShortcuts,
   onOpenProfile,
   onOpenReviews,
+  onOpenReportIssue,
   onToggleAI,
   isAIOpen,
   userAvatar,
@@ -209,6 +212,18 @@ export function ActivityBar({
           </button>
         )}
 
+
+        {/* Report Issue / Moderation Flag */}
+        {onOpenReportIssue && (
+          <button
+            onClick={onOpenReportIssue}
+            className="w-10 h-10 flex items-center justify-center rounded opacity-60 hover:opacity-100 hover:bg-rose-500/15 text-rose-400 hover:text-rose-300 transition-all"
+            title="Report Issue or Complaint to Admin"
+            aria-label="Report Issue"
+          >
+            <ShieldAlert className="w-5 h-5" />
+          </button>
+        )}
 
         {/* IDE Preferences & Settings */}
         <button

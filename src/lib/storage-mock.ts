@@ -31,11 +31,53 @@ function setStored<T>(key: string, val: T) {
 }
 
 export function initStorageMock() {
-  // Only maintain real user created data - no dummy project or demo user seeding
+  if (typeof window === 'undefined') return;
+  try {
+    // 1. Purge legacy dummy users from local storage
+    const rawUsers = localStorage.getItem(STORAGE_KEY_USERS);
+    if (rawUsers) {
+      const users: UserProfile[] = JSON.parse(rawUsers);
+      const isDummy = (u: any) =>
+        !u ||
+        !u.id ||
+        u.id.startsWith('user-alice') ||
+        u.id.startsWith('user-bob') ||
+        u.id.startsWith('user-charlie') ||
+        u.id.startsWith('demo-') ||
+        u.username === 'kesharyryan' ||
+        u.email === 'kesharyryan@gmail.com' ||
+        u.email === 'radiux_verifier_559224@gmail.com' ||
+        u.full_name?.toLowerCase().includes('dummy') ||
+        u.full_name?.toLowerCase() === 'not ryan keshary';
+
+      const cleaned = users.filter((u) => !isDummy(u));
+      localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(cleaned));
+    }
+
+    // 2. Clean dummy partners
+    const rawPartners = localStorage.getItem('codecollab_coding_partners');
+    if (rawPartners) {
+      const partners: any[] = JSON.parse(rawPartners);
+      const cleanedPartners = partners.filter(
+        (p) =>
+          !p.requester_id?.startsWith('user-') &&
+          !p.receiver_id?.startsWith('user-') &&
+          !p.requester_id?.startsWith('demo-') &&
+          !p.receiver_id?.startsWith('demo-')
+      );
+      localStorage.setItem('codecollab_coding_partners', JSON.stringify(cleanedPartners));
+    }
+  } catch (e) {
+    // ignore
+  }
 }
 
 
 export const StorageMock = {
+  getAllProjects(): Project[] {
+    return getStored<Project[]>(STORAGE_KEY_PROJECTS, []);
+  },
+
   getProjects(userId: string): Project[] {
     const projects = getStored<Project[]>(STORAGE_KEY_PROJECTS, []);
     const members = getStored<ProjectMember[]>(STORAGE_KEY_MEMBERS, []);
@@ -320,7 +362,20 @@ export const StorageMock = {
   },
 
   getAllProfiles(): UserProfile[] {
-    return getStored<UserProfile[]>(STORAGE_KEY_USERS, []);
+    const list = getStored<UserProfile[]>(STORAGE_KEY_USERS, []);
+    return list.filter(
+      (u) =>
+        u &&
+        u.id &&
+        !u.id.startsWith('user-alice') &&
+        !u.id.startsWith('user-bob') &&
+        !u.id.startsWith('user-charlie') &&
+        !u.id.startsWith('demo-') &&
+        u.username !== 'kesharyryan' &&
+        u.email !== 'kesharyryan@gmail.com' &&
+        u.email !== 'radiux_verifier_559224@gmail.com' &&
+        u.full_name?.toLowerCase() !== 'not ryan keshary'
+    );
   },
 
   getDirectMessages(user1Id: string, user2Id: string): DirectMessage[] {

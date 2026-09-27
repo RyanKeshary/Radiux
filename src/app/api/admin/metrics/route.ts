@@ -9,6 +9,7 @@ function getSupabaseAdmin() {
 }
 
 import { verifyAdminRequest } from '@/lib/admin/admin-auth';
+import { getFeedbackStats } from '@/lib/ai/feedback-store';
 
 export async function GET(req: NextRequest) {
   const adminAuth = await verifyAdminRequest(req);
@@ -58,6 +59,9 @@ export async function GET(req: NextRequest) {
     const aiRequestsCount = usageData?.length || 0;
     const avgLatencyMs = aiRequestsCount > 0 ? Math.round(totalLatency / aiRequestsCount) : 0;
 
+    // 4. AI Feedback metrics (likes, dislikes, satisfaction rate, reverts)
+    const feedbackStats = await getFeedbackStats();
+
     return NextResponse.json({
       metrics: {
         totalUsers: totalUsers || 0,
@@ -70,6 +74,7 @@ export async function GET(req: NextRequest) {
         totalToolCalls,
         errorCount,
         avgLatencyMs,
+        feedback: feedbackStats,
       },
     });
   } catch (err: any) {

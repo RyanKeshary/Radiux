@@ -48,7 +48,14 @@ export class ToolExecutor {
 
     const userRole = context.user?.role;
     const isVisitor = userRole === 'visitor';
-    const writeTools = ['write_file', 'edit_file', 'delete_file', 'run_terminal'];
+    const writeTools = [
+      'write_file',
+      'create_file',
+      'edit_file',
+      'apply_editor_edit',
+      'delete_file',
+      'run_terminal',
+    ];
 
     if (isVisitor && writeTools.includes(toolName)) {
       return {
@@ -57,6 +64,32 @@ export class ToolExecutor {
         output: `Access Denied (403): Workspace role is "visitor". Visitors only have read-only privileges. File modifications and terminal execution are strictly forbidden.`,
         error: 'Forbidden (Visitor)',
       };
+    }
+
+    // Ensure activeFile and targetFiles are synchronized into workspace disk if provided
+    try {
+      if (context.activeFile?.path && context.activeFile.content !== undefined) {
+        const dest = this.getWorkspacePath(projectId, context.activeFile.path);
+        const dir = path.dirname(dest);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        if (!fs.existsSync(dest)) {
+          fs.writeFileSync(dest, context.activeFile.content, 'utf8');
+        }
+      }
+      if (context.targetFiles && Array.isArray(context.targetFiles)) {
+        for (const tf of context.targetFiles) {
+          if (tf.path && tf.content !== undefined) {
+            const dest = this.getWorkspacePath(projectId, tf.path);
+            const dir = path.dirname(dest);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            if (!fs.existsSync(dest)) {
+              fs.writeFileSync(dest, tf.content, 'utf8');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Non-fatal sync warning
     }
 
     try {
@@ -116,8 +149,44 @@ export class ToolExecutor {
         // TOOL 2: read_file
         // ----------------------------------------------------------------------
         case 'read_file': {
+          let rawContent: string | null = null;
           const filePath = this.getWorkspacePath(projectId, args.path);
-          if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+
+          if (fs.existsSync(filePath) && !fs.statSync(filePath).isDirectory()) {
+            const stat = fs.statSync(filePath);
+            if (stat.size > AIConfig.maxFileSizeBytes) {
+              return {
+                toolCallId: '',
+                name: toolName,
+                output: `File is too large (${(stat.size / 1024).toFixed(1)} KB). Exceeds maximum limit of 1MB.`,
+                error: 'File too large',
+              };
+            }
+            rawContent = fs.readFileSync(filePath, 'utf8');
+          } else {
+            // Check context.activeFile or targetFiles fallback
+            const normalizedReq = (args.path || '').replace(/^[\\\/]+/, '');
+            if (
+              context.activeFile &&
+              (context.activeFile.path === normalizedReq ||
+                context.activeFile.path.endsWith(normalizedReq) ||
+                normalizedReq.endsWith(context.activeFile.path))
+            ) {
+              rawContent = context.activeFile.content ?? '';
+            } else if (context.targetFiles) {
+              const matched = context.targetFiles.find(
+                (t) =>
+                  t.path === normalizedReq ||
+                  t.path.endsWith(normalizedReq) ||
+                  normalizedReq.endsWith(t.path)
+              );
+              if (matched && matched.content !== undefined) {
+                rawContent = matched.content;
+              }
+            }
+          }
+
+          if (rawContent === null) {
             return {
               toolCallId: '',
               name: toolName,
@@ -126,17 +195,6 @@ export class ToolExecutor {
             };
           }
 
-          const stat = fs.statSync(filePath);
-          if (stat.size > AIConfig.maxFileSizeBytes) {
-            return {
-              toolCallId: '',
-              name: toolName,
-              output: `File is too large (${(stat.size / 1024).toFixed(1)} KB). Exceeds maximum limit of 1MB.`,
-              error: 'File too large',
-            };
-          }
-
-          const rawContent = fs.readFileSync(filePath, 'utf8');
           const lines = rawContent.split('\n');
 
           const start = args.startLine ? Math.max(1, args.startLine) : 1;
@@ -316,6 +374,48 @@ export class ToolExecutor {
         }
 
         // ----------------------------------------------------------------------
+        // TOOL 6B: get_open_tabs
+        // ----------------------------------------------------------------------
+        case 'get_open_tabs': {
+          const openTabs = context.openTabs || [];
+          return {
+            toolCallId: '',
+            name: toolName,
+            output: JSON.stringify(
+              {
+                openTabs,
+                activeFile: context.activeFile?.path || null,
+                count: openTabs.length,
+              },
+              null,
+              2
+            ),
+          };
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 6C: get_editor_state
+        // ----------------------------------------------------------------------
+        case 'get_editor_state': {
+          return {
+            toolCallId: '',
+            name: toolName,
+            output: JSON.stringify(
+              {
+                activeFile: context.activeFile?.path || null,
+                language: context.activeFile?.language || 'plaintext',
+                cursor: context.editorState?.cursor || null,
+                selection: context.activeFile?.selection || null,
+                openTabs: context.openTabs || [],
+                dirtyFiles: context.editorState?.dirtyFiles || [],
+              },
+              null,
+              2
+            ),
+          };
+        }
+
+        // ----------------------------------------------------------------------
         // TOOL 7: write_file
         // ----------------------------------------------------------------------
         case 'write_file': {
@@ -354,12 +454,40 @@ export class ToolExecutor {
         case 'edit_file': {
           const filePath = this.getWorkspacePath(projectId, args.path);
           if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-            return {
-              toolCallId: '',
-              name: toolName,
-              output: `File does not exist to edit: "${args.path}". Use write_file to create new files.`,
-              error: 'File not found',
-            };
+            // Check if file content exists in context.activeFile or targetFiles to initialize it
+            const normalizedReq = (args.path || '').replace(/^[\\\/]+/, '');
+            let fallbackContent: string | null = null;
+            if (
+              context.activeFile &&
+              (context.activeFile.path === normalizedReq ||
+                context.activeFile.path.endsWith(normalizedReq) ||
+                normalizedReq.endsWith(context.activeFile.path))
+            ) {
+              fallbackContent = context.activeFile.content ?? '';
+            } else if (context.targetFiles) {
+              const matched = context.targetFiles.find(
+                (t) =>
+                  t.path === normalizedReq ||
+                  t.path.endsWith(normalizedReq) ||
+                  normalizedReq.endsWith(t.path)
+              );
+              if (matched && matched.content !== undefined) {
+                fallbackContent = matched.content;
+              }
+            }
+
+            if (fallbackContent !== null) {
+              const dir = path.dirname(filePath);
+              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+              fs.writeFileSync(filePath, fallbackContent, 'utf8');
+            } else {
+              return {
+                toolCallId: '',
+                name: toolName,
+                output: `File does not exist to edit: "${args.path}". Use write_file to create new files.`,
+                error: 'File not found',
+              };
+            }
           }
 
           const originalContent = fs.readFileSync(filePath, 'utf8');
@@ -400,6 +528,130 @@ export class ToolExecutor {
             toolCallId: '',
             name: toolName,
             output: `Prepared ${rawEdits.length} structured edit(s) for "${args.path}". Diff preview generated for user review.`,
+            diffProposal: proposal,
+          };
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 8B: create_file
+        // ----------------------------------------------------------------------
+        case 'create_file': {
+          const filePath = this.getWorkspacePath(projectId, args.path);
+          if (fs.existsSync(filePath)) {
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: `File already exists: "${args.path}". Use "edit_file" to modify or "write_file" to overwrite.`,
+              error: 'File already exists',
+            };
+          }
+
+          const dir = path.dirname(filePath);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+          const content = args.content || '';
+          fs.writeFileSync(filePath, content, 'utf8');
+
+          const proposal: DiffProposal = {
+            id: `diff_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+            path: args.path,
+            originalContent: '',
+            proposedContent: content,
+            edits: [],
+            status: 'pending',
+            summary: `Created new file ${args.path} (${content.split('\n').length} lines)`,
+          };
+
+          if (onDiffProposal) {
+            onDiffProposal(proposal);
+          }
+
+          return {
+            toolCallId: '',
+            name: toolName,
+            output: `Successfully created "${args.path}". Diff proposal generated for user review.`,
+            diffProposal: proposal,
+          };
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 8C: apply_editor_edit
+        // ----------------------------------------------------------------------
+        case 'apply_editor_edit': {
+          const filePath = this.getWorkspacePath(projectId, args.path);
+          if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+            const normalizedReq = (args.path || '').replace(/^[\\\/]+/, '');
+            let fallbackContent: string | null = null;
+            if (
+              context.activeFile &&
+              (context.activeFile.path === normalizedReq ||
+                context.activeFile.path.endsWith(normalizedReq) ||
+                normalizedReq.endsWith(context.activeFile.path))
+            ) {
+              fallbackContent = context.activeFile.content ?? '';
+            } else if (context.targetFiles) {
+              const matched = context.targetFiles.find(
+                (t) =>
+                  t.path === normalizedReq ||
+                  t.path.endsWith(normalizedReq) ||
+                  normalizedReq.endsWith(t.path)
+              );
+              if (matched && matched.content !== undefined) {
+                fallbackContent = matched.content;
+              }
+            }
+
+            if (fallbackContent !== null) {
+              const dir = path.dirname(filePath);
+              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+              fs.writeFileSync(filePath, fallbackContent, 'utf8');
+            } else {
+              return {
+                toolCallId: '',
+                name: toolName,
+                output: `File does not exist to edit: "${args.path}". Use create_file to create new files.`,
+                error: 'File not found',
+              };
+            }
+          }
+
+          const originalContent = fs.readFileSync(filePath, 'utf8');
+          const lines = originalContent.split('\n');
+
+          const rawEdits: StructuredEdit[] = Array.isArray(args.edits) ? args.edits : [];
+          if (rawEdits.length === 0) {
+            return { toolCallId: '', name: toolName, output: 'No edits provided.' };
+          }
+
+          const sortedEdits = [...rawEdits].sort((a, b) => b.startLine - a.startLine);
+          const newLines = [...lines];
+
+          for (const edit of sortedEdits) {
+            const startIdx = Math.max(0, edit.startLine - 1);
+            const endIdx = Math.min(newLines.length, edit.endLine);
+            const replacementLines = (edit.replacement || '').split('\n');
+            newLines.splice(startIdx, endIdx - startIdx, ...replacementLines);
+          }
+
+          const proposedContent = newLines.join('\n');
+          const proposal: DiffProposal = {
+            id: `diff_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+            path: args.path,
+            originalContent,
+            proposedContent,
+            edits: rawEdits,
+            status: 'pending',
+            summary: `Applied editor edits on ${args.path} (${rawEdits.length} edit block${rawEdits.length > 1 ? 's' : ''})`,
+          };
+
+          if (onDiffProposal) {
+            onDiffProposal(proposal);
+          }
+
+          return {
+            toolCallId: '',
+            name: toolName,
+            output: `Applied ${rawEdits.length} editor edit(s) for "${args.path}". Diff preview generated for review.`,
             diffProposal: proposal,
           };
         }
@@ -535,13 +787,35 @@ export class ToolExecutor {
         }
 
         // ----------------------------------------------------------------------
-        // TOOL 14: diagnostics
+        // TOOL 13B: git_branch
         // ----------------------------------------------------------------------
-        case 'diagnostics': {
+        case 'git_branch': {
+          try {
+            const { stdout } = await execAsync('git branch -a', { cwd: wsDir });
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: stdout.trim() || 'Active branch: ' + (context.git?.branch || 'main'),
+            };
+          } catch (e: any) {
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: 'Failed to retrieve git branches: ' + e.message,
+            };
+          }
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 14: diagnostics / get_diagnostics
+        // ----------------------------------------------------------------------
+        case 'diagnostics':
+        case 'get_diagnostics': {
           const type = args.type || 'typescript';
           if (type === 'typescript') {
             try {
-              const { stdout } = await execAsync('npx tsc --noEmit', { cwd: wsDir, timeout: 20000 });
+              const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+              const { stdout } = await execAsync(`${npxCmd} tsc --noEmit`, { cwd: wsDir, timeout: 25000 });
               return {
                 toolCallId: '',
                 name: toolName,
@@ -601,13 +875,18 @@ export class ToolExecutor {
         // TOOL 16: inspect_package_json
         // ----------------------------------------------------------------------
         case 'inspect_package_json': {
-          const pkgPath = this.getWorkspacePath(projectId, 'package.json');
+          let pkgPath = this.getWorkspacePath(projectId, 'package.json');
           if (!fs.existsSync(pkgPath)) {
-            return {
-              toolCallId: '',
-              name: toolName,
-              output: 'No package.json file found in workspace root.',
-            };
+            const rootPkg = path.resolve(process.cwd(), 'package.json');
+            if (fs.existsSync(rootPkg)) {
+              pkgPath = rootPkg;
+            } else {
+              return {
+                toolCallId: '',
+                name: toolName,
+                output: 'No package.json file found in workspace root.',
+              };
+            }
           }
 
           try {
@@ -660,6 +939,163 @@ export class ToolExecutor {
             name: toolName,
             output: JSON.stringify(safeEnv, null, 2),
           };
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 18: inspect_project_context
+        // ----------------------------------------------------------------------
+        case 'inspect_project_context': {
+          if (!context.projectMemory) {
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: JSON.stringify(
+                {
+                  framework: 'Next.js 14 / React 18',
+                  language: 'TypeScript',
+                  architecture: 'Collaborative browser-based IDE with Monaco, Yjs, Supabase, and real-time agents.',
+                  conventions: 'Modular services, strict typing, dark IDE aesthetics, zero client secrets.',
+                  notes: 'No project-specific memory configured yet.',
+                },
+                null,
+                2
+              ),
+            };
+          }
+
+          return {
+            toolCallId: '',
+            name: toolName,
+            output: JSON.stringify(context.projectMemory, null, 2),
+          };
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 19: inspect_collaboration_state
+        // ----------------------------------------------------------------------
+        case 'inspect_collaboration_state': {
+          const collab = context.collaboration || { peerCount: 1, peers: [] };
+          return {
+            toolCallId: '',
+            name: toolName,
+            output: JSON.stringify(
+              {
+                peerCount: collab.peerCount,
+                peers: collab.peers,
+                openTabs: context.openTabs || [],
+                activeEditorFile: context.activeFile?.path || null,
+                syncStatus: 'connected',
+              },
+              null,
+              2
+            ),
+          };
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 20: inspect_project_members
+        // ----------------------------------------------------------------------
+        case 'inspect_project_members': {
+          const members = context.members || [
+            {
+              userId: context.user?.id || 'current-user',
+              email: context.user?.email || 'user@radiux.dev',
+              role: context.user?.role || 'editor',
+            },
+          ];
+          return {
+            toolCallId: '',
+            name: toolName,
+            output: JSON.stringify(
+              {
+                members,
+                currentUserRole: context.user?.role || 'editor',
+                totalMembers: members.length,
+              },
+              null,
+              2
+            ),
+          };
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 21: run_typecheck
+        // ----------------------------------------------------------------------
+        case 'run_typecheck': {
+          const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+          const startTime = Date.now();
+          try {
+            const { stdout } = await execAsync(`${npxCmd} tsc --noEmit`, { cwd: wsDir, timeout: 35000 });
+            const duration = Date.now() - startTime;
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: `Typecheck passed: 0 compiler errors (${duration}ms).\n${stdout ? stdout.trim() : ''}`.trim(),
+            };
+          } catch (err: any) {
+            const duration = Date.now() - startTime;
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: `TypeScript compiler detected errors (${duration}ms):\n${err.stdout || err.stderr || err.message}`,
+              error: 'TypeScript typecheck failed',
+            };
+          }
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 22: run_build
+        // ----------------------------------------------------------------------
+        case 'run_build': {
+          const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+          const startTime = Date.now();
+          try {
+            const { stdout } = await execAsync(`${npmCmd} run build`, {
+              cwd: wsDir,
+              timeout: 120000,
+              maxBuffer: 1024 * 1024 * 4,
+            });
+            const duration = Date.now() - startTime;
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: `Build succeeded (${duration}ms):\n${stdout.slice(-1000)}`,
+            };
+          } catch (err: any) {
+            const duration = Date.now() - startTime;
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: `Build failed (${duration}ms):\n${err.stdout ? err.stdout.slice(-1500) : ''}\n${err.stderr ? err.stderr.slice(-1000) : ''}\n${err.message}`,
+              error: 'Build failed',
+            };
+          }
+        }
+
+        // ----------------------------------------------------------------------
+        // TOOL 23: run_tests
+        // ----------------------------------------------------------------------
+        case 'run_tests': {
+          const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+          const cmd = (args.testCommand || `${npmCmd} test`).trim();
+          const startTime = Date.now();
+          try {
+            const { stdout } = await execAsync(cmd, { cwd: wsDir, timeout: 60000 });
+            const duration = Date.now() - startTime;
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: `Tests passed (${duration}ms):\n${stdout.slice(-1500)}`,
+            };
+          } catch (err: any) {
+            const duration = Date.now() - startTime;
+            return {
+              toolCallId: '',
+              name: toolName,
+              output: `Tests failed (${duration}ms):\n${err.stdout ? err.stdout.slice(-1500) : ''}\n${err.stderr ? err.stderr.slice(-1000) : ''}\n${err.message}`,
+              error: 'Test suite failed',
+            };
+          }
         }
 
         default:

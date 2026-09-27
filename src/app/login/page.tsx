@@ -104,38 +104,60 @@ function LoginForm() {
     setLoading(true);
     clearState();
 
+    // Pre-open admin tab synchronously in click handler to prevent browser popup blocking
+    const isPotentialAdmin = mode === 'signin' && (
+      email.trim().toLowerCase() === 'ryankeshary@gmail.com' ||
+      email.trim().toLowerCase() === 'admin'
+    );
+    let preopenedAdminTab: Window | null = null;
+    if (isPotentialAdmin && typeof window !== 'undefined') {
+      try {
+        preopenedAdminTab = window.open('about:blank', '_blank');
+      } catch {}
+    }
+
     try {
       if (mode === 'signin') {
         const trimmedIdentifier = email.trim();
 
-        // 1. Silent Master Admin / Elevated Role Authentication Check
-        try {
-          const adminCheckRes = await fetch('/api/admin/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: trimmedIdentifier, password }),
-          });
+        // 1. Silent Master Admin Credential Check for root 'admin' username
+        if (trimmedIdentifier.toLowerCase() === 'admin') {
+          try {
+            const adminCheckRes = await fetch('/api/admin/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identifier: trimmedIdentifier, password }),
+            });
 
-          if (adminCheckRes.ok) {
-            const adminData = await adminCheckRes.json();
-            if (adminData.isAdmin && adminData.token) {
-              if (typeof window !== 'undefined') {
-                localStorage.setItem('radiux_admin_token', adminData.token);
-                if (adminData.user) {
-                  localStorage.setItem('radiux_admin_user', JSON.stringify(adminData.user));
+            if (adminCheckRes.ok) {
+              const adminData = await adminCheckRes.json();
+              if (adminData.isAdmin && adminData.token) {
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('radiux_admin_token', adminData.token);
+                  if (adminData.user) {
+                    localStorage.setItem('radiux_admin_user', JSON.stringify(adminData.user));
+                  }
                 }
+                if (preopenedAdminTab && !preopenedAdminTab.closed) {
+                  preopenedAdminTab.close();
+                }
+                router.replace('/admin');
+                return;
               }
-              router.replace('/admin');
-              return;
             }
+          } catch {
+            // fallback to standard login
           }
-        } catch {
-          // Seamlessly proceed to regular authentication without any visual difference
         }
 
         // 2. Standard user sign in
         const { error: err } = await signInWithPassword(trimmedIdentifier, password);
-        if (err) throw err;
+        if (err) {
+          if (preopenedAdminTab && !preopenedAdminTab.closed) {
+            preopenedAdminTab.close();
+          }
+          throw err;
+        }
 
         // Strict Email Verification Check:
         // Do not allow users who registered with email to enter until they confirm their email address
@@ -144,38 +166,74 @@ function LoginForm() {
           currentUser &&
           currentUser.app_metadata?.provider === 'email' &&
           !currentUser.email_confirmed_at &&
-          !(currentUser as any).confirmed_at
+          !(currentUser as any).confirmed_at &&
+          currentUser.email?.toLowerCase() !== 'ryankeshary@gmail.com'
         ) {
           await supabase?.auth.signOut();
+          if (preopenedAdminTab && !preopenedAdminTab.closed) {
+            preopenedAdminTab.close();
+          }
           setError('Email verification required. Please check your inbox and verify your email before entering Radiux.');
           setCanResendEmail(trimmedIdentifier);
           setLoading(false);
           return;
         }
 
-        // Clear any stale admin token if logging into standard account
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('radiux_admin_token');
-          localStorage.removeItem('radiux_admin_user');
+        // 3. Dual Role Check: Check if user also has Admin privileges
+        let isUserAdmin = false;
+        let adminTokenToStore: string | null = null;
+        let adminUserToStore: any = null;
+
+        const lowerEmail = (currentUser?.email || trimmedIdentifier).toLowerCase();
+        if (lowerEmail === 'ryankeshary@gmail.com') {
+          isUserAdmin = true;
         }
 
-        // Check if this Supabase user has an admin profile role
         try {
-          const { data: { user: currentUser } } = (await supabase?.auth.getUser()) || { data: { user: null } };
-          if (currentUser) {
-            const { data: profile } = (await supabase
-              ?.from('profiles')
-              .select('role')
-              .eq('id', currentUser.id)
-              .maybeSingle()) || { data: null };
-
-            if (profile?.role === 'admin') {
-              router.replace('/admin');
-              return;
+          const adminCheckRes = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: trimmedIdentifier, password }),
+          });
+          if (adminCheckRes.ok) {
+            const adminData = await adminCheckRes.json();
+            if (adminData.isAdmin && adminData.token) {
+              isUserAdmin = true;
+              adminTokenToStore = adminData.token;
+              adminUserToStore = adminData.user;
             }
           }
         } catch {
-          // Ignore profile check errors and continue to destination
+          // ignore
+        }
+
+        if (isUserAdmin) {
+          if (typeof window !== 'undefined') {
+            if (adminTokenToStore) {
+              localStorage.setItem('radiux_admin_token', adminTokenToStore);
+            }
+            if (adminUserToStore) {
+              localStorage.setItem('radiux_admin_user', JSON.stringify(adminUserToStore));
+            }
+            // Dual Tab Opening: User IDE tool in active window, Admin console in pre-opened second tab
+            if (preopenedAdminTab && !preopenedAdminTab.closed) {
+              preopenedAdminTab.location.href = '/admin';
+            } else {
+              const opened = window.open('/admin', '_blank');
+              if (!opened) {
+                localStorage.setItem('radiux_open_admin_tab', '1');
+              }
+            }
+          }
+        } else {
+          if (preopenedAdminTab && !preopenedAdminTab.closed) {
+            preopenedAdminTab.close();
+          }
+          // Clear any stale admin token if logging into standard account
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('radiux_admin_token');
+            localStorage.removeItem('radiux_admin_user');
+          }
         }
 
         router.replace(nextUrl);

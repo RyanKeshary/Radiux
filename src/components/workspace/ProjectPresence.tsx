@@ -12,6 +12,7 @@ import { useClickOutside } from '@/hooks/useClickOutside';
 interface ExtendedPresenceUser extends PresenceUser {
   fileName?: string;
   email?: string;
+  avatar_url?: string;
   inVoice?: boolean;
 }
 
@@ -62,6 +63,7 @@ export function ProjectPresence({
       id: user?.id || 'guest',
       name: user?.full_name || 'Anonymous Peer',
       email: user?.email || '',
+      avatar_url: user?.avatar_url || '',
       color: userColor,
       currentFileId: activeFileId,
       fileName: activeFileName || undefined,
@@ -83,6 +85,7 @@ export function ProjectPresence({
             id: state.user.id,
             name: state.user.name,
             email: state.user.email,
+            avatar_url: state.user.avatar_url,
             color: state.user.color,
             currentFileId: state.user.currentFileId,
             fileName: state.user.fileName,
@@ -111,7 +114,7 @@ export function ProjectPresence({
     };
   }, [projectId, user?.id]);
 
-  // 2. Update local presence state (active file, name) without tearing down websocket connection!
+  // 2. Update local presence state (active file, name, avatar) without tearing down websocket connection!
   useEffect(() => {
     if (!providerRef.current) return;
     const awareness = providerRef.current.awareness;
@@ -121,6 +124,7 @@ export function ProjectPresence({
       id: user?.id || 'guest',
       name: user?.full_name || 'Anonymous Peer',
       email: user?.email || '',
+      avatar_url: user?.avatar_url || '',
       color: userColor,
       currentFileId: activeFileId,
       fileName: activeFileName || undefined,
@@ -128,7 +132,7 @@ export function ProjectPresence({
     };
 
     awareness.setLocalStateField('user', currentUserState);
-  }, [activeFileId, activeFileName, user?.full_name, user?.email, isInVoice]);
+  }, [activeFileId, activeFileName, user?.full_name, user?.email, user?.avatar_url, isInVoice]);
 
   return (
     <div ref={drawerRef} className="relative">
@@ -153,16 +157,31 @@ export function ProjectPresence({
 
         {/* Avatars */}
         <div className="flex items-center -space-x-1 overflow-hidden">
-          {onlineUsers.slice(0, 4).map((u, idx) => (
-            <div
-              key={u.id + idx}
-              style={{ backgroundColor: u.color, borderColor: 'var(--ide-border)' }}
-              className="w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-bold text-black shadow-sm"
-              title={`${u.name}${u.fileName ? ` (Editing: ${u.fileName})` : ''}`}
-            >
-              {u.name.charAt(0).toUpperCase()}
-            </div>
-          ))}
+          {onlineUsers.slice(0, 4).map((u, idx) => {
+            const isMe = u.id === user?.id;
+            const avatarSrc = (isMe ? user?.avatar_url : u.avatar_url) || u.avatar_url;
+            return (
+              <div
+                key={u.id + idx}
+                style={{
+                  backgroundColor: avatarSrc ? 'transparent' : u.color,
+                  borderColor: 'var(--ide-border)',
+                }}
+                className="w-5 h-5 rounded-full border overflow-hidden flex items-center justify-center text-[9px] font-bold text-black shadow-sm shrink-0"
+                title={`${u.name}${u.fileName ? ` (Editing: ${u.fileName})` : ''}`}
+              >
+                {avatarSrc ? (
+                  <img
+                    src={avatarSrc}
+                    alt={u.name}
+                    className="w-full h-full object-cover rounded-full"
+                  />
+                ) : (
+                  <span>{u.name.charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+            );
+          })}
         </div>
         <ChevronDown className="w-3 h-3" style={{ color: 'var(--ide-text-muted)' }} />
       </button>
@@ -190,6 +209,7 @@ export function ProjectPresence({
           <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
             {onlineUsers.map((u, idx) => {
               const isCurrentUser = u.id === user?.id;
+              const avatarSrc = (isCurrentUser ? user?.avatar_url : u.avatar_url) || u.avatar_url;
               return (
                 <div
                   key={u.id + idx}
@@ -200,10 +220,18 @@ export function ProjectPresence({
                   className="p-2 rounded-lg border flex items-start gap-2.5"
                 >
                   <div
-                    style={{ backgroundColor: u.color }}
-                    className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] text-black flex-shrink-0 mt-0.5"
+                    style={{ backgroundColor: avatarSrc ? 'transparent' : u.color }}
+                    className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center font-bold text-[10px] text-black flex-shrink-0 mt-0.5"
                   >
-                    {u.name.charAt(0).toUpperCase()}
+                    {avatarSrc ? (
+                      <img
+                        src={avatarSrc}
+                        alt={u.name}
+                        className="w-full h-full object-cover rounded-full"
+                      />
+                    ) : (
+                      <span>{u.name.charAt(0).toUpperCase()}</span>
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-medium flex items-center gap-1.5 truncate" style={{ color: 'var(--ide-text)' }}>

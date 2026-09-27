@@ -1397,16 +1397,58 @@ export const DataService = {
   // Level 8: Developer Discovery Search
   async searchDevelopers(query: string, currentUserId?: string): Promise<UserProfile[]> {
     const q = query.toLowerCase().trim();
-    const all = StorageMock.getAllProfiles();
-    return all.filter(u => {
+    let all: UserProfile[] = [];
+
+    // 1. Fetch real developer profiles from database
+    if (isSupabaseConfigured && supabase) {
+      try {
+        let qb = supabase.from('profiles').select('*').limit(100);
+        if (currentUserId) {
+          qb = qb.neq('id', currentUserId);
+        }
+        const { data, error } = await qb;
+        if (!error && data) {
+          all = data as UserProfile[];
+        }
+      } catch (err) {
+        console.warn('Failed to query Supabase profiles in searchDevelopers:', err);
+      }
+    }
+
+    // 2. Merge with any local user profiles (avoiding duplicates)
+    const local = StorageMock.getAllProfiles();
+    for (const u of local) {
+      if (!all.some(existing => existing.id === u.id || existing.email === u.email)) {
+        all.push(u);
+      }
+    }
+
+    // 3. Exclude dummy/test accounts strictly
+    const isExcluded = (u: UserProfile) => {
+      const email = u.email?.toLowerCase() || '';
+      const username = u.username?.toLowerCase() || '';
+      const name = u.full_name?.toLowerCase() || '';
+      return (
+        email === 'kesharyryan@gmail.com' ||
+        email === 'radiux_verifier_559224@gmail.com' ||
+        name === 'not ryan keshary' ||
+        u.id.startsWith('user-alice') ||
+        u.id.startsWith('user-bob') ||
+        u.id.startsWith('user-charlie') ||
+        u.id.startsWith('demo-')
+      );
+    };
+
+    return all.filter((u) => {
       if (currentUserId && u.id === currentUserId) return false;
+      if (isExcluded(u)) return false;
       if (!q) return true;
       const matchName = u.full_name?.toLowerCase().includes(q);
       const matchUsername = u.username?.toLowerCase().includes(q);
       const matchBio = u.bio?.toLowerCase().includes(q);
-      const matchSkills = u.skills?.some(s => s.toLowerCase().includes(q));
+      const matchSkills = u.skills?.some((s) => s.toLowerCase().includes(q));
       const matchRole = u.role?.toLowerCase().includes(q);
-      const matchTech = u.technologies?.some(t => t.toLowerCase().includes(q));
+      const matchTech = u.technologies?.some((t) => t.toLowerCase().includes(q));
       return matchName || matchUsername || matchBio || matchSkills || matchRole || matchTech;
     });
   },

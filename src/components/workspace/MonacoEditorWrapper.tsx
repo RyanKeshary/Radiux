@@ -259,6 +259,39 @@ export function MonacoEditorWrapper({
     }
   }, [settings.showCollaboratorCursors]);
 
+  // Listen for collaborative editor content updates (e.g. from Zodiac Agent diff approvals)
+  useEffect(() => {
+    const handleApplyEditorContent = (e: any) => {
+      const { fileId, filePath, content } = e.detail || {};
+      const matchesFile =
+        (fileId && fileId === file.id) ||
+        (filePath && (filePath === file.name || file.name.endsWith(filePath) || filePath.endsWith(file.name)));
+
+      if (matchesFile && editorRef.current) {
+        const model = editorRef.current.getModel();
+        if (model && content !== undefined) {
+          const currentContent = model.getValue();
+          if (currentContent !== content) {
+            const fullRange = model.getFullModelRange();
+            editorRef.current.executeEdits('zodiac-agent', [
+              {
+                range: fullRange,
+                text: content,
+                forceMoveMarkers: true,
+              },
+            ]);
+            editorRef.current.pushUndoStop();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('radiux:apply-editor-content' as any, handleApplyEditorContent);
+    return () => {
+      window.removeEventListener('radiux:apply-editor-content' as any, handleApplyEditorContent);
+    };
+  }, [file.id, file.name]);
+
   useEffect(() => {
     if (!editorReady || !editorRef.current || !monacoRef.current) return;
 

@@ -66,7 +66,7 @@ export interface DiffProposal {
   originalContent: string;
   proposedContent: string;
   edits: StructuredEdit[];
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected' | 'reverted';
   summary?: string;
 }
 
@@ -86,10 +86,63 @@ export interface ActiveFileContext {
   selection?: EditorSelectionContext | null;
 }
 
+export type TaskIntentMode =
+  | 'ASK'
+  | 'EXPLAIN'
+  | 'EDIT'
+  | 'DEBUG'
+  | 'BUILD'
+  | 'TEST'
+  | 'REVIEW'
+  | 'AGENT';
+
+export type AgentTaskStatus =
+  | 'QUEUED'
+  | 'PLANNING'
+  | 'RUNNING'
+  | 'WAITING_FOR_APPROVAL'
+  | 'VALIDATING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'MAX_STEPS_REACHED';
+
+export interface AgentTask {
+  id: string;
+  user_id: string;
+  project_id: string;
+  conversation_id?: string;
+  status: AgentTaskStatus;
+  mode: TaskIntentMode | AIPermissionMode;
+  intent_mode?: TaskIntentMode;
+  user_goal: string;
+  current_step: number;
+  max_steps: number;
+  plan?: string[];
+  files_inspected?: string[];
+  files_modified?: string[];
+  commands_run?: string[];
+  tool_calls_count?: number;
+  errors_count?: number;
+  tool_calls?: Array<{
+    name: string;
+    args?: any;
+    status: 'success' | 'failed';
+  }>;
+  validation_results?: Array<{
+    type: string;
+    passed: boolean;
+    output: string;
+  }>;
+  started_at: string;
+  completed_at?: string;
+  cancelled_at?: string;
+}
+
 export interface WorkspaceAIContext {
   user: {
     id: string;
-    name: string;
+    name?: string;
     email?: string;
     role?: string;
   };
@@ -98,6 +151,7 @@ export interface WorkspaceAIContext {
     name: string;
     description?: string;
   };
+  intentMode?: TaskIntentMode;
   activeFile?: ActiveFileContext | null;
   openTabs?: string[];
   fileTree?: string;
@@ -113,6 +167,16 @@ export interface WorkspaceAIContext {
     language?: string;
     architecture_summary?: string;
     coding_conventions?: string;
+  };
+  collaboration?: {
+    peerCount: number;
+    peers: Array<{ id: string; name: string; currentFileName?: string }>;
+  };
+  members?: Array<{ id: string; name: string; email?: string; role: string }>;
+  editorState?: {
+    cursor?: { line: number; column: number };
+    selection?: EditorSelectionContext | null;
+    dirtyFiles?: string[];
   };
 }
 
@@ -155,6 +219,7 @@ export interface AIProvider {
 // Agent Execution Stream Events
 export type AgentStreamEvent =
   | { type: 'status'; message: string; step?: number }
+  | { type: 'task_state'; task: Partial<AgentTask> }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: any }
   | { type: 'tool_finish'; toolCallId: string; toolName: string; output: string; error?: string }
   | { type: 'diff_proposal'; proposal: DiffProposal }

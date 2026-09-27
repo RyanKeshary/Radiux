@@ -50,7 +50,7 @@ export class PermissionEngine {
   ): PermissionCheckResult {
     const name = tool.name;
 
-    // 1. Read-only operations are always permitted in all modes
+    // 1. Read-only and safe inspection operations are always permitted in all modes
     const readOnlyTools = [
       'list_files',
       'read_file',
@@ -58,17 +58,30 @@ export class PermissionEngine {
       'get_file_tree',
       'get_current_file',
       'get_selection',
+      'get_open_tabs',
+      'get_editor_state',
+      'get_diagnostics',
+      'diagnostics',
       'git_status',
       'git_diff',
       'git_log',
-      'diagnostics',
+      'git_branch',
+      'inspect_project',
+      'inspect_package_json',
+      'inspect_project_context',
+      'inspect_collaboration_state',
+      'inspect_project_members',
+      'inspect_environment_safely',
+      'run_typecheck',
+      'run_build',
+      'run_tests',
     ];
 
     if (readOnlyTools.includes(name)) {
       return { allowed: true, requiresConfirmation: false };
     }
 
-    // 2. In READ_ONLY mode, all modifying or execution tools are strictly prohibited
+    // 2. In READ_ONLY mode, all modifying tools are strictly prohibited
     if (mode === 'READ_ONLY') {
       return {
         allowed: false,
@@ -86,8 +99,13 @@ export class PermissionEngine {
       };
     }
 
-    // 4. File write / edit
-    if (name === 'write_file' || name === 'edit_file') {
+    // 4. File write / create / edit
+    if (
+      name === 'write_file' ||
+      name === 'create_file' ||
+      name === 'edit_file' ||
+      name === 'apply_editor_edit'
+    ) {
       if (mode === 'ASSISTED') {
         // Assisted mode requires user confirmation / review of diff before persisting
         return {

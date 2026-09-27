@@ -6,102 +6,63 @@ import { WorkspaceAIContext } from './types';
 
 export function buildSystemPrompt(context: WorkspaceAIContext): string {
   const parts: string[] = [];
+  const intentMode = context.intentMode || 'AGENT';
 
-  parts.push(`You are Zodiac 1.0 — the native autonomous AI Coding Agent of the Radiux collaborative cloud IDE.
+  parts.push(`You are Zodiac 1.0 — ultra-fast autonomous AI Coding Agent for Radiux IDE.
+STEP BUDGET (STRICTLY ENFORCED):
+- SIMPLE task (add code, insert element, create file, rename, style change) → MAXIMUM 2 steps total.
+- MEDIUM task (add feature across 2-3 files, fix bug) → MAXIMUM 4 steps total.
+- COMPLEX task (new page, architecture refactor) → MAXIMUM 6 steps total.
 
-YOUR WORKFLOW & CORE DIRECTIVES:
-1. You are NOT a generic conversational chatbot. You are an active coding agent that investigates, solves, edits, and verifies tasks inside the user's workspace.
-2. Progressive Exploration: Never guess project structure or file contents. Use your 17 workspace tools:
-   - Call \`get_file_tree\` or \`list_files\` to explore folder structure.
-   - Call \`search_files\` to locate relevant symbols, functions, and imports.
-   - Call \`read_file\` to inspect targeted lines of code.
-   - Call \`inspect_project\` or \`inspect_package_json\` to inspect tech stack and dependencies.
-   - Call \`inspect_environment_safely\` to inspect platform and tools.
-3. Structured, Surgical Editing:
-   - When modifying files, prefer \`edit_file\` with precise start and end lines rather than rewriting entire large files.
-   - All proposed file modifications are presented to the user as clear visual diff previews.
-   - When modifying multiple files, organize them cleanly so the user can review and [Accept All].
-   - Ensure your code compiles and follows existing project idioms and conventions.
-4. Autonomous Iteration & Error Recovery:
-   - Execute the canonical loop: RUN -> ERROR -> INSPECT -> FIX -> RUN AGAIN.
-   - If asked to fix a build error or bug, inspect the error, read the code, apply edits, and run validation (e.g. \`run_terminal\` with \`npx tsc --noEmit\` or test commands) to verify the resolution.
-   - If validation fails, read the error output and iterate until solved or maximum steps reached.
-5. Security & Boundary Awareness:
-   - You only operate within the authorized project workspace boundary.
-   - Never run destructive commands without authorization.
-   - Never output, inspect, or log secret tokens or private keys.`);
+EXECUTION RULES:
+1. ASSESS COMPLEXITY FIRST: Identify whether task is SIMPLE/MEDIUM/COMPLEX before acting.
+2. For SIMPLE tasks with an active/target file: call \`edit_file\` or \`create_file\` IMMEDIATELY. Do NOT read first.
+3. ZERO CONVERSATIONAL FLUFF: No preambles or explanations before tool calls. One sentence max.
+4. DIRECT-TO-TARGET: Edit active/linked files directly. Never crawl unrelated directories.
+5. FINISH IMMEDIATELY after the edit/create. Do NOT run typecheck for trivial HTML/CSS/text edits.
+6. INTENT MODE: [${intentMode}]. Complete with fewest possible steps.
+7. FINAL RESPONSE: One-line summary + bullet of what changed.`);
 
-  // Workspace Metadata
   const projectName = context?.project?.name || 'Workspace';
   const projectId = context?.project?.id || 'default';
   const userName = context?.user?.name || context?.user?.email || 'Developer';
-  const userEmail = context?.user?.email || '';
 
-  parts.push(`\nCURRENT WORKSPACE CONTEXT:
-- Project Name: ${projectName} (ID: ${projectId})
-- Active User: ${userName} ${userEmail ? `(${userEmail})` : ''}`);
+  parts.push(`CONTEXT: Project: ${projectName} (${projectId}) | User: ${userName}`);
 
-  if (context.projectMemory) {
-    const mem = context.projectMemory;
-    const memParts = [];
-    if (mem.framework) memParts.push(`Framework: ${mem.framework}`);
-    if (mem.language) memParts.push(`Language: ${mem.language}`);
-    if (mem.architecture_summary) memParts.push(`Architecture: ${mem.architecture_summary}`);
-    if (mem.coding_conventions) memParts.push(`Conventions: ${mem.coding_conventions}`);
-    if (memParts.length > 0) {
-      parts.push(`\nPROJECT MEMORY / CONVENTIONS:\n${memParts.join('\n')}`);
-    }
+  if (context.projectMemory?.framework || context.projectMemory?.language) {
+    parts.push(`Stack: ${context.projectMemory.framework || ''} ${context.projectMemory.language || ''}`.trim());
   }
 
-  // Explicitly linked target files for editing
+  // Linked target files (bounded)
   if (context.targetFiles && context.targetFiles.length > 0) {
-    const list = context.targetFiles.map((f) => `- ${f.path}`).join('\n');
-    parts.push(`\nTARGET FILES SPECIFICALLY LINKED FOR EDIT (HIGHEST PRIORITY):
-The user explicitly linked the following file(s) by clicking '+' to specifically inspect and edit:
-${list}
-
-CRITICAL DIRECTIVE: You MUST inspect these target file(s) and apply your code edits/diffs directly to them according to the user's request.`);
-
+    const list = context.targetFiles.map((f) => f.path).join(', ');
+    parts.push(`TARGET FILES: ${list}`);
     context.targetFiles.forEach((tf) => {
       if (tf.content) {
-        parts.push(`\n--- CONTENT OF LINKED TARGET FILE: ${tf.path} ---
-\`\`\`
-${tf.content}
-\`\`\``);
+        const preview = tf.content.length > 1500 ? tf.content.slice(0, 1400) + '\n... [truncated]' : tf.content;
+        parts.push(`--- ${tf.path} ---\n${preview}`);
       }
     });
   }
 
-  // Active Editor File & Selection
+  // Active Editor File (bounded)
   if (context.activeFile) {
-    parts.push(`\nCURRENT OPEN EDITOR FILE:
-- Path: ${context.activeFile.path}
-- Language: ${context.activeFile.language || 'plaintext'}`);
-
-    if (context.activeFile.selection && context.activeFile.selection.text.trim()) {
-      const sel = context.activeFile.selection;
-      parts.push(`- Selected Lines (${sel.startLine}-${sel.endLine}):
-\`\`\`${context.activeFile.language || ''}
-${sel.text}
-\`\`\``);
+    parts.push(`ACTIVE FILE: ${context.activeFile.path} (${context.activeFile.language || 'text'})`);
+    if (context.activeFile.content) {
+      const preview =
+        context.activeFile.content.length > 1500
+          ? context.activeFile.content.slice(0, 1400) + '\n... [truncated — use read_file for specific lines]'
+          : context.activeFile.content;
+      parts.push(`--- ${context.activeFile.path} ---\n${preview}`);
     }
-  }
-
-  if (context.openTabs && context.openTabs.length > 0) {
-    parts.push(`\nOPEN EDITOR TABS: ${context.openTabs.join(', ')}`);
-  }
-
-  if (context.git) {
-    const gitInfo = [];
-    if (context.git.branch) gitInfo.push(`Branch: ${context.git.branch}`);
-    if (context.git.statusSummary) gitInfo.push(`Status: ${context.git.statusSummary}`);
-    if (gitInfo.length > 0) {
-      parts.push(`\nGIT REPOSITORY STATE:\n${gitInfo.join('\n')}`);
+    if (context.activeFile.selection?.text?.trim()) {
+      const sel = context.activeFile.selection;
+      parts.push(`SELECTION (lines ${sel.startLine}-${sel.endLine}):\n${sel.text.slice(0, 500)}`);
     }
   }
 
   if (context.diagnostics) {
-    parts.push(`\nCURRENT DIAGNOSTICS & ERRORS:\n${context.diagnostics}`);
+    parts.push(`DIAGNOSTICS:\n${context.diagnostics.slice(0, 600)}`);
   }
 
   return parts.join('\n');

@@ -58,6 +58,8 @@ const KeyboardShortcutsModal = dynamic(() => import('./KeyboardShortcutsModal').
 const ReviewRequestsModal = dynamic(() => import('./ReviewRequestsModal').then(m => m.ReviewRequestsModal), { ssr: false });
 import { ProfilePreviewCard } from '@/components/profile/ProfilePreviewCard';
 import { useKeyboardManager } from '@/hooks/useKeyboardManager';
+import { ReportIssueModal } from '@/components/common/ReportIssueModal';
+import { isUserAdmin } from '@/lib/admin/admin-client';
 import { InlineCommentsOverlay } from './InlineCommentsOverlay';
 import { ExtensionsPanel } from './ExtensionsPanel';
 import { CommentService } from '@/lib/collaboration/comment-service';
@@ -68,6 +70,7 @@ import { AIAgentPanel } from './AIAgentPanel';
 import { DiffViewerModal } from './DiffViewerModal';
 import { DiffProposal, WorkspaceAIContext } from '@/lib/ai/types';
 import { NotificationCenter } from './NotificationCenter';
+import { analytics } from '@/lib/analytics/tracker';
 
 
 import { 
@@ -288,6 +291,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isReviewsOpen, setIsReviewsOpen] = useState(false);
+  const [isReportIssueOpen, setIsReportIssueOpen] = useState(false);
+  const [isAdminModerationMode, setIsAdminModerationMode] = useState(false);
   const [currentGitBranch, setCurrentGitBranch] = useState('main');
   const [projectMemory, setProjectMemory] = useState<string>('');
 
@@ -433,14 +438,50 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const loadWorkspaceData = useCallback(async () => {
     if (!user) return;
     try {
+      analytics.init(user.id, projectId);
+      const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const isAdminModeRequested = searchParams?.get('admin_mode') === '1';
+      const userIsAdmin = isUserAdmin(user);
+
       // 1. Verify access
       const access = await DataService.verifyProjectAccess(projectId, user.id);
       if (!access.authorized) {
-        setUnauthorized(true);
-        setLoading(false);
-        return;
+        if (userIsAdmin) {
+          setIsAdminModerationMode(true);
+          setRole('visitor');
+          fetch('/api/admin/audit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'admin_joined_workspace',
+              target_type: 'project',
+              target_id: projectId,
+              details: { mode: 'moderation_observer', reason: 'Administrator inspection' }
+            })
+          }).catch(() => {});
+        } else {
+          setUnauthorized(true);
+          setLoading(false);
+          return;
+        }
+      } else {
+        if (userIsAdmin && isAdminModeRequested) {
+          setIsAdminModerationMode(true);
+          setRole('visitor');
+          fetch('/api/admin/audit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'admin_joined_workspace',
+              target_type: 'project',
+              target_id: projectId,
+              details: { mode: 'moderation_observer', reason: 'Admin moderation view' }
+            })
+          }).catch(() => {});
+        } else {
+          setRole(access.role || 'member');
+        }
       }
-      setRole(access.role || 'member');
 
       // 2. Fetch data in parallel
       const [projData, filesData, membersData] = await Promise.all([
@@ -590,9 +631,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
       if (lastLoadedKeyRef.current !== currentKey) {
         lastLoadedKeyRef.current = currentKey;
         loadWorkspaceData();
+        analytics.init(user.id, projectId);
+        analytics.track('project.opened', { projectId, projectName: project?.name });
       }
     }
-  }, [user?.id, authLoading, projectId, loadWorkspaceData]);
+  }, [user?.id, authLoading, projectId, loadWorkspaceData, project?.name]);
 
   // Persist Workspace State (Debounced)
   useEffect(() => {
@@ -1231,6 +1274,17 @@ export function Workspace({ projectId }: WorkspaceProps) {
       }
 
       broadcastFileChange();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('radiux:apply-editor-content', {
+            detail: {
+              fileId: targetFile?.id,
+              filePath: proposal.path,
+              content: proposal.proposedContent,
+            },
+          })
+        );
+      }
       appendOutputLog('sync', `Applied AI diff changes to "${proposal.path}".`);
       logAndBroadcastActivity('file_saved', `Applied AI changes to "${proposal.path}"`, proposal.path);
     } catch (err: any) {
@@ -1241,6 +1295,46 @@ export function Workspace({ projectId }: WorkspaceProps) {
 
   const handleRejectDiff = (proposal: DiffProposal) => {
     appendOutputLog('system', `Rejected AI proposal for "${proposal.path}".`);
+  };
+
+  const handleRevertDiff = async (proposal: DiffProposal) => {
+    try {
+      const targetFile = files.find(f => f.name === proposal.path || f.name.endsWith(proposal.path) || proposal.path.endsWith(f.name));
+
+      if (targetFile && proposal.originalContent !== undefined) {
+        await DataService.updateFileContent(targetFile.id, proposal.originalContent);
+        syncFileToWorkspace(targetFile.name, proposal.originalContent);
+
+        setFiles((prev) =>
+          prev.map((f) => (f.id === targetFile.id ? { ...f, content: proposal.originalContent } : f))
+        );
+
+        setEditorGroups((prev) =>
+          prev.map((g) => ({
+            ...g,
+            openFiles: g.openFiles.map((f) => (f.id === targetFile.id ? { ...f, content: proposal.originalContent } : f)),
+          }))
+        );
+
+        broadcastFileChange();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('radiux:apply-editor-content', {
+              detail: {
+                fileId: targetFile.id,
+                filePath: proposal.path,
+                content: proposal.originalContent,
+              },
+            })
+          );
+        }
+        appendOutputLog('sync', `Reverted AI changes to "${proposal.path}".`);
+        logAndBroadcastActivity('file_saved', `Reverted AI changes to "${proposal.path}"`, proposal.path);
+      }
+    } catch (err: any) {
+      console.error('Failed to revert AI diff:', err);
+      appendOutputLog('system', `Error reverting AI changes: ${err.message}`);
+    }
   };
 
   const handleReviewDiff = (proposal: DiffProposal) => {
@@ -1733,6 +1827,23 @@ export function Workspace({ projectId }: WorkspaceProps) {
         </div>
       </header>
 
+      {/* Admin Moderation Banner */}
+      {isAdminModerationMode && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 text-amber-300 text-xs px-4 py-1.5 flex items-center justify-between z-30 font-mono flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span className="font-semibold tracking-wide">ADMINISTRATOR / MODERATION VIEW</span>
+            <span className="text-zinc-400 hidden sm:inline">| Inspection Mode active &bull; Read-Only enforcement enabled</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-zinc-400 hidden md:inline">Project: {project?.name || projectId}</span>
+            <Link href="/admin" className="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-2.5 py-0.5 rounded border border-amber-500/40 transition">
+              &larr; Return to Admin Center
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* 2. Main Middle Workspace Layout */}
       <div className="flex-1 flex min-h-0 relative">
         {/* Persistent Activity Bar */}
@@ -1745,6 +1856,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenReviews={() => setIsReviewsOpen(true)}
+          onOpenReportIssue={() => setIsReportIssueOpen(true)}
           onToggleAI={() => setIsAIPanelOpen(!isAIPanelOpen)}
           isAIOpen={isAIPanelOpen}
           userAvatar={user?.avatar_url}
@@ -2063,6 +2175,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                             onSave={() => {
                               logAndBroadcastActivity('file_saved', `Saved changes to "${groupActiveFile.name}"`, groupActiveFile.name);
                               appendOutputLog('sync', `Saved "${groupActiveFile.name}"`);
+                              analytics.track('file.edited', { fileName: groupActiveFile.name, projectId });
                             }}
                             onContentSaved={(latestText) => {
                               setFiles((prev) =>
@@ -2087,6 +2200,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                             }}
                             onAskAI={() => {
                               setIsAIPanelOpen(true);
+                              analytics.track('zodiac.request', { projectId, file: groupActiveFile.name });
                             }}
                             readOnly={role === 'visitor'}
                           />
@@ -2117,6 +2231,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
                 onAcceptDiff={handleAcceptDiff}
                 onRejectDiff={handleRejectDiff}
                 onReviewDiff={handleReviewDiff}
+                onRevertDiff={handleRevertDiff}
                 initialPrompt={aiInitialPrompt}
                 onClearInitialPrompt={() => setAiInitialPrompt(null)}
                 files={files}
@@ -2545,7 +2660,12 @@ export function Workspace({ projectId }: WorkspaceProps) {
         currentBranch={currentGitBranch}
       />
 
-
+      <ReportIssueModal
+        isOpen={isReportIssueOpen}
+        onClose={() => setIsReportIssueOpen(false)}
+        projectId={projectId}
+        projectName={project?.name}
+      />
 
     </div>
   );

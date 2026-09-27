@@ -10,7 +10,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       isAdmin: true,
-      role: 'admin',
+      isLeadAdmin: adminAuth.isLeadAdmin,
+      role: adminAuth.role,
       userId: adminAuth.userId,
       email: adminAuth.email,
     });

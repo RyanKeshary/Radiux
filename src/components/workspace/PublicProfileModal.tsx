@@ -132,9 +132,14 @@ export function PublicProfileModal({
           color: 'var(--ide-text)',
         }}
       >
-        {/* Header */}
+        {/* Header Banner */}
         <div 
-          className="h-24 bg-gradient-to-r from-sky-600/40 via-indigo-600/30 to-purple-600/30 relative flex justify-end p-3"
+          className="h-24 relative flex justify-end p-3 overflow-hidden"
+          style={{
+            background: profile?.banner_url
+              ? `url(${profile.banner_url}) center/cover no-repeat`
+              : (profile?.banner_gradient || 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)'),
+          }}
         >
           <button
             onClick={onClose}

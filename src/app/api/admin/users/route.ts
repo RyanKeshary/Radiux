@@ -8,7 +8,7 @@ function getSupabaseAdmin() {
   return createClient(url, serviceKey, { auth: { persistSession: false } });
 }
 
-import { verifyAdminRequest } from '@/lib/admin/admin-auth';
+import { verifyAdminRequest, suspendUserAccount, restoreUserAccount, isUserSuspended } from '@/lib/admin/admin-auth';
 
 export async function GET(req: NextRequest) {
   const adminAuth = await verifyAdminRequest(req);
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   try {
     const { data: users, error } = await supabase
       .from('profiles')
-      .select('id, email, username, full_name, role, avatar_url, created_at, updated_at')
+      .select('id, email, username, full_name, role, avatar_url, created_at, updated_at, preferences')
       .order('created_at', { ascending: false })
       .limit(100);
 
@@ -32,7 +32,38 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ users: users || [] });
+    const enhanced = (users || []).map((u) => ({
+      ...u,
+      is_suspended: isUserSuspended(u.id) || !!(u.preferences as any)?.suspended,
+    }));
+
+    return NextResponse.json({ users: enhanced });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const adminAuth = await verifyAdminRequest(req);
+  if (!adminAuth.isAdmin) {
+    return NextResponse.json({ error: 'Forbidden. Admin privileges required.' }, { status: 403 });
+  }
+
+  try {
+    const body = await req.json();
+    const { action, userId, reason } = body;
+
+    if (!userId || !['suspend', 'restore'].includes(action)) {
+      return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
+    }
+
+    if (action === 'suspend') {
+      await suspendUserAccount(userId, reason || 'Suspended by administrator', adminAuth.email || 'admin@radiux.internal');
+      return NextResponse.json({ success: true, message: 'User suspended successfully' });
+    } else {
+      await restoreUserAccount(userId, adminAuth.email || 'admin@radiux.internal');
+      return NextResponse.json({ success: true, message: 'User account restored successfully' });
+    }
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

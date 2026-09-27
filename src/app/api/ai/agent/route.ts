@@ -3,6 +3,7 @@ import { AgentExecutionLoop } from '@/lib/ai/agent/loop';
 import { WorkspaceAIContext, AIPermissionMode, AIMessage, AgentStreamEvent } from '@/lib/ai/types';
 import { AIConfig } from '@/lib/ai/config';
 import { createClient } from '@supabase/supabase-js';
+import { logAnalyticsEvent, logErrorEvent, logPerformanceEvent } from '@/lib/analytics/store';
 
 // Server-side Supabase client for authentication and usage logging
 function getSupabaseServerClient(authHeader?: string | null) {
@@ -53,7 +54,48 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing userMessage in request.' }, { status: 400 });
     }
 
-    // 2. Validate Groq API Key (from process.env or x-groq-api-key header or body)
+    // 2. Server-side Project Membership and RBAC Verification
+    let verifiedRole = clientContext.user?.role || 'editor';
+    if (supabase && projectId !== 'default' && userId !== 'anonymous') {
+      try {
+        const { data: member } = await supabase
+          .from('project_members')
+          .select('role')
+          .eq('project_id', projectId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (member && member.role) {
+          verifiedRole = member.role;
+        } else {
+          const { data: proj } = await supabase
+            .from('projects')
+            .select('owner_id')
+            .eq('id', projectId)
+            .maybeSingle();
+
+          if (proj && proj.owner_id === userId) {
+            verifiedRole = 'owner';
+          } else if (proj) {
+            return NextResponse.json(
+              { error: 'Unauthorized: You are not a member of this project.' },
+              { status: 403 }
+            );
+          }
+        }
+      } catch (rbacErr) {
+        // Graceful fallback if database table not available
+      }
+    }
+
+    clientContext.user = {
+      ...(clientContext.user || {}),
+      id: userId,
+      name: clientContext.user?.name || 'User',
+      role: verifiedRole as any,
+    };
+
+    // 3. Validate Groq API Key (from process.env or x-groq-api-key header or body)
     const clientProvidedKey = (req.headers.get('x-groq-api-key') || body.groqApiKey || '').trim();
     const effectiveApiKey = clientProvidedKey || AIConfig.groqApiKey;
 
@@ -126,14 +168,65 @@ export async function POST(req: NextRequest) {
                 .from('ai_conversations')
                 .update({ updated_at: new Date().toISOString() })
                 .eq('id', conversationId);
+
+              // Save task state and tool calls if available
+              if (result.task) {
+                try {
+                  await supabase.from('ai_tasks').insert({
+                    id: result.task.id,
+                    user_id: userId !== 'anonymous' ? userId : null,
+                    project_id: projectId !== 'default' ? projectId : null,
+                    conversation_id: conversationId || null,
+                    status: result.task.status,
+                    mode: result.task.mode,
+                    intent_mode: result.task.intent_mode,
+                    goal: result.task.user_goal,
+                    current_step: result.task.current_step,
+                    max_steps: result.task.max_steps,
+                    files_inspected: result.task.files_inspected,
+                    files_modified: result.task.files_modified,
+                    commands_run: result.task.commands_run,
+                    validation_results: result.task.validation_results,
+                    started_at: result.task.started_at,
+                    completed_at: result.task.completed_at,
+                  });
+
+                  if (result.task.tool_calls && result.task.tool_calls.length > 0) {
+                    const rows = result.task.tool_calls.map((tc: any) => ({
+                      task_id: result.task.id,
+                      tool_name: tc.name,
+                      args: tc.args || {},
+                      status: tc.status,
+                    }));
+                    await supabase.from('ai_tool_calls').insert(rows);
+                  }
+                } catch (taskSaveErr) {
+                  // Non-fatal if schema v16 is pending
+                }
+              }
             } catch (persistErr) {
               console.warn('[AI Agent API] Could not persist message to DB:', persistErr);
             }
           }
 
-          // 5. Asynchronously log AI usage
+          // 5. Asynchronously log AI usage & canonical intelligence
+          const latency = Date.now() - startTime;
+          logAnalyticsEvent({
+            eventType: 'zodiac.request',
+            userId: userId !== 'anonymous' ? userId : null,
+            projectId: projectId !== 'default' ? projectId : null,
+            metadata: { model: AIConfig.defaultModel, latency_ms: latency, toolCallsCount, status: 'success' },
+          }).catch(() => {});
+
+          logPerformanceEvent({
+            eventName: 'zodiac.completion',
+            subsystem: 'ai',
+            latencyMs: latency,
+            userId: userId !== 'anonymous' ? userId : null,
+            projectId: projectId !== 'default' ? projectId : null,
+          }).catch(() => {});
+
           if (supabase) {
-            const latency = Date.now() - startTime;
             try {
               await supabase.from('ai_usage').insert({
                 user_id: userId !== 'anonymous' ? userId : null,
@@ -151,6 +244,13 @@ export async function POST(req: NextRequest) {
           controller.close();
         } catch (runErr: any) {
           console.error('[AI Agent Execution Error]:', runErr);
+          logErrorEvent({
+            message: runErr.message || 'AI agent execution failure',
+            subsystem: 'ai',
+            userId: userId !== 'anonymous' ? userId : null,
+            projectId: projectId !== 'default' ? projectId : null,
+          }).catch(() => {});
+
           sendEvent({
             type: 'error',
             message: AIConfig.sanitizeText(runErr.message || 'Agent execution encountered an error.'),

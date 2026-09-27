@@ -203,39 +203,52 @@ export function DeveloperProfileView({
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 md:p-8 space-y-6">
         {/* 1. Developer Identity Card */}
         <div 
-          className="p-6 rounded-2xl border shadow-sm relative overflow-hidden"
+          className="rounded-2xl border shadow-sm relative overflow-hidden"
           style={{
             backgroundColor: 'var(--ide-card-bg)',
             borderColor: 'var(--ide-border)',
           }}
         >
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-              {/* Avatar with status indicator */}
-              <div className="relative">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center text-2xl font-bold shadow-md ring-4 ring-white/10 overflow-hidden">
-                  {profile.avatar_url ? (
-                    <img src={profile.avatar_url} alt={profile.full_name} className="w-full h-full object-cover" />
-                  ) : (
-                    profile.full_name?.charAt(0).toUpperCase() || 'U'
-                  )}
-                </div>
-                <span 
-                  className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 ring-4 ring-[var(--ide-card-bg)]" 
-                  title="Online on Radiux"
-                />
-              </div>
+          {/* Custom Banner Header */}
+          <div
+            className="h-32 sm:h-44 w-full relative overflow-hidden flex items-end p-4 transition-all"
+            style={{
+              background: profile.banner_url
+                ? `url(${profile.banner_url}) center/cover no-repeat`
+                : profile.banner_gradient || 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+          </div>
 
-              {/* Identity Info */}
-              <div className="space-y-1">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--ide-text)' }}>
-                    {profile.full_name}
-                  </h1>
-                  <span className="text-xs font-mono opacity-70">
-                    @{profile.username || profile.email.split('@')[0]}
-                  </span>
+          <div className="p-6 pt-0 relative -mt-10 sm:-mt-12">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+                {/* Avatar with status indicator */}
+                <div className="relative">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center text-2xl font-bold shadow-xl ring-4 ring-[var(--ide-card-bg)] overflow-hidden">
+                    {profile.avatar_url ? (
+                      <img src={profile.avatar_url} alt={profile.full_name} className="w-full h-full object-cover" />
+                    ) : (
+                      profile.full_name?.charAt(0).toUpperCase() || 'U'
+                    )}
+                  </div>
+                  <span 
+                    className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 ring-4 ring-[var(--ide-card-bg)]" 
+                    title="Online on Radiux"
+                  />
                 </div>
+
+                {/* Identity Info */}
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--ide-text)' }}>
+                      {profile.full_name}
+                    </h1>
+                    <span className="text-xs font-mono opacity-70">
+                      @{profile.username || profile.email.split('@')[0]}
+                    </span>
+                  </div>
 
                 {profile.role && (
                   <div className="flex items-center gap-1.5 text-xs font-medium text-sky-400">
@@ -417,6 +430,7 @@ export function DeveloperProfileView({
                 )}
               </div>
             )}
+          </div>
           </div>
         </div>
 

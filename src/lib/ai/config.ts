@@ -14,15 +14,17 @@ export const AIConfig = {
     return process.env.GROQ_API_KEY || '';
   },
 
-  // Configured default model (Groq coding & tool capable)
+  // Configured default model (Groq fast coding & tool capable)
+  // llama-3.3-70b-versatile: best tool-calling support + generous daily limits on free tier
   get defaultModel(): string {
-    return process.env.AI_MODEL || 'openai/gpt-oss-120b';
+    return process.env.AI_MODEL || 'llama-3.3-70b-versatile';
   },
 
   // Maximum iterative tool steps per agent execution
+  // Default 8: enough for complex tasks, avoids infinite loops on simple ones
   get maxAgentSteps(): number {
-    const val = parseInt(process.env.AI_MAX_STEPS || '20', 10);
-    return isNaN(val) || val <= 0 ? 20 : Math.min(val, 50);
+    const val = parseInt(process.env.AI_MAX_STEPS || '8', 10);
+    return isNaN(val) || val <= 0 ? 8 : Math.min(val, 30);
   },
 
   // Token limits
@@ -32,8 +34,8 @@ export const AIConfig = {
   },
 
   get maxOutputTokens(): number {
-    const val = parseInt(process.env.AI_MAX_OUTPUT || '500', 10);
-    return isNaN(val) || val <= 0 ? 500 : Math.min(val, 600);
+    const val = parseInt(process.env.AI_MAX_OUTPUT || '1200', 10);
+    return isNaN(val) || val <= 0 ? 1200 : Math.min(val, 4096);
   },
 
   // Default security permission mode

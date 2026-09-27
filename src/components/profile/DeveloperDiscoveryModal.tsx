@@ -166,10 +166,14 @@ export function DeveloperDiscoveryModal({
             <div className="text-center py-12 space-y-2">
               <Users className="w-8 h-8 text-neutral-500 mx-auto opacity-40" />
               <p className="text-xs font-medium" style={{ color: 'var(--ide-text-muted)' }}>
-                No developers found matching &quot;{query}&quot;.
+                {query
+                  ? `No developers found matching "${query}".`
+                  : 'No other registered developers found on this instance yet.'}
               </p>
               <p className="text-[11px] text-neutral-500">
-                Try searching for technologies like &quot;TypeScript&quot;, &quot;React&quot;, or &quot;Go&quot;.
+                {query
+                  ? 'Try searching for technologies like "TypeScript", "React", or "Go".'
+                  : 'Invite teammates or collaborators using the workspace Invite button!'}
               </p>
             </div>
           ) : (

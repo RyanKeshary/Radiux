@@ -49,13 +49,18 @@ import {
   User,
   Sparkles,
   Globe,
-  Loader2
+  Loader2,
+  Shield,
+  ShieldAlert,
+  X
 } from 'lucide-react';
 import { soundManager } from '@/lib/sound';
+import { ReportIssueModal } from '@/components/common/ReportIssueModal';
 
 export default function DashboardPage() {
   const router = useRouter();
   const { user, loading: authLoading, signInWithOAuth, isSupabase } = useAuth();
+  const [isReportOpen, setIsReportOpen] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'github' | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,6 +106,46 @@ export default function DashboardPage() {
   // Deletion State
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Dual Tab Opening Handler (for manual, Google OAuth, GitHub OAuth)
+  const [dualAdminPrompt, setDualAdminPrompt] = useState<{ token: string; role: string } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDual = urlParams.get('dual_admin') === '1';
+    const adminToken = urlParams.get('admin_token');
+    const adminRole = urlParams.get('admin_role') || 'lead_admin';
+    const flag = localStorage.getItem('radiux_open_admin_tab') === '1';
+
+    if (isDual || flag) {
+      if (adminToken) {
+        localStorage.setItem('radiux_admin_token', adminToken);
+      }
+      localStorage.removeItem('radiux_open_admin_tab');
+
+      // Clean query parameters from URL without reloading
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+
+      // Attempt immediate open
+      try {
+        const adminWin = window.open('/admin', '_blank');
+        if (!adminWin || adminWin.closed || typeof adminWin.closed === 'undefined') {
+          setDualAdminPrompt({
+            token: adminToken || localStorage.getItem('radiux_admin_token') || '',
+            role: adminRole,
+          });
+        }
+      } catch {
+        setDualAdminPrompt({
+          token: adminToken || localStorage.getItem('radiux_admin_token') || '',
+          role: adminRole,
+        });
+      }
+    }
+  }, []);
 
   // 1. Initialize Theme from user preferences
   useEffect(() => {
@@ -354,6 +399,15 @@ export default function DashboardPage() {
             </select>
           </div>
 
+          <button
+            onClick={() => setIsReportOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium text-rose-400/80 hover:text-rose-300 border border-rose-500/20 hover:border-rose-500/40 hover:bg-rose-500/10 transition-all cursor-pointer"
+            title="Report Issue or Concern to Admin"
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Report</span>
+          </button>
+
           <UserMenu 
             onViewPublicProfile={() => router.push('/profile/' + (user?.username || user?.id))}
             onOpenProfileModal={(tab) => {
@@ -369,6 +423,36 @@ export default function DashboardPage() {
           />
         </div>
       </header>
+
+      {/* Dual Tab Opening Notification Banner */}
+      {dualAdminPrompt && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-sky-500/10 to-indigo-500/15 border-b border-amber-500/30 px-6 py-2.5 flex items-center justify-between text-xs z-30">
+          <div className="flex items-center gap-2 text-amber-300 font-medium">
+            <span className="text-base">👑</span>
+            <span>
+              <strong>{dualAdminPrompt.role === 'lead_admin' ? 'Lead Admin' : 'Admin'} Access Activated:</strong> Your user workspace is ready here. Open the Operations Console in a new tab.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                window.open('/admin', '_blank');
+                setDualAdminPrompt(null);
+              }}
+              className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded text-xs transition-all shadow-sm flex items-center gap-1 active:scale-95"
+            >
+              <span>Launch Admin Console</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setDualAdminPrompt(null)}
+              className="p-1 hover:bg-white/10 rounded text-neutral-400 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main IDE Welcome Body */}
       <main className="flex-1 max-w-5xl w-full mx-auto p-6 md:p-10 flex flex-col justify-start">
@@ -943,6 +1027,11 @@ export default function DashboardPage() {
           />
         </>
       )}
+
+      <ReportIssueModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+      />
     </div>
   );
 }

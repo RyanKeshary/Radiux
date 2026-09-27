@@ -39,28 +39,20 @@ export class GroqProvider implements AIProvider {
   async getModels(): Promise<AIModelInfo[]> {
     return [
       {
-        id: 'qwen/qwen3.8-27b',
-        name: 'Qwen 3.8 27B',
-        contextWindow: 128000,
-        maxOutputTokens: 8192,
-        description: 'Verified high-speed coding and tool-calling model on Groq Cloud.',
-        supportsTools: true,
-        isDefault: true,
-      },
-      {
-        id: 'openai/gpt-oss-120b',
-        name: 'GPT OSS 120B',
-        contextWindow: 128000,
-        maxOutputTokens: 8192,
-        description: 'Large-scale advanced reasoning model on Groq Cloud.',
-        supportsTools: true,
-      },
-      {
         id: 'openai/gpt-oss-20b',
         name: 'GPT OSS 20B',
         contextWindow: 128000,
         maxOutputTokens: 8192,
         description: 'Ultra-fast lightweight reasoning model on Groq Cloud.',
+        supportsTools: true,
+        isDefault: true,
+      },
+      {
+        id: 'qwen/qwen3.8-27b',
+        name: 'Qwen 3.8 27B',
+        contextWindow: 128000,
+        maxOutputTokens: 8192,
+        description: 'Verified high-speed coding and tool-calling model on Groq Cloud.',
         supportsTools: true,
       },
       {
@@ -110,6 +102,55 @@ export class GroqProvider implements AIProvider {
     }));
   }
 
+  private async handleGroqError(err: any, payload: any, isStream: boolean): Promise<any> {
+    const groq = this.getClient();
+    // 1. Rate Limit 429 handling (TPD vs TPM)
+    if (err.status === 429 || err.message?.includes('rate_limit_exceeded') || err.message?.includes('Rate limit')) {
+      // Check for wait duration in message
+      const match = err.message?.match(/try again in ([\d\.]+)s/i);
+      const waitSec = match ? parseFloat(match[1]) : 0;
+
+      // If wait is brief (<= 10s), back off and retry
+      if (waitSec > 0 && waitSec <= 10) {
+        console.warn(`[GroqProvider] TPM rate limit on ${payload.model}. Backing off ${waitSec.toFixed(1)}s...`);
+        await new Promise((r) => setTimeout(r, Math.ceil(waitSec * 1000) + 300));
+        payload.model = 'llama-3.3-70b-versatile';
+        payload.max_tokens = Math.min(payload.max_tokens || 800, 600);
+        return isStream
+          ? groq.chat.completions.create({ ...payload, stream: true })
+          : groq.chat.completions.create(payload);
+      }
+
+      // If not already on fallback, switch immediately
+      if (payload.model !== 'llama-3.3-70b-versatile') {
+        console.warn(`[GroqProvider] Rate limit on ${payload.model}. Switching to llama-3.3-70b-versatile...`);
+        payload.model = 'llama-3.3-70b-versatile';
+        payload.max_tokens = Math.min(payload.max_tokens || 800, 600);
+        return isStream
+          ? groq.chat.completions.create({ ...payload, stream: true })
+          : groq.chat.completions.create(payload);
+      }
+    }
+
+    // 2. Model Not Found / Tool Use Error 404 / 400
+    if (
+      err.status === 404 ||
+      err.status === 400 ||
+      err.message?.includes('does not exist') ||
+      err.message?.includes('Failed to call a function')
+    ) {
+      if (payload.model !== 'llama-3.3-70b-versatile') {
+        console.warn(`[GroqProvider] Model ${payload.model} failed (${err.message}). Falling back to llama-3.3-70b-versatile...`);
+        payload.model = 'llama-3.3-70b-versatile';
+        return isStream
+          ? groq.chat.completions.create({ ...payload, stream: true })
+          : groq.chat.completions.create(payload);
+      }
+    }
+
+    throw err;
+  }
+
   async complete(messages: AIMessage[], options?: AIProviderCompletionOptions): Promise<AIMessage> {
     const groq = this.getClient();
     const model = options?.model || AIConfig.defaultModel;
@@ -119,7 +160,7 @@ export class GroqProvider implements AIProvider {
       model,
       messages: this.mapMessages(messages),
       temperature: options?.temperature ?? 0.2,
-      max_tokens: Math.min(options?.maxTokens ?? AIConfig.maxOutputTokens, 500),
+      max_tokens: options?.maxTokens ?? AIConfig.maxOutputTokens,
     };
 
     if (tools && tools.length > 0) {
@@ -131,21 +172,7 @@ export class GroqProvider implements AIProvider {
     try {
       response = await groq.chat.completions.create(payload);
     } catch (err: any) {
-      if ((err.status === 404 || err.message?.includes('does not exist') || err.message?.includes('decommissioned') || err.message?.includes('Failed to call a function')) && payload.model !== 'openai/gpt-oss-120b') {
-        console.warn(`[GroqProvider] Model ${payload.model} failed (${err.message}). Falling back to openai/gpt-oss-120b...`);
-        payload.model = 'openai/gpt-oss-120b';
-        response = await groq.chat.completions.create(payload);
-      } else if ((err.status === 404 || err.message?.includes('Failed to call a function')) && payload.model === 'openai/gpt-oss-120b') {
-        console.warn(`[GroqProvider] Falling back to openai/gpt-oss-20b...`);
-        payload.model = 'openai/gpt-oss-20b';
-        response = await groq.chat.completions.create(payload);
-      } else if (err.status === 429 && (err.message?.includes('OTPM') || err.message?.includes('rate_limit_exceeded'))) {
-        console.warn(`[GroqProvider] Token limit hit on ${payload.model}. Retrying with reduced max_tokens 300...`);
-        payload.max_tokens = 300;
-        response = await groq.chat.completions.create(payload);
-      } else {
-        throw err;
-      }
+      response = await this.handleGroqError(err, payload, false);
     }
     const choice = response.choices[0];
     if (!choice || !choice.message) {
@@ -185,7 +212,7 @@ export class GroqProvider implements AIProvider {
       model,
       messages: this.mapMessages(messages),
       temperature: options?.temperature ?? 0.2,
-      max_tokens: Math.min(options?.maxTokens ?? AIConfig.maxOutputTokens, 500),
+      max_tokens: options?.maxTokens ?? AIConfig.maxOutputTokens,
       stream: true,
     };
 
@@ -194,7 +221,8 @@ export class GroqProvider implements AIProvider {
       payload.tool_choice = options?.toolChoice || 'auto';
     }
 
-    let fullContent = '';
+    let assistantContent = '';
+    let reasoningText = '';
     const toolCallAccumulators: Map<number, { id: string; name: string; arguments: string }> = new Map();
 
     try {
@@ -202,33 +230,23 @@ export class GroqProvider implements AIProvider {
       try {
         stream = await groq.chat.completions.create(payload);
       } catch (err: any) {
-        if ((err.status === 404 || err.message?.includes('does not exist') || err.message?.includes('decommissioned') || err.message?.includes('Failed to call a function')) && payload.model !== 'openai/gpt-oss-120b') {
-          console.warn(`[GroqProvider] Model ${payload.model} failed for streaming (${err.message}). Falling back to openai/gpt-oss-120b...`);
-          payload.model = 'openai/gpt-oss-120b';
-          stream = await groq.chat.completions.create(payload);
-        } else if ((err.status === 404 || err.message?.includes('Failed to call a function')) && payload.model === 'openai/gpt-oss-120b') {
-          console.warn(`[GroqProvider] Falling back to openai/gpt-oss-20b for streaming...`);
-          payload.model = 'openai/gpt-oss-20b';
-          stream = await groq.chat.completions.create(payload);
-        } else if (err.status === 429 && (err.message?.includes('OTPM') || err.message?.includes('rate_limit_exceeded'))) {
-          console.warn(`[GroqProvider] Token limit hit on stream ${payload.model}. Retrying with reduced max_tokens 300...`);
-          payload.max_tokens = 300;
-          stream = await groq.chat.completions.create(payload);
-        } else {
-          throw err;
-        }
+        stream = await this.handleGroqError(err, payload, true);
       }
 
       for await (const chunk of stream as any) {
         const delta = chunk.choices[0]?.delta;
         if (!delta) continue;
 
-        // 1. Text token
+        // 1. User-visible text token
         if (delta.content) {
-          fullContent += delta.content;
+          assistantContent += delta.content;
           if (callbacks.onToken) {
             callbacks.onToken(delta.content);
           }
+        } else if (delta.reasoning || delta.reasoning_content) {
+          // Internal reasoning scratchpad - keep separate from assistant message content
+          const reasoning = delta.reasoning || delta.reasoning_content;
+          reasoningText += reasoning;
         }
 
         // 2. Tool call delta
@@ -236,6 +254,7 @@ export class GroqProvider implements AIProvider {
           for (const tcDelta of delta.tool_calls) {
             const index = tcDelta.index ?? 0;
             if (!toolCallAccumulators.has(index)) {
+              // Initialize with the first chunk's name (Groq sends name only on first delta)
               toolCallAccumulators.set(index, {
                 id: tcDelta.id || `call_${Date.now()}_${index}`,
                 name: tcDelta.function?.name || '',
@@ -244,7 +263,7 @@ export class GroqProvider implements AIProvider {
             }
             const acc = toolCallAccumulators.get(index)!;
             if (tcDelta.id) acc.id = tcDelta.id;
-            if (tcDelta.function?.name) acc.name += tcDelta.function.name;
+            // Do NOT append name — Groq sends it only once on the first delta
             if (tcDelta.function?.arguments) acc.arguments += tcDelta.function.arguments;
           }
         }
@@ -267,9 +286,14 @@ export class GroqProvider implements AIProvider {
         }
       });
 
+      // If tools were called, content must remain clean (empty string) for strict API compatibility
+      const finalContent = parsedToolCalls.length > 0
+        ? assistantContent
+        : (assistantContent || reasoningText);
+
       return {
         role: 'assistant',
-        content: fullContent,
+        content: finalContent,
         tool_calls: parsedToolCalls.length > 0 ? parsedToolCalls : undefined,
       };
     } catch (err: any) {

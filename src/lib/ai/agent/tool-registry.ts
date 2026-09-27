@@ -222,8 +222,64 @@ export const CORE_AI_TOOLS: AITool[] = [
     },
   },
   {
-    name: 'diagnostics',
-    description: 'Get current workspace diagnostics, TypeScript compiler errors, or build errors.',
+    name: 'create_file',
+    description: 'Create a new file in the workspace with initial content. Proposes a diff or creates the file.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Relative path of the new file to create.',
+        },
+        content: {
+          type: 'string',
+          description: 'Initial text content for the file.',
+          default: '',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'apply_editor_edit',
+    description: 'Apply targeted structured edits to the active editor file or workspace file. Directly reflects in Monaco editor and generates diff proposal.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Relative path of the file to edit.',
+        },
+        edits: {
+          type: 'array',
+          description: 'List of edits to apply with startLine, endLine, and replacement content.',
+          items: {
+            type: 'object',
+          },
+        },
+      },
+      required: ['path', 'edits'],
+    },
+  },
+  {
+    name: 'get_open_tabs',
+    description: 'Get the list of currently open tabs/files in the editor workspace.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'get_editor_state',
+    description: 'Get detailed active editor state, cursor line/col, active selection, open tabs, and dirty files.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'get_diagnostics',
+    description: 'Inspect compiler errors, TypeScript errors, and editor diagnostics in the workspace.',
     parameters: {
       type: 'object',
       properties: {
@@ -233,6 +289,28 @@ export const CORE_AI_TOOLS: AITool[] = [
           default: 'typescript',
         },
       },
+    },
+  },
+  {
+    name: 'diagnostics',
+    description: 'Alias for get_diagnostics: inspect compiler errors and workspace problems.',
+    parameters: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          description: 'Type of diagnostics to check ("typescript" | "build" | "general").',
+          default: 'typescript',
+        },
+      },
+    },
+  },
+  {
+    name: 'git_branch',
+    description: 'Inspect the current git branch and list of available branches.',
+    parameters: {
+      type: 'object',
+      properties: {},
     },
   },
   {
@@ -249,6 +327,59 @@ export const CORE_AI_TOOLS: AITool[] = [
     parameters: {
       type: 'object',
       properties: {},
+    },
+  },
+  {
+    name: 'inspect_project_context',
+    description: 'Inspect project AI context, conventions, framework details, and architectural guidelines.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'inspect_collaboration_state',
+    description: 'Inspect the real-time collaboration state: active peers, connected collaborators, and which files they are viewing.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'inspect_project_members',
+    description: 'Inspect project members and their role-based access control (RBAC) privileges (owner, editor, visitor).',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'run_typecheck',
+    description: 'Run TypeScript compiler typecheck (npx tsc --noEmit) to validate code correctness and verify zero compiler errors.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'run_build',
+    description: 'Run the project build script (npm run build) to validate that the application compiles without errors.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'run_tests',
+    description: 'Run the project tests (npm test) to validate test suite passing status.',
+    parameters: {
+      type: 'object',
+      properties: {
+        testCommand: {
+          type: 'string',
+          description: 'Optional custom test command (defaults to "npm test").',
+        },
+      },
     },
   },
   {
@@ -270,11 +401,31 @@ export class ToolRegistry {
     }
   }
 
+  private static readonly FAST_CORE_NAMES = new Set([
+    'read_file',
+    'edit_file',
+    'create_file',
+    'list_files',
+    'search_files',
+    'get_file_tree',
+    'run_terminal',
+    'run_typecheck',
+    'get_editor_state',
+    'git_status',
+    'git_diff',
+    'delete_file',
+  ]);
+
   get(name: string): AITool | undefined {
     return this.tools.get(name);
   }
 
-  getAll(): AITool[] {
+  getAll(fastCoreOnly = true): AITool[] {
+    if (fastCoreOnly) {
+      return Array.from(this.tools.values()).filter((t) =>
+        ToolRegistry.FAST_CORE_NAMES.has(t.name)
+      );
+    }
     return Array.from(this.tools.values());
   }
 
