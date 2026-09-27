@@ -649,7 +649,7 @@ export function AIAgentPanel({
                   };
                   break;
                 case 'error':
-                  curr.content += `\n\n> ⚠️ **Error**: ${event.message}`;
+                  curr.content += '\n\n' + '> ⚠️ **Error**: ' + event.message;
                   break;
                 case 'done':
                   if (curr.steps && curr.steps.length > 0) {
@@ -674,7 +674,7 @@ export function AIAgentPanel({
           if (lastIdx >= 0 && copy[lastIdx].id === assistantMessageId) {
             copy[lastIdx] = {
               ...copy[lastIdx],
-              content: copy[lastIdx].content + `\n\n> ⚠️ **Agent Error**: ${err.message}`,
+              content: copy[lastIdx].content + '\n\n' + '> ⚠️ **Agent Error**: ' + err.message,
             };
           }
           return copy;
@@ -1463,8 +1463,9 @@ export function AIAgentPanel({
                 )}
               </div>
             </div>
-          );
-        })}
+          </div>
+        );
+      })}
         <div ref={messagesEndRef} />
       </div>
 
