@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   };
 
   // 2. WebSocket & Collaboration Backend (Port 1234)
-  const wsUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1234';
+  const wsUrl = process.env.NEXT_PUBLIC_API_URL || 'https://codecollab-backend-isjt.onrender.com';
   const wsStart = Date.now();
   try {
     const controller = new AbortController();
