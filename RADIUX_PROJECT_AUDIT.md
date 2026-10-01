@@ -1,10 +1,10 @@
-# RADIUX â€” PROJECT-WIDE ENGINEERING AUDIT REPORT
+# RADIUX — PROJECT-WIDE ENGINEERING AUDIT REPORT
 
 **Date:** September 2026  
 **Auditor:** Antigravity Autonomous Engineering Agent  
 **Branch:** `main`  
 **Repository:** Radiux Core IDE  
-**Status:** Complete â€” All 24 Audit Items Resolved & Verified (`npm run build` passing)
+**Status:** Complete — All 24 Audit Items Resolved & Verified (`npm run build` passing)
 
 ---
 

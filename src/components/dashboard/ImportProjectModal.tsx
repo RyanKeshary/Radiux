@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useRef } from 'react';
 import { 
@@ -263,7 +263,7 @@ export function ImportProjectModal({
                   <div>
                     <span className="text-xs font-semibold text-white block">{selectedFile.name}</span>
                     <span className="text-[11px] text-neutral-400">
-                      {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB â€¢ Click to change
+                      {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • Click to change
                     </span>
                   </div>
                 ) : (
@@ -301,7 +301,7 @@ export function ImportProjectModal({
                 {selectedFolderFiles ? (
                   <div>
                     <span className="text-xs font-semibold text-white block">{folderCount} files selected</span>
-                    <span className="text-[11px] text-neutral-400">Ready to recreate project structure â€¢ Click to reselect</span>
+                    <span className="text-[11px] text-neutral-400">Ready to recreate project structure • Click to reselect</span>
                   </div>
                 ) : (
                   <div>

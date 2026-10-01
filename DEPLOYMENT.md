@@ -1,4 +1,4 @@
-﻿# CodeCollab â€” Production Deployment Guide
+# CodeCollab — Production Deployment Guide
 
 This document describes the production deployment architecture and step-by-step setup for CodeCollab.
 
@@ -8,37 +8,37 @@ This document describes the production deployment architecture and step-by-step 
 
 ```text
                          INTERNET
-                            â”‚
-                            â–¼
-                  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                  â”‚      Vercel        â”‚
-                  â”‚   Next.js Frontend â”‚
-                  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                            â”‚
+                            │
+                            ▼
+                  ┌────────────────────┐
+                  │      Vercel        │
+                  │   Next.js Frontend │
+                  └─────────┬──────────┘
+                            │
                      HTTPS / WSS
-                            â”‚
-                            â–¼
-                  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                  â”‚       Render       â”‚
-                  â”‚   Node Backend     â”‚
-                  â”‚                    â”‚
-                  â”‚ WebSockets         â”‚
-                  â”‚ Terminal / PTY     â”‚
-                  â”‚ Git                â”‚
-                  â”‚ Workspace          â”‚
-                  â”‚ Dev Server Proxy   â”‚
-                  â”‚ REST API           â”‚
-                  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                            â”‚
-                            â–¼
-                  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                  â”‚     Supabase       â”‚
-                  â”‚                    â”‚
-                  â”‚ Auth               â”‚
-                  â”‚ PostgreSQL         â”‚
-                  â”‚ Storage            â”‚
-                  â”‚ Realtime           â”‚
-                  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                            │
+                            ▼
+                  ┌────────────────────┐
+                  │       Render       │
+                  │   Node Backend     │
+                  │                    │
+                  │ WebSockets         │
+                  │ Terminal / PTY     │
+                  │ Git                │
+                  │ Workspace          │
+                  │ Dev Server Proxy   │
+                  │ REST API           │
+                  └─────────┬──────────┘
+                            │
+                            ▼
+                  ┌────────────────────┐
+                  │     Supabase       │
+                  │                    │
+                  │ Auth               │
+                  │ PostgreSQL         │
+                  │ Storage            │
+                  │ Realtime           │
+                  └────────────────────┘
 ```
 
 ### Hosting Roles & Responsibilities

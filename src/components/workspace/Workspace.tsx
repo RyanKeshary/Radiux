@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
@@ -1085,8 +1085,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
       const isFolder = fileToDelete?.is_folder;
 
       const confirmMessage = isFolder
-        ? `Are you sure you want to permanently delete the folder "${itemName}" and all of its contents?\n\nâš ï¸ Warning: This action cannot be undone.`
-        : `Are you sure you want to permanently delete "${itemName}"?\n\nâš ï¸ Warning: This action cannot be undone.`;
+        ? `Are you sure you want to permanently delete the folder "${itemName}" and all of its contents?\n\n⚠ï¸ Warning: This action cannot be undone.`
+        : `Are you sure you want to permanently delete "${itemName}"?\n\n⚠ï¸ Warning: This action cannot be undone.`;
 
       if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
         return;
@@ -1632,7 +1632,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
         color: 'var(--ide-text)',
       }}
     >
-      {/* 1. Top IDE App Header â€” clean, minimal, premium */}
+      {/* 1. Top IDE App Header — clean, minimal, premium */}
       <header 
         className="h-10 border-b flex items-center justify-between px-3 text-xs flex-shrink-0 z-30 select-none"
         style={{

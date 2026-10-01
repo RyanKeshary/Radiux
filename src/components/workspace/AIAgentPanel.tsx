@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -130,7 +130,7 @@ export function AIAgentPanel({
     const now = Date.now();
     const firstUser = messages.find(m => m.role === 'user');
     const title = firstUser
-      ? firstUser.content.slice(0, 48) + (firstUser.content.length > 48 ? 'â€¦' : '')
+      ? firstUser.content.slice(0, 48) + (firstUser.content.length > 48 ? '…' : '')
       : 'New Chat';
     setSessions(prev => {
       const existing = prev.find(s => s.id === currentSessionId);
@@ -649,7 +649,7 @@ export function AIAgentPanel({
                   };
                   break;
                 case 'error':
-                  curr.content += '\n\n' + '> âš ï¸ **Error**: ' + event.message;
+                  curr.content += '\n\n' + '> ⚠ï¸ **Error**: ' + event.message;
                   break;
                 case 'done':
                   if (curr.steps && curr.steps.length > 0) {
@@ -674,7 +674,7 @@ export function AIAgentPanel({
           if (lastIdx >= 0 && copy[lastIdx].id === assistantMessageId) {
             copy[lastIdx] = {
               ...copy[lastIdx],
-              content: copy[lastIdx].content + '\n\n' + '> âš ï¸ **Agent Error**: ' + err.message,
+              content: copy[lastIdx].content + '\n\n' + '> ⚠ï¸ **Agent Error**: ' + err.message,
             };
           }
           return copy;
@@ -1110,7 +1110,7 @@ export function AIAgentPanel({
                 }`}
                 style={m.role === 'user' ? { background: 'linear-gradient(135deg, #0284c7 0%, #4f46e5 100%)' } : {}}
               >
-                {/* Empty generating bubble â†’ animated dots */}
+                {/* Empty generating bubble → animated dots */}
                 {m.role === 'assistant' && !m.content && isGenerating ? (
                   <span className="flex items-center gap-1 h-4">
                     <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -1177,7 +1177,7 @@ export function AIAgentPanel({
                       )}
                       {m.task.files_modified && m.task.files_modified.length > 0 && (
                         <span className="px-2 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20 font-mono">
-                          âœï¸ {m.task.files_modified.length} modified
+                          ✏ï¸ {m.task.files_modified.length} modified
                         </span>
                       )}
                       {m.task.commands_run && m.task.commands_run.length > 0 && (
@@ -1555,7 +1555,7 @@ export function AIAgentPanel({
             className="w-full bg-transparent text-xs text-neutral-200 placeholder-neutral-600 outline-none resize-none leading-relaxed"
           />
           <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/[0.06]">
-            <span className="text-[9px] text-neutral-600 font-mono">â†µ send Â· â‡§â†µ newline</span>
+            <span className="text-[9px] text-neutral-600 font-mono">↵ send Â· ⇧↵ newline</span>
             {isGenerating ? (
               <button
                 onClick={handleStop}
