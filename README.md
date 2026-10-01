@@ -1,4 +1,4 @@
-<p align="center">
+﻿<p align="center">
   <img src="public/logo.png" alt="Radiux Logo" width="120" height="120" />
 </p>
 
@@ -9,17 +9,17 @@
 </p>
 
 <p align="center">
-  A browser-based IDE with real-time collaboration, a native terminal, Git integration, and an autonomous AI coding agent — all in one workspace.
+  A browser-based IDE with real-time collaboration, a native terminal, Git integration, and an autonomous AI coding agent â€” all in one workspace.
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="#zodiac-ai">Zodiac AI</a> ·
-  <a href="#api-reference">API</a> ·
-  <a href="#development">Development</a> ·
-  <a href="#deployment">Deployment</a> ·
+  <a href="#quick-start">Quick Start</a> Â·
+  <a href="#features">Features</a> Â·
+  <a href="#architecture">Architecture</a> Â·
+  <a href="#zodiac-ai">Zodiac AI</a> Â·
+  <a href="#api-reference">API</a> Â·
+  <a href="#development">Development</a> Â·
+  <a href="#deployment">Deployment</a> Â·
   <a href="#roadmap">Roadmap</a>
 </p>
 
@@ -97,17 +97,17 @@
 
 ### One-Sentence Explanation
 
-Radiux is a cloud and local developer workspace platform that runs a complete development experience — editing, terminal, Git, collaboration, and AI assistance — directly inside web browsers.
+Radiux is a cloud and local developer workspace platform that runs a complete development experience â€” editing, terminal, Git, collaboration, and AI assistance â€” directly inside web browsers.
 
 ### Detailed Explanation
 
 Radiux eliminates the friction of local environment configuration, screen-sharing collaboration, and disconnected AI tooling by providing:
 
-- **A real code editor** — Monaco (the editor that powers VS Code) with syntax highlighting for 35+ languages, 8 curated themes, multi-tab editing, breadcrumbs, diagnostics, and minimap
-- **A real terminal** — OS-level pseudo-terminal sessions via `node-pty`, supporting PowerShell, CMD, Git Bash, WSL, Bash, and Zsh with multi-session tabs
-- **Real-time collaboration** — Yjs CRDT-based shared editing with live remote cursors, selections, and awareness indicators
-- **Full Git workflow** — Stage, commit, branch, merge, diff, push, and pull through a native `git` CLI integration
-- **An autonomous AI agent** — "Zodiac" inspects your codebase, proposes surgical edits, runs terminal commands, validates changes through typecheck/build/test loops, and iterates until completion
+- **A real code editor** â€” Monaco (the editor that powers VS Code) with syntax highlighting for 35+ languages, 8 curated themes, multi-tab editing, breadcrumbs, diagnostics, and minimap
+- **A real terminal** â€” OS-level pseudo-terminal sessions via `node-pty`, supporting PowerShell, CMD, Git Bash, WSL, Bash, and Zsh with multi-session tabs
+- **Real-time collaboration** â€” Yjs CRDT-based shared editing with live remote cursors, selections, and awareness indicators
+- **Full Git workflow** â€” Stage, commit, branch, merge, diff, push, and pull through a native `git` CLI integration
+- **An autonomous AI agent** â€” "Zodiac" inspects your codebase, proposes surgical edits, runs terminal commands, validates changes through typecheck/build/test loops, and iterates until completion
 
 ### Who Radiux Is For
 
@@ -126,21 +126,21 @@ Modern development workflows suffer from several persistent friction points:
 
 | Problem | Impact |
 | :--- | :--- |
-| **Fragmented workflows** | Developers switch between editor, terminal, Git client, chat tools, and AI assistants — often across multiple applications and windows |
-| **Local-only development** | "Works on my machine" — environment inconsistencies, dependency conflicts, and setup overhead slow down onboarding and collaboration |
+| **Fragmented workflows** | Developers switch between editor, terminal, Git client, chat tools, and AI assistants â€” often across multiple applications and windows |
+| **Local-only development** | "Works on my machine" â€” environment inconsistencies, dependency conflicts, and setup overhead slow down onboarding and collaboration |
 | **Collaboration friction** | Screen sharing is laggy and read-only; traditional version control creates merge conflicts and serializes work |
-| **Disconnected AI tooling** | AI chatbots generate code snippets that must be manually copied into files, tested, and iterated — breaking flow and context |
+| **Disconnected AI tooling** | AI chatbots generate code snippets that must be manually copied into files, tested, and iterated â€” breaking flow and context |
 | **Terminal/editor separation** | Running commands requires context-switching to a separate terminal application |
 | **Git workflow friction** | Staging, committing, branching, and reviewing requires leaving the editor or learning complex CLI commands |
 
 ### How Radiux Addresses These
 
-- **Unified workspace** — Editor, terminal, Git, chat, and AI coexist in a single browser tab with shared context
-- **Zero-setup cloud workspaces** — Create a project and start coding immediately; the terminal and filesystem are ready
-- **Real-time collaboration** — Multiple developers edit the same files simultaneously with zero merge conflicts (Yjs CRDT)
-- **AI-native workflow** — Zodiac operates directly on your codebase, proposes diffs you can review, and validates its own changes
-- **Integrated terminal** — A real shell runs alongside your editor, with automatic port detection for previewing running applications
-- **Visual Git** — Stage, commit, branch, and review diffs without leaving the IDE
+- **Unified workspace** â€” Editor, terminal, Git, chat, and AI coexist in a single browser tab with shared context
+- **Zero-setup cloud workspaces** â€” Create a project and start coding immediately; the terminal and filesystem are ready
+- **Real-time collaboration** â€” Multiple developers edit the same files simultaneously with zero merge conflicts (Yjs CRDT)
+- **AI-native workflow** â€” Zodiac operates directly on your codebase, proposes diffs you can review, and validates its own changes
+- **Integrated terminal** â€” A real shell runs alongside your editor, with automatic port detection for previewing running applications
+- **Visual Git** â€” Stage, commit, branch, and review diffs without leaving the IDE
 
 ---
 
@@ -148,14 +148,14 @@ Modern development workflows suffer from several persistent friction points:
 
 Radiux is built on these design principles:
 
-- **IDE-first** — The code editor is the centerpiece; everything else supports the editing experience
-- **Collaboration-first** — Real-time multi-user editing is not an add-on; it's the foundation
-- **AI-native** — Zodiac is not a chat bubble bolted onto the side; it's an integrated agent that operates on your workspace with full context
-- **Browser-based** — No local installation required; the entire experience runs in a browser tab
-- **Developer-focused** — Every feature is designed for professional developers who need power and precision
-- **Permission-aware** — RBAC governs every action, from file edits to AI tool execution
-- **Real-time** — All state changes propagate instantly to all connected clients
-- **Transparent automation** — AI actions are visible, reviewable, and revocable; nothing happens silently
+- **IDE-first** â€” The code editor is the centerpiece; everything else supports the editing experience
+- **Collaboration-first** â€” Real-time multi-user editing is not an add-on; it's the foundation
+- **AI-native** â€” Zodiac is not a chat bubble bolted onto the side; it's an integrated agent that operates on your workspace with full context
+- **Browser-based** â€” No local installation required; the entire experience runs in a browser tab
+- **Developer-focused** â€” Every feature is designed for professional developers who need power and precision
+- **Permission-aware** â€” RBAC governs every action, from file edits to AI tool execution
+- **Real-time** â€” All state changes propagate instantly to all connected clients
+- **Transparent automation** â€” AI actions are visible, reviewable, and revocable; nothing happens silently
 
 ---
 
@@ -163,35 +163,35 @@ Radiux is built on these design principles:
 
 | Feature | Status | Description |
 | :--- | :---: | :--- |
-| **Monaco Editor** | ✅ Implemented | Multi-tab editing, 8 themes, 35+ language support, minimap, breadcrumbs, diagnostics |
-| **Real-time Collaboration** | ✅ Implemented | Yjs CRDT shared editing with live remote cursors and selections |
-| **Terminal** | ✅ Implemented | OS-level PTY via node-pty, multi-session, shell auto-detection |
-| **Shell Detection** | ✅ Implemented | PowerShell 7, Windows PowerShell, CMD, Git Bash, WSL, Bash, Zsh |
-| **Git Integration** | ✅ Implemented | Stage, commit, branch, merge, diff, push, pull via native git CLI |
-| **GitHub Integration** | ✅ Implemented | Import from GitHub repos, push/pull via personal access tokens |
-| **Authentication** | ✅ Implemented | Email/Password, Google OAuth, GitHub OAuth (PKCE) |
-| **User Profiles** | ✅ Implemented | Public profiles, bio, skills, contribution graph, pinned projects |
-| **Project Chat** | ✅ Implemented | Real-time messaging with media uploads and reactions |
-| **WebRTC Voice** | ✅ Implemented | Peer-to-peer voice with mute controls (requires TURN for strict NATs) |
-| **Notifications** | ✅ Implemented | Bell indicator, slide-in drawer, WebSocket + polling delivery |
-| **Inline Comments** | ✅ Implemented | Line-level code review comments synced over WebSocket |
-| **Code Review / PRs** | ✅ Implemented | Review request workflow with accept/decline actions |
-| **Zodiac AI Agent** | ✅ Implemented | 29 tools, 3 permission modes, SSE streaming, validation loop |
-| **AI Diff Proposals** | ✅ Implemented | Structured hunks with accept/reject in Monaco diff viewer |
-| **Admin Console** | ✅ Implemented | User management, AI analytics, system health, audit logs |
-| **Analytics** | ✅ Implemented | Event tracking, performance monitoring, AI usage metrics |
-| **Dev Server Preview** | ✅ Implemented | Automatic port detection with reverse proxy preview |
-| **File Explorer** | ✅ Implemented | Tree view, context menu, file icons, drag-and-drop |
-| **Command Palette** | ✅ Implemented | Ctrl+Shift+P quick command execution |
-| **Quick Open** | ✅ Implemented | Ctrl+P file search and open |
-| **Global Search** | ✅ Implemented | Cross-project file content search |
-| **Keyboard Shortcuts** | ✅ Implemented | Full VS Code shortcut parity with customization |
-| **Settings** | ✅ Implemented | Editor preferences, themes, keybindings, sound toggle |
-| **Public Project Showcase** | ✅ Implemented | Read-only public project pages with README rendering |
-| **Dashboard** | ✅ Implemented | Project listing, quick starters, ZIP/GitHub import |
-| **Extensions Panel** | 🔶 Partial | Visual marketplace showcase; extensions do not execute arbitrary code |
-| **Container Sandbox** | ❌ Not Implemented | Terminal runs on host OS; no Docker/microVM isolation |
-| **Automated Tests** | 🔶 Partial | Manual verification scripts only; no unit/integration test suite |
+| **Monaco Editor** | âœ… Implemented | Multi-tab editing, 8 themes, 35+ language support, minimap, breadcrumbs, diagnostics |
+| **Real-time Collaboration** | âœ… Implemented | Yjs CRDT shared editing with live remote cursors and selections |
+| **Terminal** | âœ… Implemented | OS-level PTY via node-pty, multi-session, shell auto-detection |
+| **Shell Detection** | âœ… Implemented | PowerShell 7, Windows PowerShell, CMD, Git Bash, WSL, Bash, Zsh |
+| **Git Integration** | âœ… Implemented | Stage, commit, branch, merge, diff, push, pull via native git CLI |
+| **GitHub Integration** | âœ… Implemented | Import from GitHub repos, push/pull via personal access tokens |
+| **Authentication** | âœ… Implemented | Email/Password, Google OAuth, GitHub OAuth (PKCE) |
+| **User Profiles** | âœ… Implemented | Public profiles, bio, skills, contribution graph, pinned projects |
+| **Project Chat** | âœ… Implemented | Real-time messaging with media uploads and reactions |
+| **WebRTC Voice** | âœ… Implemented | Peer-to-peer voice with mute controls (requires TURN for strict NATs) |
+| **Notifications** | âœ… Implemented | Bell indicator, slide-in drawer, WebSocket + polling delivery |
+| **Inline Comments** | âœ… Implemented | Line-level code review comments synced over WebSocket |
+| **Code Review / PRs** | âœ… Implemented | Review request workflow with accept/decline actions |
+| **Zodiac AI Agent** | âœ… Implemented | 29 tools, 3 permission modes, SSE streaming, validation loop |
+| **AI Diff Proposals** | âœ… Implemented | Structured hunks with accept/reject in Monaco diff viewer |
+| **Admin Console** | âœ… Implemented | User management, AI analytics, system health, audit logs |
+| **Analytics** | âœ… Implemented | Event tracking, performance monitoring, AI usage metrics |
+| **Dev Server Preview** | âœ… Implemented | Automatic port detection with reverse proxy preview |
+| **File Explorer** | âœ… Implemented | Tree view, context menu, file icons, drag-and-drop |
+| **Command Palette** | âœ… Implemented | Ctrl+Shift+P quick command execution |
+| **Quick Open** | âœ… Implemented | Ctrl+P file search and open |
+| **Global Search** | âœ… Implemented | Cross-project file content search |
+| **Keyboard Shortcuts** | âœ… Implemented | Full VS Code shortcut parity with customization |
+| **Settings** | âœ… Implemented | Editor preferences, themes, keybindings, sound toggle |
+| **Public Project Showcase** | âœ… Implemented | Read-only public project pages with README rendering |
+| **Dashboard** | âœ… Implemented | Project listing, quick starters, ZIP/GitHub import |
+| **Extensions Panel** | ðŸ”¶ Partial | Visual marketplace showcase; extensions do not execute arbitrary code |
+| **Container Sandbox** | âŒ Not Implemented | Terminal runs on host OS; no Docker/microVM isolation |
+| **Automated Tests** | ðŸ”¶ Partial | Manual verification scripts only; no unit/integration test suite |
 
 ---
 
@@ -215,18 +215,18 @@ Radiux is built on these design principles:
 
 <!-- VIDEO PLACEHOLDER: docs/media/videos/demo.mp4
      Recommended demo flow:
-     00:00 — Open Radiux and sign in
-     00:15 — Create a new project from dashboard
-     00:30 — Explore the workspace: file explorer, tabs, themes
-     00:50 — Edit code in Monaco with syntax highlighting
-     01:10 — Open terminal and run a command
-     01:30 — Start a dev server and preview in the browser
-     01:50 — Invite a collaborator and edit together in real time
-     02:15 — Collaborative editing with live cursors
-     02:40 — Stage, commit, and create a branch in Git
-     03:00 — Ask Zodiac to implement a feature
-     03:40 — Zodiac inspects files, proposes a diff, and validates
-     04:00 — Review and accept the AI-proposed changes -->
+     00:00 â€” Open Radiux and sign in
+     00:15 â€” Create a new project from dashboard
+     00:30 â€” Explore the workspace: file explorer, tabs, themes
+     00:50 â€” Edit code in Monaco with syntax highlighting
+     01:10 â€” Open terminal and run a command
+     01:30 â€” Start a dev server and preview in the browser
+     01:50 â€” Invite a collaborator and edit together in real time
+     02:15 â€” Collaborative editing with live cursors
+     02:40 â€” Stage, commit, and create a branch in Git
+     03:00 â€” Ask Zodiac to implement a feature
+     03:40 â€” Zodiac inspects files, proposes a diff, and validates
+     04:00 â€” Review and accept the AI-proposed changes -->
 
 <p align="center">
   <em>Demo video: End-to-end Radiux workflow from project creation to AI-assisted development</em>
@@ -238,19 +238,19 @@ Radiux is built on these design principles:
 
 ### First Visit
 
-1. **Landing / Login** — New users arrive at `/login` with options for Email/Password, Google OAuth, or GitHub OAuth
-2. **Authentication** — After OAuth redirect or email sign-in, the user is redirected to the Dashboard
-3. **Dashboard** — The user sees their project list (empty for new users) with quick-create templates and import options
+1. **Landing / Login** â€” New users arrive at `/login` with options for Email/Password, Google OAuth, or GitHub OAuth
+2. **Authentication** â€” After OAuth redirect or email sign-in, the user is redirected to the Dashboard
+3. **Dashboard** â€” The user sees their project list (empty for new users) with quick-create templates and import options
 
 ### Workspace Experience
 
 Once inside a project workspace (`/project/[id]`), the user encounters:
 
-- **Activity Bar** (far left, 48px) — Switch between Explorer, Source Control, Activity Feed, Extensions, and Collaborators
-- **Sidebar** (260px, collapsible) — Context-sensitive panel for the active activity
-- **Editor Area** — Monaco editor with tab strip and breadcrumbs
-- **Bottom Dock** — Terminal, Output, Problems, Preview, Voice, and Chat tabs
-- **Top Bar** — Project name, branch selector, Run button, Share/Invite, collaborator presence, notifications, user menu
+- **Activity Bar** (far left, 48px) â€” Switch between Explorer, Source Control, Activity Feed, Extensions, and Collaborators
+- **Sidebar** (260px, collapsible) â€” Context-sensitive panel for the active activity
+- **Editor Area** â€” Monaco editor with tab strip and breadcrumbs
+- **Bottom Dock** â€” Terminal, Output, Problems, Preview, Voice, and Chat tabs
+- **Top Bar** â€” Project name, branch selector, Run button, Share/Invite, collaborator presence, notifications, user menu
 
 ### Loading States
 
@@ -262,7 +262,7 @@ Once inside a project workspace (`/project/[id]`), the user encounters:
 ### Empty States
 
 - New projects show a "Create your first file" prompt in the file explorer
-- Empty chat shows "No messages yet — start the conversation"
+- Empty chat shows "No messages yet â€” start the conversation"
 - Empty Git panel shows "No changes" or "Initialize repository" action
 
 ### Permission States
@@ -382,13 +382,13 @@ flowchart TD
 
 ### Code Editor
 
-The editor is built on **Monaco Editor** — the same engine that powers Visual Studio Code. It provides:
+The editor is built on **Monaco Editor** â€” the same engine that powers Visual Studio Code. It provides:
 
 - **Language detection:** Automatic mapping of 35+ file extensions to Monaco language IDs
 - **Autosave:** Debounced (400ms) persistence to both Supabase and local workspace disk
 - **Yjs binding:** Real-time collaborative editing via `y-monaco` with awareness protocol
 - **Custom themes:** 8 hand-crafted themes with distinct visual identities
-- **Editor settings:** Font size (10–28px), font family, tab size (2/4/8), word wrap, minimap toggle, line numbers
+- **Editor settings:** Font size (10â€“28px), font family, tab size (2/4/8), word wrap, minimap toggle, line numbers
 
 ```typescript
 // Language detection example (src/lib/types.ts)
@@ -418,7 +418,7 @@ export function detectLanguage(fileName: string): LanguageType {
 
 ### Terminal
 
-The terminal subsystem is one of Radiux's most distinctive features — it provides a **real OS-level shell** inside the browser.
+The terminal subsystem is one of Radiux's most distinctive features â€” it provides a **real OS-level shell** inside the browser.
 
 **Architecture:**
 
@@ -450,17 +450,17 @@ Git operations are handled by `server/git-manager.mjs` using native `git` CLI ch
 
 | Operation | Status | Details |
 | :--- | :---: | :--- |
-| `git init` | ✅ | Initializes repo with safe author defaults (`Radiux Developer`) |
-| `git status` | ✅ | Staged, unstaged, untracked files |
-| `git add` / `git reset` | ✅ | Stage/unstage individual or all files |
-| `git checkout --` | ✅ | Discard working tree changes |
-| `git commit` | ✅ | Commit with custom author info |
-| `git branch` | ✅ | List, create, delete, switch branches |
-| `git merge` | ✅ | Merge branches |
-| `git log` | ✅ | Commit history |
-| `git diff` | ✅ | Side-by-side Monaco diff inspection |
-| `git remote` | ✅ | Configure GitHub or other remotes |
-| `git push` / `git pull` | ✅ | Authenticated via GitHub Personal Access Tokens |
+| `git init` | âœ… | Initializes repo with safe author defaults (`Radiux Developer`) |
+| `git status` | âœ… | Staged, unstaged, untracked files |
+| `git add` / `git reset` | âœ… | Stage/unstage individual or all files |
+| `git checkout --` | âœ… | Discard working tree changes |
+| `git commit` | âœ… | Commit with custom author info |
+| `git branch` | âœ… | List, create, delete, switch branches |
+| `git merge` | âœ… | Merge branches |
+| `git log` | âœ… | Commit history |
+| `git diff` | âœ… | Side-by-side Monaco diff inspection |
+| `git remote` | âœ… | Configure GitHub or other remotes |
+| `git push` / `git pull` | âœ… | Authenticated via GitHub Personal Access Tokens |
 
 The Git panel (`GitPanel.tsx`) provides a VS Code-style source control interface with one-click stage/unstage, commit message input, and branch switching.
 
@@ -477,7 +477,7 @@ The Git panel (`GitPanel.tsx`) provides a VS Code-style source control interface
 
 **Room naming:** `project-${projectId}-file-${file.id}`
 
-**Conflict resolution:** Yjs uses Conflict-free Replicated Data Types (CRDTs), so concurrent edits to the same document never produce merge conflicts — the data structure guarantees consistency.
+**Conflict resolution:** Yjs uses Conflict-free Replicated Data Types (CRDTs), so concurrent edits to the same document never produce merge conflicts â€” the data structure guarantees consistency.
 
 <!-- SCREENSHOT PLACEHOLDER: docs/media/screenshots/collaboration.png -->
 
@@ -538,7 +538,7 @@ The Git panel (`GitPanel.tsx`) provides a VS Code-style source control interface
 
 ## Zodiac AI Agent
 
-**Zodiac** is Radiux's native AI coding agent — not a chatbot, but an autonomous, multi-step agent that operates directly on your workspace.
+**Zodiac** is Radiux's native AI coding agent â€” not a chatbot, but an autonomous, multi-step agent that operates directly on your workspace.
 
 ### Zodiac Architecture
 
@@ -679,7 +679,7 @@ RUN AGAIN (Verify exit code === 0)
 SUCCESS / COMPLETION
 ```
 
-This validation loop differentiates Zodiac from a simple code-generation chatbot — it verifies its own work and iterates until the task is complete.
+This validation loop differentiates Zodiac from a simple code-generation chatbot â€” it verifies its own work and iterates until the task is complete.
 
 ### Project Memory
 
@@ -696,8 +696,8 @@ Zodiac supports an editable **Project Memory** system:
 
 Radiux uses a **dual-layer filesystem model**:
 
-1. **Database layer** — Every project, folder, and file is tracked in Supabase PostgreSQL with UUIDs, timestamps, and permissions
-2. **Host filesystem** — The backend Node server mirrors project files on the physical disk at `.workspaces/<projectId>/`
+1. **Database layer** â€” Every project, folder, and file is tracked in Supabase PostgreSQL with UUIDs, timestamps, and permissions
+2. **Host filesystem** â€” The backend Node server mirrors project files on the physical disk at `.workspaces/<projectId>/`
 
 When a user opens a workspace:
 1. `WorkspaceManager.getWorkspaceDir(projectId)` ensures the directory exists
@@ -766,15 +766,15 @@ Radiux enforces a strict role-based access control system at both the UI and ser
 
 | Capability | Owner | Editor | Visitor |
 | :--- | :---: | :---: | :---: |
-| View project | ✅ | ✅ | ✅ |
-| Edit files | ✅ | ✅ | ❌ |
-| Terminal access | ✅ | ✅ | ❌ |
-| Git read (status, diff, log) | ✅ | ✅ | ✅ |
-| Git write (commit, branch) | ✅ | ✅ | ❌ |
-| AI read tools | ✅ | ✅ | ✅ |
-| AI write tools | ✅ | ✅ | ❌ |
-| Manage members | ✅ | ❌ | ❌ |
-| Delete project | ✅ | ❌ | ❌ |
+| View project | âœ… | âœ… | âœ… |
+| Edit files | âœ… | âœ… | âŒ |
+| Terminal access | âœ… | âœ… | âŒ |
+| Git read (status, diff, log) | âœ… | âœ… | âœ… |
+| Git write (commit, branch) | âœ… | âœ… | âŒ |
+| AI read tools | âœ… | âœ… | âœ… |
+| AI write tools | âœ… | âœ… | âŒ |
+| Manage members | âœ… | âŒ | âŒ |
+| Delete project | âœ… | âŒ | âŒ |
 
 > [!WARNING]
 > This table is enforced on **both** layers: by Supabase RLS on the database, and by
@@ -789,7 +789,7 @@ Radiux enforces a strict role-based access control system at both the UI and ser
 
 ### Enforcement Points
 
-- **Supabase RLS:** Row Level Security policies on all tables — this is the authoritative
+- **Supabase RLS:** Row Level Security policies on all tables â€” this is the authoritative
   authorization layer for all database access.
 - **Next.js API routes:** `/api/ai/agent` resolves the caller's role by querying
   `project_members`/`projects` with the verified Supabase user, and rejects
@@ -1021,8 +1021,8 @@ AgentExecutionLoop.run()
 | `GET` | `/api/admin/chat` | Chat moderation | Admin |
 | `GET` | `/api/admin/session` | Active sessions | Admin |
 | `GET` | `/api/admin/settings` | AI settings | Admin |
-| `POST` | `/api/admin/login` | Admin authentication | — |
-| `POST` | `/api/admin/auth` | Verify admin token | — |
+| `POST` | `/api/admin/login` | Admin authentication | â€” |
+| `POST` | `/api/admin/auth` | Verify admin token | â€” |
 | `POST` | `/api/admin/admins` | Manage admins | Admin |
 
 ### Reports
@@ -1042,7 +1042,7 @@ Verified against `server/websocket.mjs` route handlers.
 | `GET` | `/api/terminal/sessions` | List active PTY sessions | None |
 | `POST` | `/api/sync-file` | Sync file to disk | None |
 | `POST` | `/api/sync-project` | Sync entire project | None |
-| `POST` | `/api/workspace/exec` | Execute workspace command | **Client-declared role only** — see [Security](#security) |
+| `POST` | `/api/workspace/exec` | Execute workspace command | **Client-declared role only** â€” see [Security](#security) |
 | `GET` | `/api/check-port` | Probe a local port for the preview panel | None |
 | `GET/POST` | `/api/git/*` | Git operations | **Client-declared role only** |
 | `GET` | `/api/workspace/files` | List workspace files | None |
@@ -1132,9 +1132,9 @@ const isSensitive = /SUPABASE|GROQ|SECRET|KEY|TOKEN|PASSWORD|DATABASE|CREDENTIAL
 
 ### Secret Handling
 
-- `GROQ_API_KEY` — strictly server-side, never exposed to client
-- `SUPABASE_SERVICE_ROLE_KEY` — strictly server-side
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — public by design (secured via RLS)
+- `GROQ_API_KEY` â€” strictly server-side, never exposed to client
+- `SUPABASE_SERVICE_ROLE_KEY` â€” strictly server-side
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` â€” public by design (secured via RLS)
 
 ### CORS
 
@@ -1147,15 +1147,15 @@ Every request to the companion server (`server/`) is authorized by `server/authz
 
 1. **Extract** the JWT from `Authorization: Bearer <token>` (or a `token` query parameter for WebSocket upgrades, which cannot set headers).
 2. **Verify** the JWT against Supabase Auth using the service-role client.
-3. **Resolve** the caller's effective role from the database — `projects.owner_id` → `owner`, otherwise `project_members.role`.
+3. **Resolve** the caller's effective role from the database â€” `projects.owner_id` â†’ `owner`, otherwise `project_members.role`.
 4. **Compare** against the capability the route requires.
 
 | Role | Read (`status`, `log`, `diff`, chat, Yjs sync) | Write (`exec`, Git mutations, PTY shell) |
 | :--- | :---: | :---: |
-| `owner` | ✅ | ✅ |
-| `editor` | ✅ | ✅ |
-| `visitor` | ✅ | ❌ `403` |
-| non-member | ❌ `403` | ❌ `403` |
+| `owner` | âœ… | âœ… |
+| `editor` | âœ… | âœ… |
+| `visitor` | âœ… | âŒ `403` |
+| non-member | âŒ `403` | âŒ `403` |
 
 **Client-supplied `userRole` / `role` values are ignored entirely.** Roles are never read from the request.
 
@@ -1177,7 +1177,7 @@ Verified empirically against a running backend, both before and after the author
 | **Path traversal** | Mitigated | `../../../../etc` and URL-encoded traversal in `projectId` are rejected with `400`. |
 | **No TURN server** | Low | WebRTC uses public STUN only; symmetric NATs fail without a TURN relay. |
 | **Dual persistence** | Low | Comments and DMs persist to local JSON rather than Supabase tables. |
-| **Vulnerable `next@14.2.15`** | High | **Open.** Includes unauthenticated RCE on Windows hosts (GHSA-p293-qw3h-jr36). Requires a Next.js major upgrade — see [Limitations](#limitations). |
+| **Vulnerable `next@14.2.15`** | Critical | **Fixed.** Upgraded to `next@16.3.8` + React 19, which clears GHSA-p293-qw3h-jr36 (unauthenticated RCE on Windows hosts) and every other advisory. `npm audit` now reports **0 vulnerabilities** for both production and development dependencies. |
 
 > [!IMPORTANT]
 > With `authorizeProject()` in place the backend is no longer trivially exploitable, but
@@ -1347,24 +1347,24 @@ web ide/
 
 | Layer | Technology | Version |
 | :--- | :--- | :--- |
-| **Frontend Framework** | Next.js | 14.2.15 |
-| **UI Library** | React | 18.3.1 |
+| **Frontend Framework** | Next.js | 16.3.8 |
+| **UI Library** | React | 19.3.0 |
 | **Language** | TypeScript | 5.x |
 | **Code Editor** | Monaco Editor | 0.51.0 |
 | **Terminal Emulator** | XTerm.js | 6.0.0 |
 | **Collaboration** | Yjs + y-websocket + y-monaco | 13.6.x |
 | **Styling** | Tailwind CSS | 3.4.1 |
 | **Icons** | Lucide React | 0.447.0 |
-| **Backend Runtime** | Node.js (ES Modules) | — |
+| **Backend Runtime** | Node.js (ES Modules) | â€” |
 | **WebSocket** | ws | 8.18.0 |
 | **Pseudo-Terminal** | node-pty | 1.1.0 |
 | **Database** | Supabase PostgreSQL | 15 |
-| **Authentication** | Supabase Auth (GoTrue) | — |
-| **AI Provider** | Groq API | — |
-| **AI Model** | llama-3.3-70b-versatile | — |
+| **Authentication** | Supabase Auth (GoTrue) | â€” |
+| **AI Provider** | Groq API | â€” |
+| **AI Model** | llama-3.3-70b-versatile | â€” |
 | **File Archiving** | JSZip | 3.10.2 |
-| **Deployment (Frontend)** | Vercel | — |
-| **Deployment (Backend)** | Render | — |
+| **Deployment (Frontend)** | Vercel | â€” |
+| **Deployment (Backend)** | Render | â€” |
 
 ---
 
@@ -1518,15 +1518,15 @@ npm run lint
 | **Unit + Integration** | Vitest 2.1.9 | `vitest.config.mts` | `npm test` |
 | **Coverage** | `@vitest/coverage-v8` (v8 provider) | `vitest.config.mts` | `npm run test:coverage` |
 | **E2E** | Playwright 1.63 | `playwright.config.ts` | `npm run test:e2e` |
-| **Component** | Testing Library + jsdom | `src/__tests__/setup.ts` | — |
+| **Component** | Testing Library + jsdom | `src/__tests__/setup.ts` | â€” |
 
 ### Test Suite Inventory (14 files, 256 tests)
 
 | Area | Files | Tests |
 | :--- | :---: | :---: |
-| **Unit** — `cache-utils`, `config`, `themes`, `types`, `useDebounce`, `smoke` | 6 | 67 |
-| **Component** — `AuthModal`, `FileIcon`, `FileTree`, `OpenTabs`, `UserMenu` | 5 | 109 |
-| **Integration (server)** — `git-manager`, `websocket-server`, `workspace-manager` | 3 | 80 |
+| **Unit** â€” `cache-utils`, `config`, `themes`, `types`, `useDebounce`, `smoke` | 6 | 67 |
+| **Component** â€” `AuthModal`, `FileIcon`, `FileTree`, `OpenTabs`, `UserMenu` | 5 | 109 |
+| **Integration (server)** â€” `git-manager`, `websocket-server`, `workspace-manager` | 3 | 80 |
 | **Total** | **14** | **256** |
 
 ### Current Results
@@ -1540,8 +1540,8 @@ Measured on Windows / Node v24.19.0:
 | Statement coverage (`src/**`) | **4.21%** (1651 / 39125) |
 | Branch coverage | **66.13%** (293 / 443) |
 | Function coverage | **27.83%** (59 / 212) |
-| `tsc --noEmit` — app source | **0 errors** |
-| `tsc --noEmit` — test files | **419 errors** (test-runner globals untyped) |
+| `tsc --noEmit` â€” app source | **0 errors** |
+| `tsc --noEmit` â€” test files | **419 errors** (test-runner globals untyped) |
 | `next build` | **passes** (exit 0) |
 
 > [!NOTE]
@@ -1552,17 +1552,17 @@ Measured on Windows / Node v24.19.0:
 
 ### Known Test Defects
 
-- **`tsconfig.json` omits test-runner types** — `describe`/`it`/`expect`/`vi` are
+- **`tsconfig.json` omits test-runner types** â€” `describe`/`it`/`expect`/`vi` are
   untyped, producing 419 type errors. Add `"types": ["vitest/globals"]`.
-- **`npm run lint` cannot run non-interactively** — no `.eslintrc*` exists and
+- **`npm run lint` cannot run non-interactively** â€” no `.eslintrc*` exists and
   `eslint` is not installed, so `next lint` drops into its interactive setup prompt.
 - **`npm run test:coverage` requires `@vitest/coverage-v8`**, pinned to the vitest
   major version (install `@vitest/coverage-v8@2.1.9`, not `@5`).
 - **11 failing assertions:**
-  - `AuthModal` (3) — validation-message assertions do not match rendered output.
-  - `FileTree` (3) — `window.confirm` not stubbed; rename/active-class expectations unmet.
-  - `OpenTabs` (1) — `getByTitle('Close (Ctrl+W)')` is ambiguous with multiple tabs.
-  - `workspace-manager` (4) — `node-pty` is not mocked, so a real `cmd.exe` spawn is attempted.
+  - `AuthModal` (3) â€” validation-message assertions do not match rendered output.
+  - `FileTree` (3) â€” `window.confirm` not stubbed; rename/active-class expectations unmet.
+  - `OpenTabs` (1) â€” `getByTitle('Close (Ctrl+W)')` is ambiguous with multiple tabs.
+  - `workspace-manager` (4) â€” `node-pty` is not mocked, so a real `cmd.exe` spawn is attempted.
 - **`e2e/auth.spec.ts`** passes `ignoreCase` to `toHaveText`, which Playwright does not support.
 
 ### Manual Verification Scripts
@@ -1608,7 +1608,7 @@ flowchart LR
 
 ### Frontend (Vercel)
 
-1. Push to GitHub — Vercel auto-deploys on push
+1. Push to GitHub â€” Vercel auto-deploys on push
 2. Set environment variables in Vercel Project Settings:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -1693,11 +1693,11 @@ GET /health
 
 ### What Users Might See
 
-1. **Blank workspace** — Supabase unreachable; system falls back to local storage
-2. **Terminal shows "disconnected"** — Backend WebSocket not running or wrong `NEXT_PUBLIC_WS_URL`
-3. **AI panel shows "API key required"** — `GROQ_API_KEY` not configured on backend
-4. **Collaborator cursors not visible** — Yjs WebSocket connection failed; check browser console
-5. **"Unauthorized" on file edit** — User has Visitor role; RBAC correctly blocking
+1. **Blank workspace** â€” Supabase unreachable; system falls back to local storage
+2. **Terminal shows "disconnected"** â€” Backend WebSocket not running or wrong `NEXT_PUBLIC_WS_URL`
+3. **AI panel shows "API key required"** â€” `GROQ_API_KEY` not configured on backend
+4. **Collaborator cursors not visible** â€” Yjs WebSocket connection failed; check browser console
+5. **"Unauthorized" on file edit** â€” User has Visitor role; RBAC correctly blocking
 
 ### How to Diagnose
 
@@ -1712,59 +1712,59 @@ GET /health
 
 ### Implemented
 
-- ✅ Full authentication (Email, Google OAuth, GitHub OAuth)
-- ✅ Monaco Editor with multi-tab, themes, diagnostics
-- ✅ Real-time collaboration (Yjs CRDT, remote cursors)
-- ✅ Terminal (node-pty, multi-session, shell detection)
-- ✅ Git integration (full CLI operations)
-- ✅ Zodiac AI Agent (29 tools, 3 permission modes, validation loop)
-- ✅ Project chat with media uploads
-- ✅ WebRTC voice communication
-- ✅ Notifications system
-- ✅ Admin console
-- ✅ Analytics tracking
-- ✅ User profiles with contribution graph
-- ✅ Inline comments and code review
-- ✅ Dashboard with project management
-- ✅ Settings system
-- ✅ Public project showcase
-- ✅ Dev server preview with reverse proxy
+- âœ… Full authentication (Email, Google OAuth, GitHub OAuth)
+- âœ… Monaco Editor with multi-tab, themes, diagnostics
+- âœ… Real-time collaboration (Yjs CRDT, remote cursors)
+- âœ… Terminal (node-pty, multi-session, shell detection)
+- âœ… Git integration (full CLI operations)
+- âœ… Zodiac AI Agent (29 tools, 3 permission modes, validation loop)
+- âœ… Project chat with media uploads
+- âœ… WebRTC voice communication
+- âœ… Notifications system
+- âœ… Admin console
+- âœ… Analytics tracking
+- âœ… User profiles with contribution graph
+- âœ… Inline comments and code review
+- âœ… Dashboard with project management
+- âœ… Settings system
+- âœ… Public project showcase
+- âœ… Dev server preview with reverse proxy
 
 ### In Active Development
 
-- 🔄 Dual persistence consolidation (Supabase + local JSON -> unified Supabase)
-- 🔄 Extension ecosystem (visual marketplace -> functional extensions)
-- 🔄 Integration connectors (GitHub, Slack, Discord, etc.)
+- ðŸ”„ Dual persistence consolidation (Supabase + local JSON -> unified Supabase)
+- ðŸ”„ Extension ecosystem (visual marketplace -> functional extensions)
+- ðŸ”„ Integration connectors (GitHub, Slack, Discord, etc.)
 
 ### Experimental
 
-- 🧪 Extensions panel (visual showcase only)
-- 🧪 Integrations panel (mockup connectors)
+- ðŸ§ª Extensions panel (visual showcase only)
+- ðŸ§ª Integrations panel (mockup connectors)
 
 ### Planned
 
-- 📋 Container sandboxing for terminal
-- 📋 TURN server for WebRTC
-- 📋 Automated test suite
-- 📋 Progressive Monaco bundle loading
+- ðŸ“‹ Container sandboxing for terminal
+- ðŸ“‹ TURN server for WebRTC
+- ðŸ“‹ Automated test suite
+- ðŸ“‹ Progressive Monaco bundle loading
 
 ### Out of Scope for Current Version
 
-- ❌ Cloud workspace sandboxing (Docker/microVM)
-- ❌ Native mobile applications
-- ❌ Offline-first PWA mode
+- âŒ Cloud workspace sandboxing (Docker/microVM)
+- âŒ Native mobile applications
+- âŒ Offline-first PWA mode
 
 ---
 
 ## Limitations
 
-1. **No container sandboxing** — Terminal processes run directly on the host OS. In untrusted multi-tenant environments, containerization (Docker/microVMs) is recommended before general public access.
-2. **No TURN server** — WebRTC voice uses public Google STUN servers. Restrictive enterprise firewalls or symmetric NATs will fail direct P2P audio without a dedicated TURN relay.
-3. **Dual persistence** — Comments, reviews, and direct messages persist to `.workspaces/data/` JSON files and `StorageMock` rather than dedicated Supabase PostgreSQL tables with foreign key constraints.
-4. **Monaco bundle size** — Monaco Editor represents ~300KB of initial client-side JavaScript that could benefit from progressive route chunking.
-5. **Limited automated tests** — No unit or integration test suite; verification relies on manual scripts.
-6. **AI provider dependency** — Zodiac requires a Groq API key; no fallback provider is currently implemented.
-7. **Browser limitations** — Some features (e.g., native file system access, certain keyboard shortcuts) are constrained by browser capabilities.
+1. **No container sandboxing** â€” Terminal processes run directly on the host OS. In untrusted multi-tenant environments, containerization (Docker/microVMs) is recommended before general public access.
+2. **No TURN server** â€” WebRTC voice uses public Google STUN servers. Restrictive enterprise firewalls or symmetric NATs will fail direct P2P audio without a dedicated TURN relay.
+3. **Dual persistence** â€” Comments, reviews, and direct messages persist to `.workspaces/data/` JSON files and `StorageMock` rather than dedicated Supabase PostgreSQL tables with foreign key constraints.
+4. **Monaco bundle size** â€” Monaco Editor represents ~300KB of initial client-side JavaScript that could benefit from progressive route chunking.
+5. **Limited automated tests** â€” No unit or integration test suite; verification relies on manual scripts.
+6. **AI provider dependency** â€” Zodiac requires a Groq API key; no fallback provider is currently implemented.
+7. **Browser limitations** â€” Some features (e.g., native file system access, certain keyboard shortcuts) are constrained by browser capabilities.
 
 ---
 
@@ -1842,14 +1842,14 @@ This project does not currently specify a license. Please contact the maintainer
 
 Radiux is built on the shoulders of remarkable open-source projects:
 
-- **Monaco Editor** — The code editor that powers VS Code
-- **Yjs** — A high-performance CRDT framework for real-time collaboration
-- **Next.js** — The React framework for production-grade applications
-- **Supabase** — The open-source Firebase alternative
-- **Groq** — Ultra-fast LLM inference
-- **XTerm.js** — A terminal emulator for the web
-- **node-pty** — Pseudo-terminal process management
-- **Tailwind CSS** — A utility-first CSS framework
+- **Monaco Editor** â€” The code editor that powers VS Code
+- **Yjs** â€” A high-performance CRDT framework for real-time collaboration
+- **Next.js** â€” The React framework for production-grade applications
+- **Supabase** â€” The open-source Firebase alternative
+- **Groq** â€” Ultra-fast LLM inference
+- **XTerm.js** â€” A terminal emulator for the web
+- **node-pty** â€” Pseudo-terminal process management
+- **Tailwind CSS** â€” A utility-first CSS framework
 
 ---
 
@@ -1938,14 +1938,14 @@ A: Container sandboxing, TURN server for voice, automated tests, functional exte
 | **Monaco** | The code editor engine that powers VS Code, used in Radiux |
 | **Yjs** | A CRDT framework for real-time collaborative editing |
 | **Awareness** | Yjs protocol for sharing cursor positions, selections, and user info |
-| **PTY** | Pseudo-Terminal — a software emulation of a physical terminal |
+| **PTY** | Pseudo-Terminal â€” a software emulation of a physical terminal |
 | **Zodiac** | Radiux's native AI coding agent |
 | **Agent** | An autonomous AI system that plans, executes tools, and validates results |
 | **Tool** | A discrete function the AI agent can call (read_file, run_terminal, etc.) |
-| **RBAC** | Role-Based Access Control — permission system based on user roles |
-| **RLS** | Row Level Security — Supabase database policy system |
-| **CRDT** | Conflict-free Replicated Data Type — data structure that guarantees consistency without coordination |
-| **SSE** | Server-Sent Events — one-way streaming protocol for real-time updates |
+| **RBAC** | Role-Based Access Control â€” permission system based on user roles |
+| **RLS** | Row Level Security â€” Supabase database policy system |
+| **CRDT** | Conflict-free Replicated Data Type â€” data structure that guarantees consistency without coordination |
+| **SSE** | Server-Sent Events â€” one-way streaming protocol for real-time updates |
 | **Groq** | Ultra-fast LLM inference platform used by Zodiac |
 | **Supabase** | Open-source Firebase alternative providing auth, database, and storage |
 | **Render** | Cloud platform hosting the Radiux backend |

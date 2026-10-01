@@ -1,3 +1,7 @@
+// `/vitest` entry registers the custom matcher *types* (toBeInTheDocument,
+// toBeEmptyDOMElement, ...) against Vitest's `expect`. The plain entry only augments
+// Jest's `expect`, so with Vitest the matchers typecheck as missing.
+import '@testing-library/jest-dom/vitest';
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 

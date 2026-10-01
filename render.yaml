@@ -14,10 +14,10 @@ services:
       - key: PORT
         value: 10000
       - key: ALLOWED_ORIGIN
-        # Set this in Render dashboard: https://radiux-app.vercel.app
+        # Set this in Render dashboard: https://your-frontend.vercel.app
         sync: false
       - key: SUPABASE_URL
-        # Set this in Render dashboard: https://rdhwzezrmgkgsbpwznrz.supabase.co
+        # Set this in Render dashboard: https://your-project.supabase.co
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         # Set this in Render dashboard: your Supabase service role key
