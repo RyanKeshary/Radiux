@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { FileItem } from '@/lib/types';
@@ -408,7 +408,7 @@ export function FileTree({
       <input
         ref={folderInputRef}
         type="file"
-        // @ts-ignore
+        // @ts-expect-error -- non-standard attribute for selecting a folder
         webkitdirectory="true"
         directory="true"
         multiple

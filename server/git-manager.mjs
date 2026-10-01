@@ -1,4 +1,4 @@
-import path from 'path';
+﻿import path from 'path';
 import fs from 'fs';
 import { execFile, spawn } from 'child_process';
 import { WorkspaceManager, getSanitizedEnv } from './workspace-manager.mjs';
@@ -181,7 +181,7 @@ export const GitManager = {
   /**
    * Stage specific files or all files.
    */
-  async stage(projectId, files = null) {
+  async stage(projectId, files) {
     if (!files || files.length === 0 || files === 'all' || files[0] === '.') {
       return runGit(projectId, ['add', '-A']);
     }
@@ -192,7 +192,7 @@ export const GitManager = {
   /**
    * Unstage specific files or all files.
    */
-  async unstage(projectId, files = null) {
+  async unstage(projectId, files) {
     if (!files || files.length === 0 || files === 'all' || files[0] === '.') {
       return runGit(projectId, ['reset', 'HEAD']);
     }
@@ -268,7 +268,7 @@ export const GitManager = {
   /**
    * Get file diff or commit diff.
    */
-  async getDiff(projectId, filePath = null, staged = false, commitHash = null) {
+  async getDiff(projectId, filePath, staged = false, commitHash) {
     const args = ['diff'];
     if (staged) {
       args.push('--staged');
@@ -294,7 +294,9 @@ export const GitManager = {
   async getBranches(projectId) {
     const res = await runGit(projectId, ['branch', '-a', '--no-color']);
     if (!res.success) {
-      return { current: 'main', branches: ['main'] };
+      // Keep the same shape as the success path: callers do `branches.map(b => b.name)`,
+      // which previously broke when git was unavailable.
+      return { current: 'main', branches: [{ name: 'main', isCurrent: true }] };
     }
     let current = 'main';
     const branches = [];
@@ -373,7 +375,7 @@ export const GitManager = {
   /**
    * Push to remote with optional GitHub Personal Access Token.
    */
-  async push(projectId, remote = 'origin', branch = null, token = null) {
+  async push(projectId, remote = 'origin', branch, token) {
     const currentBranch = branch || (await this.getStatus(projectId)).branch || 'main';
     
     // If token provided, dynamically construct an authenticated URL for this single command
@@ -400,7 +402,7 @@ export const GitManager = {
   /**
    * Pull from remote.
    */
-  async pull(projectId, remote = 'origin', branch = null, token = null) {
+  async pull(projectId, remote = 'origin', branch, token) {
     const currentBranch = branch || (await this.getStatus(projectId)).branch || 'main';
 
     let pullTarget = remote;

@@ -7,6 +7,23 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import { WorkspaceManager } from './workspace-manager.mjs';
 import { GitManager } from './git-manager.mjs';
+import {
+  extractBearerToken,
+  verifyToken as verifySupabaseToken,
+  authorizeProject,
+  isAnonymousAllowed,
+} from './authz.mjs';
+
+// Load .env / .env.local so the standalone backend sees the same configuration as
+// Next.js. Plain `node server/websocket.mjs` does not read env files by itself, which
+// previously left SUPABASE_* unset and silently disabled all authorization.
+for (const envFile of ['.env.local', '.env']) {
+  try {
+    if (process.loadEnvFile) process.loadEnvFile(envFile);
+  } catch {
+    /* file absent — rely on the ambient environment */
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +39,7 @@ const port = parseInt(process.env.PORT || '1234', 10);
 // Level 6: Production CORS — restrict WS origins in production
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || null; // null = allow all (dev mode)
 
-// Level 6: Server-side Supabase client for WS auth verification
+// Server-side Supabase client used to verify JWTs and resolve project roles.
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 let supabaseAdmin = null;
@@ -33,12 +50,25 @@ if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
     supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    console.log('[Radiux] Supabase admin client ready for WS auth verification');
+    console.log('[Radiux] Supabase admin client ready - request authorization is ENABLED');
   } catch (e) {
     console.warn('[Radiux] Could not initialize Supabase admin client:', e.message);
   }
+} else if (isAnonymousAllowed()) {
+  console.warn(
+    '[Radiux] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n' +
+      '[Radiux] !! ANONYMOUS ACCESS ENABLED (RADIUX_ALLOW_ANONYMOUS=1)          !!\n' +
+      '[Radiux] !! SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not configured.   !!\n' +
+      '[Radiux] !! Every request is granted OWNER privileges with no identity   !!\n' +
+      '[Radiux] !! check. LOCAL DEVELOPMENT ONLY — never do this in production. !!\n' +
+      '[Radiux] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
+  );
 } else {
-  console.warn('[Radiux] SUPABASE_SERVICE_ROLE_KEY not set — WS auth verification disabled (dev mode)');
+  console.error(
+    '[Radiux] FATAL: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.\n' +
+      '[Radiux] Requests will be rejected with 503 (fail-closed).\n' +
+      '[Radiux] For local development without Supabase, set RADIUX_ALLOW_ANONYMOUS=1.'
+  );
 }
 
 /**
@@ -575,26 +605,38 @@ const server = http.createServer(async (request, response) => {
     request.on('data', chunk => body += chunk);
     request.on('end', async () => {
       try {
-        const { projectId, command, options, userRole } = JSON.parse(body);
-        const effectiveRole = userRole || options?.userRole;
-        if (effectiveRole === 'visitor') {
-          response.writeHead(403, { 'Content-Type': 'application/json' });
-          response.end(JSON.stringify({ error: 'Visitors are not authorized to execute commands in this workspace.' }));
+        // NOTE: the caller's role is resolved from the verified JWT + database.
+        // Any client-supplied `userRole` field is ignored by design.
+        const { projectId, command, options } = JSON.parse(body || '{}');
+
+        if (!projectId || !command) {
+          response.writeHead(400, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ error: 'Invalid payload. Missing projectId or command.' }));
           return;
         }
-        if (projectId && command) {
-          const result = await WorkspaceManager.runCommand(projectId, command, options);
-          response.writeHead(200, { 'Content-Type': 'application/json' });
-          response.end(JSON.stringify(result));
+
+        const auth = await authorizeProject({
+          supabaseAdmin,
+          token: extractBearerToken(request),
+          projectId,
+          requireWrite: true,
+        });
+
+        if (!auth.ok) {
+          response.writeHead(auth.status, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ error: auth.error }));
           return;
         }
+
+        const result = await WorkspaceManager.runCommand(projectId, command, options);
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ ...result, executedByRole: auth.role }));
+        return;
       } catch (e) {
         response.writeHead(500, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({ error: e.message }));
         return;
       }
-      response.writeHead(400, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ error: 'Invalid payload. Missing projectId or command.' }));
     });
     return;
   }
@@ -654,11 +696,20 @@ const server = http.createServer(async (request, response) => {
           return;
         }
 
-        // Server-side RBAC: Visitors are strictly forbidden from modifying Git state
+        // Server-side RBAC. Read-only actions need membership; mutating actions need
+        // owner/editor. The role is derived from the verified token + database —
+        // client-supplied `userRole` values are ignored by design.
         const isWriteAction = !['status', 'log', 'diff', 'branches', 'remotes'].includes(action);
-        if (isWriteAction && (payload.userRole === 'visitor' || parsedUrl.searchParams.get('userRole') === 'visitor')) {
-          response.writeHead(403, { 'Content-Type': 'application/json' });
-          response.end(JSON.stringify({ success: false, error: 'Visitors are not authorized to perform Git modifications in this workspace.' }));
+        const auth = await authorizeProject({
+          supabaseAdmin,
+          token: extractBearerToken(request),
+          projectId,
+          requireWrite: isWriteAction,
+        });
+
+        if (!auth.ok) {
+          response.writeHead(auth.status, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ success: false, error: auth.error }));
           return;
         }
 
@@ -1363,28 +1414,26 @@ server.on('upgrade', async (request, socket, head) => {
     const sessionId = parsedUrl.searchParams.get('sessionId') || '';
     const profileId = parsedUrl.searchParams.get('profileId') || '';
     const title = parsedUrl.searchParams.get('title') || '';
-    const role = parsedUrl.searchParams.get('role') || '';
     const cols = parseInt(parsedUrl.searchParams.get('cols') || '80', 10);
     const rows = parseInt(parsedUrl.searchParams.get('rows') || '24', 10);
 
-    // Server-side RBAC: Visitors cannot open an interactive terminal
-    if (role === 'visitor') {
-      console.warn(`[WS/terminal] Rejected visitor terminal connection for project: ${projectId}`);
-      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-      socket.destroy();
-      return;
-    }
+    // Server-side RBAC. WebSocket upgrades cannot set an Authorization header, so the
+    // JWT arrives as a `token` query parameter. The effective role is resolved from
+    // the verified identity + database — the previous `role` query parameter was
+    // client-asserted and is therefore ignored.
+    const auth = await authorizeProject({
+      supabaseAdmin,
+      token,
+      projectId,
+      requireWrite: true,
+    });
 
-    // Level 6: Verify token for terminal access
-    let verifiedUser = null;
-    if (token) {
-      verifiedUser = await verifyToken(token);
-    }
-
-    // In dev mode (no service role key), allow without verification
-    if (SUPABASE_SERVICE_ROLE_KEY && !verifiedUser) {
-      console.warn(`[WS/terminal] Rejected unauthenticated terminal connection for project: ${projectId}`);
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    if (!auth.ok) {
+      console.warn(
+        `[WS/terminal] Rejected terminal connection for project ${projectId}: ${auth.error}`
+      );
+      const statusLine = auth.status === 503 ? '503 Service Unavailable' : '401 Unauthorized';
+      socket.write(`HTTP/1.1 ${statusLine}\r\n\r\n`);
       socket.destroy();
       return;
     }
@@ -1407,19 +1456,25 @@ server.on('upgrade', async (request, socket, head) => {
     const token = parsedUrl.searchParams.get('token') || '';
     const queryUserId = parsedUrl.searchParams.get('userId') || '';
 
-    // Level 6: Verify token
-    let verifiedUser = null;
-    if (token) {
-      verifiedUser = await verifyToken(token);
-    }
+    // Chat/voice/presence is read+write for any project member.
+    const auth = await authorizeProject({
+      supabaseAdmin,
+      token,
+      projectId,
+      requireWrite: false,
+    });
 
-    // In dev mode (no service role key), allow without verification
-    if (SUPABASE_SERVICE_ROLE_KEY && !verifiedUser) {
-      console.warn(`[WS/comm] Rejected unauthenticated comm connection for project: ${projectId}`);
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    if (!auth.ok) {
+      console.warn(
+        `[WS/comm] Rejected comm connection for project ${projectId}: ${auth.error}`
+      );
+      const statusLine = auth.status === 503 ? '503 Service Unavailable' : '401 Unauthorized';
+      socket.write(`HTTP/1.1 ${statusLine}\r\n\r\n`);
       socket.destroy();
       return;
     }
+
+    const verifiedUser = auth.userId ? { id: auth.userId } : null;
 
     wss.handleUpgrade(request, socket, head, (ws) => {
       handleCommConnection(ws, projectId, verifiedUser, queryUserId);
@@ -1428,7 +1483,35 @@ server.on('upgrade', async (request, socket, head) => {
   }
 
   // Route 3: Yjs document & presence sync rooms
-  // Yjs handles its own document-level access — authorization enforced by Supabase RLS at DB level
+  // Room names follow `project-<projectId>-file-<fileId>`. The projectId is parsed out
+  // and authorized so document sync is not open to anonymous callers.
+  const roomName = parsedUrl.searchParams.get('room') || '';
+  const roomProjectMatch = /^project-([0-9a-fA-F-]{36})-file-/.exec(roomName);
+  const roomProjectId = roomProjectMatch ? roomProjectMatch[1] : null;
+
+  if (roomProjectId) {
+    const auth = await authorizeProject({
+      supabaseAdmin,
+      token: parsedUrl.searchParams.get('token') || '',
+      projectId: roomProjectId,
+      requireWrite: false,
+    });
+
+    if (!auth.ok) {
+      console.warn(`[WS/yjs] Rejected sync room "${roomName}": ${auth.error}`);
+      const statusLine = auth.status === 503 ? '503 Service Unavailable' : '401 Unauthorized';
+      socket.write(`HTTP/1.1 ${statusLine}\r\n\r\n`);
+      socket.destroy();
+      return;
+    }
+  } else if (!isAnonymousAllowed()) {
+    // Unrecognised room shape — deny rather than serve an unscoped document.
+    console.warn(`[WS/yjs] Rejected unrecognised room "${roomName}"`);
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
   wss.handleUpgrade(request, socket, head, (ws) => {
     wss.emit('connection', ws, request);
   });
@@ -1440,7 +1523,13 @@ server.listen(port, host, () => {
   console.log(`[Radiux] Server running on ${host}:${port}`);
   console.log(`[Radiux] Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`[Radiux] CORS origin: ${ALLOWED_ORIGIN || 'all (dev mode)'}`);
-  console.log(`[Radiux] WS auth: ${supabaseAdmin ? 'enabled' : 'disabled (dev mode)'}`);
+  if (supabaseAdmin) {
+    console.log('[Radiux] Authorization: ENABLED (fail-closed)');
+  } else if (isAnonymousAllowed()) {
+    console.warn('[Radiux] Authorization: DISABLED - anonymous access allowed by RADIUX_ALLOW_ANONYMOUS=1');
+  } else {
+    console.warn('[Radiux] Authorization: NOT CONFIGURED - all requests will be rejected with 503');
+  }
 });
 
 function gracefulShutdown(signal) {

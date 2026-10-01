@@ -7,9 +7,15 @@
     "dev:frontend": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "server": "node server/websocket.mjs",
-    "dev:all": "concurrently \"node server/websocket.mjs\" \"next dev\""
+    "dev:all": "concurrently \"node server/websocket.mjs\" \"next dev\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
@@ -23,10 +29,10 @@
     "jszip": "^3.10.2",
     "lucide-react": "^0.447.0",
     "monaco-editor": "^0.51.0",
-    "next": "14.2.15",
+    "next": "^16.3.8",
     "node-pty": "^1.1.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "tailwind-merge": "^2.5.2",
     "ws": "^8.18.0",
     "y-monaco": "^0.1.6",
@@ -35,14 +41,24 @@
     "yjs": "^13.6.19"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.7",
+    "@playwright/test": "^1.63.0",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@types/jszip": "^3.4.0",
     "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.5.12",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-v8": "^2.1.9",
     "concurrently": "^9.0.1",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.8",
+    "jsdom": "^30.1.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.1.9"
   }
 }

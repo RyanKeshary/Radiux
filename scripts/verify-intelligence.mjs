@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+﻿import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 
 try {
@@ -41,7 +41,7 @@ async function main() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       identifier: 'ryankeshary@gmail.com',
-      password: 'Admin@123456',
+      password: process.env.ADMIN_PASSWORD || '',
     }),
   });
 

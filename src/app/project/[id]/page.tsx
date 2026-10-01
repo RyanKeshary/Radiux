@@ -1,11 +1,11 @@
 import { Workspace } from '@/components/workspace/Workspace';
 
 interface ProjectPageProps {
-  params: {
-    id: string;
-  };
+  // Next.js 15+ delivers dynamic route params as a Promise.
+  params: Promise<{ id: string }>;
 }
 
-export default function ProjectPage({ params }: ProjectPageProps) {
-  return <Workspace projectId={params.id} />;
+export default async function ProjectPage({ params }: ProjectPageProps) {
+  const { id } = await params;
+  return <Workspace projectId={id} />;
 }

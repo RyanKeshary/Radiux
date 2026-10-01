@@ -1,11 +1,11 @@
-# RADIUX — Comprehensive Project Intelligence & Current-State Technical Audit
+# RADIUX â€” Comprehensive Project Intelligence & Current-State Technical Audit
 
 **Document Version:** 1.0.0  
 **Audit Date:** September 2026  
 **Auditor:** Antigravity Autonomous Engineering Agent  
 **Branch:** `main` (Git Commit: `63e1600`)  
 **Workspace Root:** `c:\Users\krish\Downloads\shit dump temp\web ide`  
-**Application Title:** Radiux — Real-Time Collaborative IDE  
+**Application Title:** Radiux â€” Real-Time Collaborative IDE  
 **Primary Repository:** [RyanKeshary/Radiux](https://github.com/RyanKeshary/Radiux.git)  
 
 ---
@@ -18,7 +18,7 @@
 1. **Build & Type Health:** The repository compiles with **0 TypeScript errors** (`npx tsc --noEmit`) and produces an optimized production build (`next build`) passing all lint and route generation checks.
 2. **Operational Runtimes:** The system operates in dual mode:
    - **Local Environment:** Next.js frontend running on `http://localhost:3000`, Node WebSocket/PTY server running on `0.0.0.0:1234`.
-   - **Cloud Environment:** Vercel frontend connected to Render web service (`codecollab-backend-isjt.onrender.com`) and cloud Supabase PostgreSQL (`rdhwzezrmgkgsbpwznrz.supabase.co`).
+   - **Cloud Environment:** Vercel frontend connected to Render web service (`codecollab-backend-isjt.onrender.com`) and cloud Supabase PostgreSQL (`your-project.supabase.co`).
 3. **Core Architectural Pattern:** The application implements a **hybrid dual-persistence architecture**. Primary operations target Supabase PostgreSQL tables and Auth with strict Row Level Security (RLS). When Supabase is unreachable or unconfigured, the system automatically falls back to the Node.js backend workspace disk (`.workspaces/data/` JSON stores) and a client-side localStorage cache (`StorageMock`).
 4. **Current Maturity Stage:** **Public Beta / Pre-Production**. All core workflows (Auth, Monaco editing, Yjs CRDT real-time multi-cursor sync, host pseudo-terminals with multi-session tabs, Git staging/committing/branching, WebRTC voice, in-workspace dev server previewing, and public profiles) are functional. Key technical debt items (unifying the dual persistence layer, sandboxing terminal execution, and adding missing route handlers such as password reset) remain before enterprise production scale.
 
@@ -62,53 +62,53 @@ Radiux is a cloud and local developer workspace platform that runs a complete VS
 ## 4. Current Architecture
 
 ```text
-                                    ┌─────────────────────────────────────────────────────────┐
-                                    │                     BROWSER CLIENT                      │
-                                    │                                                         │
-                                    │  ┌────────────────┐  ┌────────────────┐  ┌───────────┐  │
-                                    │  │  Next.js App   │  │ Monaco Editor  │  │ XTerm.js  │  │
-                                    │  │  (App Router)  │  │  + Yjs Binding │  │  Emulator │  │
-                                    │  └───────┬────────┘  └───────┬────────┘  └─────┬─────┘  │
-                                    └──────────┼───────────────────┼─────────────────┼────────┘
-                                               │                   │                 │
+                                    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+                                    â”‚                     BROWSER CLIENT                      â”‚
+                                    â”‚                                                         â”‚
+                                    â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”‚
+                                    â”‚  â”‚  Next.js App   â”‚  â”‚ Monaco Editor  â”‚  â”‚ XTerm.js  â”‚  â”‚
+                                    â”‚  â”‚  (App Router)  â”‚  â”‚  + Yjs Binding â”‚  â”‚  Emulator â”‚  â”‚
+                                    â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”˜  â”‚
+                                    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                               â”‚                   â”‚                 â”‚
                                     HTTPS / REST API          WSS (Yjs)         WSS (/terminal)
-                                               │                   │                 │
-                         ┌─────────────────────┴───────────────────┴─────────────────┴────────┐
-                         │                                                                    │
-                         ▼                                                                    ▼
-        ┌──────────────────────────────────┐                               ┌──────────────────────────────────┐
-        │        VERCEL / NEXT.JS          │                               │          NODE.JS BACKEND         │
-        │   (Frontend Hosting & SSR)       │                               │       (server/websocket.mjs)     │
-        ├──────────────────────────────────┤                               ├──────────────────────────────────┤
-        │ - SSR & Static Pages             │                               │ - Yjs WebSocket Sync Server      │
-        │ - Auth Middleware (Session Guard)│                               │ - Node-PTY Terminal Daemon       │
-        │ - OAuth Callback (/auth/callback)│                               │ - WorkspaceManager (Disk Sync)   │
-        │ - Client Bundles & Styling       │                               │ - GitManager (Child Process Git) │
-        │ - Image Optimization             │                               │ - CommRooms (Voice Signaling)    │
-        └────────────────┬─────────────────┘                               │ - Dev Server Reverse Proxy       │
-                         │                                                 │ - Disk Storage (.workspaces/)    │
-                         │                                                 └────────────────┬─────────────────┘
-                         │                                                                  │
-                         │                      HTTPS / REST / PostgREST                    │
-                         └─────────────────────────────────┬────────────────────────────────┘
-                                                           │
-                                                           ▼
-                                           ┌────────────────────────────────┐
-                                           │       SUPABASE PLATFORM        │
-                                           │ (rdhwzezrmgkgsbpwznrz.supabase)│
-                                           ├────────────────────────────────┤
-                                           │ - Supabase Auth (GoTrue)       │
-                                           │   • Google & GitHub OAuth      │
-                                           │   • Email/Password             │
-                                           │ - PostgreSQL Database (v15)    │
-                                           │   • profiles, projects         │
-                                           │   • project_members, files     │
-                                           │   • messages, activities       │
-                                           │   • coding_partners, notifs    │
-                                           │   • Row Level Security (RLS)   │
-                                           │ - Supabase Storage             │
-                                           │   • chat-media (bucket)        │
-                                           └────────────────────────────────┘
+                                               â”‚                   â”‚                 â”‚
+                         â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”
+                         â”‚                                                                    â”‚
+                         â–¼                                                                    â–¼
+        â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”                               â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+        â”‚        VERCEL / NEXT.JS          â”‚                               â”‚          NODE.JS BACKEND         â”‚
+        â”‚   (Frontend Hosting & SSR)       â”‚                               â”‚       (server/websocket.mjs)     â”‚
+        â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤                               â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+        â”‚ - SSR & Static Pages             â”‚                               â”‚ - Yjs WebSocket Sync Server      â”‚
+        â”‚ - Auth Middleware (Session Guard)â”‚                               â”‚ - Node-PTY Terminal Daemon       â”‚
+        â”‚ - OAuth Callback (/auth/callback)â”‚                               â”‚ - WorkspaceManager (Disk Sync)   â”‚
+        â”‚ - Client Bundles & Styling       â”‚                               â”‚ - GitManager (Child Process Git) â”‚
+        â”‚ - Image Optimization             â”‚                               â”‚ - CommRooms (Voice Signaling)    â”‚
+        â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜                               â”‚ - Dev Server Reverse Proxy       â”‚
+                         â”‚                                                 â”‚ - Disk Storage (.workspaces/)    â”‚
+                         â”‚                                                 â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                         â”‚                                                                  â”‚
+                         â”‚                      HTTPS / REST / PostgREST                    â”‚
+                         â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                                           â”‚
+                                                           â–¼
+                                           â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+                                           â”‚       SUPABASE PLATFORM        â”‚
+                                           â”‚ (your-project-ref.supabase)â”‚
+                                           â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+                                           â”‚ - Supabase Auth (GoTrue)       â”‚
+                                           â”‚   â€¢ Google & GitHub OAuth      â”‚
+                                           â”‚   â€¢ Email/Password             â”‚
+                                           â”‚ - PostgreSQL Database (v15)    â”‚
+                                           â”‚   â€¢ profiles, projects         â”‚
+                                           â”‚   â€¢ project_members, files     â”‚
+                                           â”‚   â€¢ messages, activities       â”‚
+                                           â”‚   â€¢ coding_partners, notifs    â”‚
+                                           â”‚   â€¢ Row Level Security (RLS)   â”‚
+                                           â”‚ - Supabase Storage             â”‚
+                                           â”‚   â€¢ chat-media (bucket)        â”‚
+                                           â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ---
@@ -147,152 +147,152 @@ Radiux is a cloud and local developer workspace platform that runs a complete VS
 
 ```text
 web ide/
-├── .env.example                     # Reference environment configuration
-├── .env.local                       # Active local secrets & provider tokens (gitignored)
-├── .env.production                  # Production URLs for Vercel builds
-├── .gitignore                       # Git exclusion rules
-├── DEPLOYMENT.md                    # Multi-provider deployment documentation
-├── next.config.js                   # Next.js configuration (images, SWC, optimization)
-├── package.json                     # Project manifest and scripts
-├── postcss.config.js                # PostCSS plugins
-├── tailwind.config.js               # Tailwind design tokens and animations
-├── tsconfig.json                    # TypeScript compiler options
-├── render.yaml                      # Render Blueprint specification for backend web service
-├── RADIUX_PROJECT_AUDIT.md          # Historical engineering audit report
-├── RADIUX_CURRENT_STATE.md          # [THIS FILE] Authoritative project intelligence report
-│
-├── public/                          # Static public assets
-│   ├── favicon.ico
-│   ├── icon.png
-│   └── logo.png
-│
-├── scripts/                         # Maintenance and verification scripts
-│   ├── apply-schema.mjs             # Remote schema migration utility
-│   └── test-sync.mjs                # WebSocket & file sync diagnostic script
-│
-├── server/                          # Dedicated Node.js Backend Companion Server
-│   ├── git-manager.mjs              # Server-side Git operations (status, commit, branch, diff, push)
-│   ├── websocket.mjs                # HTTP REST API + 3-way WebSocket server (Yjs, PTY, Comm)
-│   └── workspace-manager.mjs        # PTY process manager, shell discovery, disk file sync
-│
-├── src/
-│   ├── middleware.ts                # Next.js edge auth session guard & route matcher
-│   │
-│   ├── app/                         # Next.js App Router
-│   │   ├── globals.css              # Global design system variables and theme tokens
-│   │   ├── layout.tsx               # Root application shell with AuthProvider
-│   │   ├── page.tsx                 # Dashboard & Landing page (project listing, quick actions)
-│   │   │
-│   │   ├── auth/
-│   │   │   └── callback/
-│   │   │       └── route.ts         # OAuth PKCE exchange & profile synchronization route
-│   │   ├── login/
-│   │   │   └── page.tsx             # Dedicated sign-in and account registration page
-│   │   ├── profile/
-│   │   │   ├── page.tsx             # Authenticated user redirect to self profile
-│   │   │   └── [username]/
-│   │   │       └── page.tsx         # Public developer profile page
-│   │   ├── project/
-│   │   │   └── [id]/
-│   │   │       ├── page.tsx         # Primary IDE workspace entry point
-│   │   │       └── public/
-│   │   │           └── page.tsx     # Read-only public shared project view
-│   │   └── settings/
-│   │       └── page.tsx             # Global application settings page
-│   │
-│   ├── components/                  # UI Presentation & Interaction Layer
-│   │   ├── auth/
-│   │   │   ├── AuthModal.tsx        # In-context modal for logging in or creating account
-│   │   │   └── UserMenu.tsx         # Top-right account dropdown with theme selector & shortcuts
-│   │   ├── dashboard/
-│   │   │   ├── CreateProjectModal.tsx # Project creation modal
-│   │   │   ├── ImportProjectModal.tsx # GitHub repository import modal
-│   │   │   └── ImportWorkspaceModal.tsx # ZIP workspace backup restoration modal
-│   │   ├── profile/
-│   │   │   ├── ContributionGraph.tsx  # 52-week GitHub-style activity contribution calendar
-│   │   │   ├── DeveloperDiscoveryModal.tsx # Peer developer discovery and search modal
-│   │   │   ├── DeveloperProfileView.tsx # Comprehensive developer profile showcase
-│   │   │   ├── DirectMessageModal.tsx # Private developer direct message dialogue
-│   │   │   ├── PinnedProjectsSection.tsx # Showcase of up to 4 pinned projects
-│   │   │   ├── ProfileEditorModal.tsx # Detailed profile editing modal with tabbed controls
-│   │   │   ├── ProfilePreviewCard.tsx # Hover/click compact popover preview card
-│   │   │   └── ProfileReadme.tsx      # Markdown renderer for developer personal README
-│   │   └── workspace/
-│   │       ├── ActivityBar.tsx      # Leftmost navigation bar (Files, Git, Feed, Ext, etc.)
-│   │       ├── ActivityFeed.tsx     # Workspace audit timeline and event stream
-│   │       ├── BottomDock.tsx       # Tabbed bottom panel (Terminal, Output, Problems, Voice, Chat)
-│   │       ├── Breadcrumbs.tsx      # Path breadcrumbs bar above the code editor
-│   │       ├── ChatPanel.tsx        # Project team chat with rich media upload and reactions
-│   │       ├── CollaboratorsPanel.tsx # Active peer list with follow-mode and kick controls
-│   │       ├── CommandPalette.tsx   # Ctrl+Shift+P quick command execution modal
-│   │       ├── ContextMenu.tsx      # Custom context menu for file tree items
-│   │       ├── DiffViewerModal.tsx  # Side-by-side Monaco diff inspection modal
-│   │       ├── EditorSettingsModal.tsx # Comprehensive Monaco and IDE configuration modal
-│   │       ├── ExtensionsPanel.tsx  # Extension marketplace mockup & discovery panel
-│   │       ├── FileIcon.tsx         # File-extension-aware icon renderer
-│   │       ├── FileTree.tsx         # Nested interactive folder & file explorer
-│   │       ├── GitHubModal.tsx      # GitHub repository linking and sync modal
-│   │       ├── GitPanel.tsx         # VS Code-style Git source control management UI
-│   │       ├── GlobalSearchModal.tsx # Cross-project file content search modal
-│   │       ├── InlineCommentsOverlay.tsx # Line-level code review comment pins
-│   │       ├── IntegrationsModal.tsx # Third-party service integration management
-│   │       ├── InviteMemberModal.tsx # Collaborator invitation dialogue
-│   │       ├── KeyboardShortcutsModal.tsx # Complete keyboard shortcut cheat sheet
-│   │       ├── MediaPreviewModal.tsx # Fullscreen modal for images, audio, and videos
-│   │       ├── MediaViewer.tsx      # In-tab media file viewer (PNG, JPG, MP4, MP3)
-│   │       ├── MonacoEditorWrapper.tsx # Monaco editor mounted with Yjs binding & remote cursor tags
-│   │       ├── NotificationCenterPanel.tsx # Slide-in drawer for managing alerts & requests
-│   │       ├── NotificationToast.tsx # Toast notification models, container, & corner alerts
-│   │       ├── OpenTabs.tsx         # Draggable/closeable editor tab strip
-│   │       ├── OutputPanel.tsx      # System build and execution logs console
-│   │       ├── PreviewPanel.tsx     # In-browser iframe live web preview & reverse proxy
-│   │       ├── ProblemsPanel.tsx    # Syntax warnings and linter diagnostics dock
-│   │       ├── ProjectPresence.tsx  # Top navigation collaborator avatars and shared cursors
-│   │       ├── ProjectSwitcherModal.tsx # Quick modal to jump between recent workspaces
-│   │       ├── PublicProfileModal.tsx # Modal wrapper for viewing peer public profiles
-│   │       ├── QuickOpenModal.tsx   # Ctrl+P quick file search and open modal
-│   │       ├── ReviewRequestsModal.tsx # Pull Request & Code Review management modal
-│   │       ├── TerminalPanel.tsx    # XTerm.js multi-session pseudo-terminal container
-│   │       ├── UserProfileModal.tsx # Comprehensive personal profile modal
-│   │       ├── VoicePanel.tsx       # WebRTC voice room participant dock
-│   │       └── Workspace.tsx        # Master IDE workspace controller component (100KB)
-│   │
-│   ├── context/
-│   │   └── AuthContext.tsx          # Global authentication state, session listener, profile sync
-│   ├── hooks/
-│   │   ├── useClickOutside.ts       # DOM outside click detection hook
-│   │   ├── useDebounce.ts           # Value debouncing hook
-│   │   ├── useKeyboardManager.ts    # Global keybinding dispatcher (Ctrl+S, Ctrl+P, Ctrl+`, etc.)
-│   │   └── useVoiceChat.ts          # WebRTC mesh voice client hook with Google STUN
-│   └── lib/
-│       ├── cache-utils.ts           # In-memory query cache with TTL invalidation
-│       ├── commands.ts              # Command palette registry
-│       ├── config.ts                # Centralized environment URL configuration & auto-failover
-│       ├── data-service.ts          # Master data layer bridging Supabase, Server, and Mock
-│       ├── sound.ts                 # Web Audio API procedural sound synthesizer
-│       ├── storage-mock.ts          # Client-side localStorage persistence layer
-│       ├── themes.ts                # Theme token definitions (Monaco themes, UI palettes)
-│       ├── types.ts                 # TypeScript type definitions across the entire system
-│       ├── collaboration/
-│       │   ├── comment-service.ts   # Inline code comments & pull request manager
-│       │   └── types.ts             # Review and comment data types
-│       ├── extensions/
-│       │   ├── registry.ts          # Extensions catalog registry
-│       │   └── types.ts             # Extension specification interfaces
-│       ├── integrations/
-│       │   ├── integration-manager.ts # Deployment and cloud integration client
-│       │   └── types.ts             # Integration provider interfaces
-│       └── supabase/
-│           ├── client.ts            # Browser Supabase client instance
-│           ├── server.ts            # Server-side Supabase client instance using cookies
-│           └── profile-utils.ts     # Metadata normalization for Google/GitHub OAuth users
-│
-└── supabase/                        # SQL Migrations & Database DDL
-    ├── schema.sql                   # Base schema: profiles, projects, members, files, messages
-    ├── schema_v6.sql                # Media columns, activities target object, storage bucket
-    ├── schema_v9.sql                # Coding partners & notifications tables with RLS
-    ├── schema_v10_auth_profiles.sql # Safe additive OAuth profiles migration & handle_new_user trigger
-    └── schema_v11_performance_indexes.sql # Rapid lookup B-tree indexes for zero N+1 latency
+â”œâ”€â”€ .env.example                     # Reference environment configuration
+â”œâ”€â”€ .env.local                       # Active local secrets & provider tokens (gitignored)
+â”œâ”€â”€ .env.production                  # Production URLs for Vercel builds
+â”œâ”€â”€ .gitignore                       # Git exclusion rules
+â”œâ”€â”€ DEPLOYMENT.md                    # Multi-provider deployment documentation
+â”œâ”€â”€ next.config.js                   # Next.js configuration (images, SWC, optimization)
+â”œâ”€â”€ package.json                     # Project manifest and scripts
+â”œâ”€â”€ postcss.config.js                # PostCSS plugins
+â”œâ”€â”€ tailwind.config.js               # Tailwind design tokens and animations
+â”œâ”€â”€ tsconfig.json                    # TypeScript compiler options
+â”œâ”€â”€ render.yaml                      # Render Blueprint specification for backend web service
+â”œâ”€â”€ RADIUX_PROJECT_AUDIT.md          # Historical engineering audit report
+â”œâ”€â”€ RADIUX_CURRENT_STATE.md          # [THIS FILE] Authoritative project intelligence report
+â”‚
+â”œâ”€â”€ public/                          # Static public assets
+â”‚   â”œâ”€â”€ favicon.ico
+â”‚   â”œâ”€â”€ icon.png
+â”‚   â””â”€â”€ logo.png
+â”‚
+â”œâ”€â”€ scripts/                         # Maintenance and verification scripts
+â”‚   â”œâ”€â”€ apply-schema.mjs             # Remote schema migration utility
+â”‚   â””â”€â”€ test-sync.mjs                # WebSocket & file sync diagnostic script
+â”‚
+â”œâ”€â”€ server/                          # Dedicated Node.js Backend Companion Server
+â”‚   â”œâ”€â”€ git-manager.mjs              # Server-side Git operations (status, commit, branch, diff, push)
+â”‚   â”œâ”€â”€ websocket.mjs                # HTTP REST API + 3-way WebSocket server (Yjs, PTY, Comm)
+â”‚   â””â”€â”€ workspace-manager.mjs        # PTY process manager, shell discovery, disk file sync
+â”‚
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ middleware.ts                # Next.js edge auth session guard & route matcher
+â”‚   â”‚
+â”‚   â”œâ”€â”€ app/                         # Next.js App Router
+â”‚   â”‚   â”œâ”€â”€ globals.css              # Global design system variables and theme tokens
+â”‚   â”‚   â”œâ”€â”€ layout.tsx               # Root application shell with AuthProvider
+â”‚   â”‚   â”œâ”€â”€ page.tsx                 # Dashboard & Landing page (project listing, quick actions)
+â”‚   â”‚   â”‚
+â”‚   â”‚   â”œâ”€â”€ auth/
+â”‚   â”‚   â”‚   â””â”€â”€ callback/
+â”‚   â”‚   â”‚       â””â”€â”€ route.ts         # OAuth PKCE exchange & profile synchronization route
+â”‚   â”‚   â”œâ”€â”€ login/
+â”‚   â”‚   â”‚   â””â”€â”€ page.tsx             # Dedicated sign-in and account registration page
+â”‚   â”‚   â”œâ”€â”€ profile/
+â”‚   â”‚   â”‚   â”œâ”€â”€ page.tsx             # Authenticated user redirect to self profile
+â”‚   â”‚   â”‚   â””â”€â”€ [username]/
+â”‚   â”‚   â”‚       â””â”€â”€ page.tsx         # Public developer profile page
+â”‚   â”‚   â”œâ”€â”€ project/
+â”‚   â”‚   â”‚   â””â”€â”€ [id]/
+â”‚   â”‚   â”‚       â”œâ”€â”€ page.tsx         # Primary IDE workspace entry point
+â”‚   â”‚   â”‚       â””â”€â”€ public/
+â”‚   â”‚   â”‚           â””â”€â”€ page.tsx     # Read-only public shared project view
+â”‚   â”‚   â””â”€â”€ settings/
+â”‚   â”‚       â””â”€â”€ page.tsx             # Global application settings page
+â”‚   â”‚
+â”‚   â”œâ”€â”€ components/                  # UI Presentation & Interaction Layer
+â”‚   â”‚   â”œâ”€â”€ auth/
+â”‚   â”‚   â”‚   â”œâ”€â”€ AuthModal.tsx        # In-context modal for logging in or creating account
+â”‚   â”‚   â”‚   â””â”€â”€ UserMenu.tsx         # Top-right account dropdown with theme selector & shortcuts
+â”‚   â”‚   â”œâ”€â”€ dashboard/
+â”‚   â”‚   â”‚   â”œâ”€â”€ CreateProjectModal.tsx # Project creation modal
+â”‚   â”‚   â”‚   â”œâ”€â”€ ImportProjectModal.tsx # GitHub repository import modal
+â”‚   â”‚   â”‚   â””â”€â”€ ImportWorkspaceModal.tsx # ZIP workspace backup restoration modal
+â”‚   â”‚   â”œâ”€â”€ profile/
+â”‚   â”‚   â”‚   â”œâ”€â”€ ContributionGraph.tsx  # 52-week GitHub-style activity contribution calendar
+â”‚   â”‚   â”‚   â”œâ”€â”€ DeveloperDiscoveryModal.tsx # Peer developer discovery and search modal
+â”‚   â”‚   â”‚   â”œâ”€â”€ DeveloperProfileView.tsx # Comprehensive developer profile showcase
+â”‚   â”‚   â”‚   â”œâ”€â”€ DirectMessageModal.tsx # Private developer direct message dialogue
+â”‚   â”‚   â”‚   â”œâ”€â”€ PinnedProjectsSection.tsx # Showcase of up to 4 pinned projects
+â”‚   â”‚   â”‚   â”œâ”€â”€ ProfileEditorModal.tsx # Detailed profile editing modal with tabbed controls
+â”‚   â”‚   â”‚   â”œâ”€â”€ ProfilePreviewCard.tsx # Hover/click compact popover preview card
+â”‚   â”‚   â”‚   â””â”€â”€ ProfileReadme.tsx      # Markdown renderer for developer personal README
+â”‚   â”‚   â””â”€â”€ workspace/
+â”‚   â”‚       â”œâ”€â”€ ActivityBar.tsx      # Leftmost navigation bar (Files, Git, Feed, Ext, etc.)
+â”‚   â”‚       â”œâ”€â”€ ActivityFeed.tsx     # Workspace audit timeline and event stream
+â”‚   â”‚       â”œâ”€â”€ BottomDock.tsx       # Tabbed bottom panel (Terminal, Output, Problems, Voice, Chat)
+â”‚   â”‚       â”œâ”€â”€ Breadcrumbs.tsx      # Path breadcrumbs bar above the code editor
+â”‚   â”‚       â”œâ”€â”€ ChatPanel.tsx        # Project team chat with rich media upload and reactions
+â”‚   â”‚       â”œâ”€â”€ CollaboratorsPanel.tsx # Active peer list with follow-mode and kick controls
+â”‚   â”‚       â”œâ”€â”€ CommandPalette.tsx   # Ctrl+Shift+P quick command execution modal
+â”‚   â”‚       â”œâ”€â”€ ContextMenu.tsx      # Custom context menu for file tree items
+â”‚   â”‚       â”œâ”€â”€ DiffViewerModal.tsx  # Side-by-side Monaco diff inspection modal
+â”‚   â”‚       â”œâ”€â”€ EditorSettingsModal.tsx # Comprehensive Monaco and IDE configuration modal
+â”‚   â”‚       â”œâ”€â”€ ExtensionsPanel.tsx  # Extension marketplace mockup & discovery panel
+â”‚   â”‚       â”œâ”€â”€ FileIcon.tsx         # File-extension-aware icon renderer
+â”‚   â”‚       â”œâ”€â”€ FileTree.tsx         # Nested interactive folder & file explorer
+â”‚   â”‚       â”œâ”€â”€ GitHubModal.tsx      # GitHub repository linking and sync modal
+â”‚   â”‚       â”œâ”€â”€ GitPanel.tsx         # VS Code-style Git source control management UI
+â”‚   â”‚       â”œâ”€â”€ GlobalSearchModal.tsx # Cross-project file content search modal
+â”‚   â”‚       â”œâ”€â”€ InlineCommentsOverlay.tsx # Line-level code review comment pins
+â”‚   â”‚       â”œâ”€â”€ IntegrationsModal.tsx # Third-party service integration management
+â”‚   â”‚       â”œâ”€â”€ InviteMemberModal.tsx # Collaborator invitation dialogue
+â”‚   â”‚       â”œâ”€â”€ KeyboardShortcutsModal.tsx # Complete keyboard shortcut cheat sheet
+â”‚   â”‚       â”œâ”€â”€ MediaPreviewModal.tsx # Fullscreen modal for images, audio, and videos
+â”‚   â”‚       â”œâ”€â”€ MediaViewer.tsx      # In-tab media file viewer (PNG, JPG, MP4, MP3)
+â”‚   â”‚       â”œâ”€â”€ MonacoEditorWrapper.tsx # Monaco editor mounted with Yjs binding & remote cursor tags
+â”‚   â”‚       â”œâ”€â”€ NotificationCenterPanel.tsx # Slide-in drawer for managing alerts & requests
+â”‚   â”‚       â”œâ”€â”€ NotificationToast.tsx # Toast notification models, container, & corner alerts
+â”‚   â”‚       â”œâ”€â”€ OpenTabs.tsx         # Draggable/closeable editor tab strip
+â”‚   â”‚       â”œâ”€â”€ OutputPanel.tsx      # System build and execution logs console
+â”‚   â”‚       â”œâ”€â”€ PreviewPanel.tsx     # In-browser iframe live web preview & reverse proxy
+â”‚   â”‚       â”œâ”€â”€ ProblemsPanel.tsx    # Syntax warnings and linter diagnostics dock
+â”‚   â”‚       â”œâ”€â”€ ProjectPresence.tsx  # Top navigation collaborator avatars and shared cursors
+â”‚   â”‚       â”œâ”€â”€ ProjectSwitcherModal.tsx # Quick modal to jump between recent workspaces
+â”‚   â”‚       â”œâ”€â”€ PublicProfileModal.tsx # Modal wrapper for viewing peer public profiles
+â”‚   â”‚       â”œâ”€â”€ QuickOpenModal.tsx   # Ctrl+P quick file search and open modal
+â”‚   â”‚       â”œâ”€â”€ ReviewRequestsModal.tsx # Pull Request & Code Review management modal
+â”‚   â”‚       â”œâ”€â”€ TerminalPanel.tsx    # XTerm.js multi-session pseudo-terminal container
+â”‚   â”‚       â”œâ”€â”€ UserProfileModal.tsx # Comprehensive personal profile modal
+â”‚   â”‚       â”œâ”€â”€ VoicePanel.tsx       # WebRTC voice room participant dock
+â”‚   â”‚       â””â”€â”€ Workspace.tsx        # Master IDE workspace controller component (100KB)
+â”‚   â”‚
+â”‚   â”œâ”€â”€ context/
+â”‚   â”‚   â””â”€â”€ AuthContext.tsx          # Global authentication state, session listener, profile sync
+â”‚   â”œâ”€â”€ hooks/
+â”‚   â”‚   â”œâ”€â”€ useClickOutside.ts       # DOM outside click detection hook
+â”‚   â”‚   â”œâ”€â”€ useDebounce.ts           # Value debouncing hook
+â”‚   â”‚   â”œâ”€â”€ useKeyboardManager.ts    # Global keybinding dispatcher (Ctrl+S, Ctrl+P, Ctrl+`, etc.)
+â”‚   â”‚   â””â”€â”€ useVoiceChat.ts          # WebRTC mesh voice client hook with Google STUN
+â”‚   â””â”€â”€ lib/
+â”‚       â”œâ”€â”€ cache-utils.ts           # In-memory query cache with TTL invalidation
+â”‚       â”œâ”€â”€ commands.ts              # Command palette registry
+â”‚       â”œâ”€â”€ config.ts                # Centralized environment URL configuration & auto-failover
+â”‚       â”œâ”€â”€ data-service.ts          # Master data layer bridging Supabase, Server, and Mock
+â”‚       â”œâ”€â”€ sound.ts                 # Web Audio API procedural sound synthesizer
+â”‚       â”œâ”€â”€ storage-mock.ts          # Client-side localStorage persistence layer
+â”‚       â”œâ”€â”€ themes.ts                # Theme token definitions (Monaco themes, UI palettes)
+â”‚       â”œâ”€â”€ types.ts                 # TypeScript type definitions across the entire system
+â”‚       â”œâ”€â”€ collaboration/
+â”‚       â”‚   â”œâ”€â”€ comment-service.ts   # Inline code comments & pull request manager
+â”‚       â”‚   â””â”€â”€ types.ts             # Review and comment data types
+â”‚       â”œâ”€â”€ extensions/
+â”‚       â”‚   â”œâ”€â”€ registry.ts          # Extensions catalog registry
+â”‚       â”‚   â””â”€â”€ types.ts             # Extension specification interfaces
+â”‚       â”œâ”€â”€ integrations/
+â”‚       â”‚   â”œâ”€â”€ integration-manager.ts # Deployment and cloud integration client
+â”‚       â”‚   â””â”€â”€ types.ts             # Integration provider interfaces
+â”‚       â””â”€â”€ supabase/
+â”‚           â”œâ”€â”€ client.ts            # Browser Supabase client instance
+â”‚           â”œâ”€â”€ server.ts            # Server-side Supabase client instance using cookies
+â”‚           â””â”€â”€ profile-utils.ts     # Metadata normalization for Google/GitHub OAuth users
+â”‚
+â””â”€â”€ supabase/                        # SQL Migrations & Database DDL
+    â”œâ”€â”€ schema.sql                   # Base schema: profiles, projects, members, files, messages
+    â”œâ”€â”€ schema_v6.sql                # Media columns, activities target object, storage bucket
+    â”œâ”€â”€ schema_v9.sql                # Coding partners & notifications tables with RLS
+    â”œâ”€â”€ schema_v10_auth_profiles.sql # Safe additive OAuth profiles migration & handle_new_user trigger
+    â””â”€â”€ schema_v11_performance_indexes.sql # Rapid lookup B-tree indexes for zero N+1 latency
 ```
 
 ---
@@ -310,17 +310,17 @@ web ide/
 ### End-to-End Authentication Flow
 ```text
 [User Clicks "Sign in with Google / GitHub"]
-       │
-       ▼
+       â”‚
+       â–¼
 Supabase Client initiates OAuth (PKCE Flow)
 Redirects browser to provider consent screen:
 redirect_to = http://localhost:3000/auth/callback (or production origin)
-       │
-       ▼
+       â”‚
+       â–¼
 User completes consent on Google / GitHub
 Provider redirects to /auth/callback?code=AUTH_CODE
-       │
-       ▼
+       â”‚
+       â–¼
 Next.js Route Handler (/src/app/auth/callback/route.ts):
 1. Reads `code` from query parameters.
 2. Calls `supabase.auth.exchangeCodeForSession(code)` to set auth cookies.
@@ -330,8 +330,8 @@ Next.js Route Handler (/src/app/auth/callback/route.ts):
    - If missing: inserts new profile row with OAuth metadata.
    - If exists: non-destructively updates only empty/default fields, preserving custom user edits.
 5. Redirects to target destination (`/?` or `/project/[id]`).
-       │
-       ▼
+       â”‚
+       â–¼
 AuthContext (`src/context/AuthContext.tsx`):
 - `supabase.auth.onAuthStateChange` fires.
 - Synchronizes user state into React Context and `StorageMock`.
@@ -469,10 +469,10 @@ Radiux uses a **dual-layer filesystem model**:
 - Model: `public.coding_partners` table in PostgreSQL + `.workspaces/data/partners.json` + `StorageMock`.
 - **State Machine:**
   ```text
-  [Send Request] ──► PENDING ──┬──► ACCEPTED (Mutual Partners)
-                               ├──► REJECTED / DECLINED
-                               ├──► IGNORED
-                               └──► CANCELLED (Unsent by requester)
+  [Send Request] â”€â”€â–º PENDING â”€â”€â”¬â”€â”€â–º ACCEPTED (Mutual Partners)
+                               â”œâ”€â”€â–º REJECTED / DECLINED
+                               â”œâ”€â”€â–º IGNORED
+                               â””â”€â”€â–º CANCELLED (Unsent by requester)
   ```
 - **Live Dispatch:** Sending a partner request immediately transmits a WebSocket event (`partner_request_received`) to the receiver if online, and records a persistent notification.
 
@@ -549,7 +549,7 @@ Radiux uses a **dual-layer filesystem model**:
 | :--- | :--- | :--- | :--- |
 | **Vercel** | Frontend Hosting (Next.js 14) | Configured | `.env.production`, `render.yaml`, `next.config.js` |
 | **Render** | Backend Companion Service (Node/PTY) | Configured | `render.yaml` Blueprint (`radiux-backend`), `/health` check |
-| **Supabase** | Auth, PostgreSQL Database, Storage | Active & Live | `https://rdhwzezrmgkgsbpwznrz.supabase.co` |
+| **Supabase** | Auth, PostgreSQL Database, Storage | Active & Live | `https://your-project.supabase.co` |
 | **GitHub** | Codebase VCS & OAuth Identity | Configured | `https://github.com/RyanKeshary/Radiux.git` |
 
 ### Audit of Network References (Ports & URLs)
@@ -566,38 +566,38 @@ Radiux uses a **dual-layer filesystem model**:
 ## 21. Database Architecture & ER Diagram
 
 ```text
-       ┌────────────────────────┐
-       │       auth.users       │
-       └───────────┬────────────┘
-                   │ (1:1 cascade)
-                   ▼
-       ┌────────────────────────┐
-       │    public.profiles     │◄───────────────────┐
-       └───────────┬────────────┘                    │
-                   │ (1:N)                           │
-       ┌───────────┴────────────┐                    │
-       │                        │                    │
-       ▼                        ▼                    │
-┌──────────────┐         ┌──────────────┐            │
-│   projects   │         │ notifications│            │
-└──────┬───────┘         └──────────────┘            │
-       │                                             │
-       ├────────────────────────┐                    │
-       ▼                        ▼                    │
-┌──────────────┐         ┌──────────────┐            │
-│    files     │         │project_members            │
-└──────────────┘         └──────────────┘            │
-       │                                             │
-       ├────────────────────────┐                    │
-       ▼                        ▼                    │
-┌──────────────┐         ┌──────────────┐            │
-│   messages   │         │  activities  │            │
-└──────────────┘         └──────────────┘            │
-                                                     │
-                                                     │
-                         ┌────────────────────────┐  │
-                         │    coding_partners     ├──┘
-                         └────────────────────────┘
+       â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+       â”‚       auth.users       â”‚
+       â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                   â”‚ (1:1 cascade)
+                   â–¼
+       â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+       â”‚    public.profiles     â”‚â—„â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+       â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜                    â”‚
+                   â”‚ (1:N)                           â”‚
+       â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”                    â”‚
+       â”‚                        â”‚                    â”‚
+       â–¼                        â–¼                    â”‚
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”         â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”            â”‚
+â”‚   projects   â”‚         â”‚ notificationsâ”‚            â”‚
+â””â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”˜         â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜            â”‚
+       â”‚                                             â”‚
+       â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”                    â”‚
+       â–¼                        â–¼                    â”‚
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”         â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”            â”‚
+â”‚    files     â”‚         â”‚project_members            â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜         â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜            â”‚
+       â”‚                                             â”‚
+       â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”                    â”‚
+       â–¼                        â–¼                    â”‚
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”         â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”            â”‚
+â”‚   messages   â”‚         â”‚  activities  â”‚            â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜         â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜            â”‚
+                                                     â”‚
+                                                     â”‚
+                         â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”‚
+                         â”‚    coding_partners     â”œâ”€â”€â”˜
+                         â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ---
@@ -726,9 +726,9 @@ Radiux uses a **dual-layer filesystem model**:
 
 - **TypeScript Verification:** `npx tsc --noEmit` executed with **exit code 0** (0 type errors across all files).
 - **Next.js Production Build:** `npm run build` executed with **exit code 0** (all 9 routes compiled cleanly, including new `/auth/reset-password`).
-- **Interactive Terminal Verification:** Tested interactive command execution via WebSocket — `node -v` (v24.19.0) and `npm -v` (11.17.0) executed cleanly without PowerShell execution policy errors.
-- **Shell Profile Switching Verification:** Tested `cmd.exe` profile execution — successfully spawned CMD session, ran `echo RADIUX_CMD_OK` and verified output.
-- **Git Integration Verification:** Tested `/api/git/init` and `/api/git/status` — successfully initialized Git repository with default branch `main`.
-- **Notification Deduplication Verification:** Tested `/comm` notifications with deterministic idempotency keys — 3 repeated dispatches collapsed to exactly 1 persisted record.
+- **Interactive Terminal Verification:** Tested interactive command execution via WebSocket â€” `node -v` (v24.19.0) and `npm -v` (11.17.0) executed cleanly without PowerShell execution policy errors.
+- **Shell Profile Switching Verification:** Tested `cmd.exe` profile execution â€” successfully spawned CMD session, ran `echo RADIUX_CMD_OK` and verified output.
+- **Git Integration Verification:** Tested `/api/git/init` and `/api/git/status` â€” successfully initialized Git repository with default branch `main`.
+- **Notification Deduplication Verification:** Tested `/comm` notifications with deterministic idempotency keys â€” 3 repeated dispatches collapsed to exactly 1 persisted record.
 - **Backend Health Verification:** `http://127.0.0.1:1234/health` returns `{ "status": "ok", "product": "radiux", "service": "radiux-backend" }`.
 - **Git Status:** Clean and synchronized on branch `main`.

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 function getSupabaseClient(authHeader?: string | null) {
@@ -13,9 +13,10 @@ function getSupabaseClient(authHeader?: string | null) {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  // Next.js 15+ delivers route-handler params as a Promise.
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const conversationId = params.id;
+  const { id: conversationId } = await params;
   const authHeader = req.headers.get('Authorization');
   const supabase = getSupabaseClient(authHeader);
 
@@ -42,9 +43,9 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const conversationId = params.id;
+  const { id: conversationId } = await params;
   const authHeader = req.headers.get('Authorization');
   const supabase = getSupabaseClient(authHeader);
 
@@ -78,9 +79,9 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const conversationId = params.id;
+  const { id: conversationId } = await params;
   const authHeader = req.headers.get('Authorization');
   const supabase = getSupabaseClient(authHeader);
 

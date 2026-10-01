@@ -1,10 +1,10 @@
-# RADIUX — PROJECT-WIDE ENGINEERING AUDIT REPORT
+# RADIUX â€” PROJECT-WIDE ENGINEERING AUDIT REPORT
 
 **Date:** September 2026  
 **Auditor:** Antigravity Autonomous Engineering Agent  
 **Branch:** `main`  
 **Repository:** Radiux Core IDE  
-**Status:** Complete — All 24 Audit Items Resolved & Verified (`npm run build` passing)
+**Status:** Complete â€” All 24 Audit Items Resolved & Verified (`npm run build` passing)
 
 ---
 
@@ -26,7 +26,7 @@ This engineering audit documents the architectural and functional state of **Rad
 ### RAD-001: Supabase Database Schema Cache Disconnect & Fallback Siloing
 - **Feature:** Authentication, Data Persistence & Supabase Synchronization
 - **Location:** `src/lib/data-service.ts`, `src/lib/supabase/client.ts`, `server/websocket.mjs`
-- **Problem:** Supabase remote instance (`rdhwzezrmgkgsbpwznrz.supabase.co`) throws `PGRST205: Could not find the table 'public.coding_partners' in the schema cache` and does not contain custom columns (`bio`, `skills`, `location`, `education`) on `profiles`.
+- **Problem:** Supabase remote instance (`your-project.supabase.co`) throws `PGRST205: Could not find the table 'public.coding_partners' in the schema cache` and does not contain custom columns (`bio`, `skills`, `location`, `education`) on `profiles`.
 - **Reproduction Steps:** Perform profile update or partner request when connected to Supabase.
 - **Expected:** Robust persistent storage with transparent local backend synchronization when Supabase schema is missing custom tables.
 - **Actual:** Direct Supabase queries fail silently or throw schema errors, causing UI updates to stall unless backed by local file storage.

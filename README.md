@@ -776,6 +776,10 @@ Radiux enforces a strict role-based access control system at both the UI and ser
 | Manage members | ✅ | ❌ | ❌ |
 | Delete project | ✅ | ❌ | ❌ |
 
+> [!WARNING]
+> This table is enforced on **both** layers: by Supabase RLS on the database, and by
+> `server/authz.mjs` on the backend companion server. The UI merely reflects the role.
+
 ### System Roles
 
 | Role | Access |
@@ -785,10 +789,16 @@ Radiux enforces a strict role-based access control system at both the UI and ser
 
 ### Enforcement Points
 
-- **Supabase RLS:** Row Level Security policies on all tables
-- **API routes:** Server-side role verification in `/api/ai/agent`, `/api/workspace/exec`
-- **WebSocket:** Token verification on connection; project membership checked
-- **UI:** Conditional rendering based on role (e.g., Monaco `readOnly` for Visitors)
+- **Supabase RLS:** Row Level Security policies on all tables — this is the authoritative
+  authorization layer for all database access.
+- **Next.js API routes:** `/api/ai/agent` resolves the caller's role by querying
+  `project_members`/`projects` with the verified Supabase user, and rejects
+  non-members with `403`.
+- **Backend companion server:** `server/authz.mjs` verifies the JWT and resolves the
+  caller's project role from the database. Client-supplied roles are ignored.
+  See [Backend Authorization Model](#backend-authorization-model).
+- **UI:** Conditional rendering based on role (e.g., Monaco `readOnly` for Visitors).
+  This is a UX affordance; the server is the actual enforcement boundary.
 
 ---
 
@@ -1023,16 +1033,28 @@ AgentExecutionLoop.run()
 
 ### Backend REST API (Node.js Server)
 
+Verified against `server/websocket.mjs` route handlers.
+
 | Method | Route | Purpose | Auth |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/health` | Health check | None |
-| `POST` | `/api/sync-file` | Sync file to disk | Token |
-| `POST` | `/api/sync-project` | Sync entire project | Token |
-| `POST` | `/api/workspace/exec` | Execute workspace command | Token + RBAC |
-| `GET/POST` | `/api/git/*` | Git operations | Token + RBAC |
-| `GET/POST` | `/api/profiles` | Profile management | Token |
-| `GET/POST` | `/api/coding-partners` | Partner requests | Token |
-| `GET/POST` | `/api/notifications` | Notification management | Token |
+| `GET` | `/api/terminal/profiles` | List detected host shells | None |
+| `GET` | `/api/terminal/sessions` | List active PTY sessions | None |
+| `POST` | `/api/sync-file` | Sync file to disk | None |
+| `POST` | `/api/sync-project` | Sync entire project | None |
+| `POST` | `/api/workspace/exec` | Execute workspace command | **Client-declared role only** — see [Security](#security) |
+| `GET` | `/api/check-port` | Probe a local port for the preview panel | None |
+| `GET/POST` | `/api/git/*` | Git operations | **Client-declared role only** |
+| `GET` | `/api/workspace/files` | List workspace files | None |
+| `GET/POST` | `/api/messages` | Project chat messages | None |
+| `GET/POST` | `/api/partners` | Coding-partner requests | None |
+| `GET/POST` | `/api/profiles` | Profile management | None |
+| `GET/POST` | `/api/comments` | Inline code comments | None |
+| `GET/POST` | `/api/reviews` | Review requests | None |
+
+> **Note:** There is **no** `/api/notifications` REST route. Notifications are delivered
+> over the `/comm` WebSocket and written through `/api/reviews` and `/api/partners`.
+> Unmatched `/api/*` paths fall through to the server's HTML shell handler.
 
 ---
 
@@ -1119,11 +1141,49 @@ const isSensitive = /SUPABASE|GROQ|SECRET|KEY|TOKEN|PASSWORD|DATABASE|CREDENTIAL
 - **Development:** All origins allowed
 - **Production:** Restricted to `ALLOWED_ORIGIN` env var + official Radiux Vercel domains
 
+### Backend Authorization Model
+
+Every request to the companion server (`server/`) is authorized by `server/authz.mjs`:
+
+1. **Extract** the JWT from `Authorization: Bearer <token>` (or a `token` query parameter for WebSocket upgrades, which cannot set headers).
+2. **Verify** the JWT against Supabase Auth using the service-role client.
+3. **Resolve** the caller's effective role from the database — `projects.owner_id` → `owner`, otherwise `project_members.role`.
+4. **Compare** against the capability the route requires.
+
+| Role | Read (`status`, `log`, `diff`, chat, Yjs sync) | Write (`exec`, Git mutations, PTY shell) |
+| :--- | :---: | :---: |
+| `owner` | ✅ | ✅ |
+| `editor` | ✅ | ✅ |
+| `visitor` | ✅ | ❌ `403` |
+| non-member | ❌ `403` | ❌ `403` |
+
+**Client-supplied `userRole` / `role` values are ignored entirely.** Roles are never read from the request.
+
+**Fail-closed:** if `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are not configured, every request is refused with `503` rather than being allowed through. Local development without Supabase can opt out explicitly with `RADIUX_ALLOW_ANONYMOUS=1`, which grants anonymous callers `owner` privileges and prints a loud warning at boot. **Never set this in production.**
+
 ### Current Security Limitations
 
-- **No container sandboxing:** Terminal processes run directly on the host OS. In untrusted multi-tenant environments, containerization (Docker/microVMs) is recommended.
-- **No TURN server:** WebRTC voice uses public STUN only; symmetric NATs will fail without a TURN relay.
-- **Dual persistence:** Some data (comments, DMs) persists to local JSON files rather than Supabase tables.
+Verified empirically against a running backend, both before and after the authorization fix.
+
+| Issue | Severity | Status |
+| :--- | :--- | :--- |
+| **Command execution trusted a client-supplied `userRole`** | Critical | **Fixed.** Roles now resolved from the verified JWT + database. Re-tested: omitting `userRole`, sending `editor`, and sending a bogus `superadmin` all return `503`/`403`; none execute. |
+| **WebSocket auth failed open** | Critical | **Fixed.** Replaced `if (SUPABASE_SERVICE_ROLE_KEY && !verifiedUser)` with fail-closed `authorizeProject()`. Re-tested: **0/6** unauthenticated endpoints accepted (was 5/5). |
+| **`/terminal` role check ran before token verification** | High | **Fixed.** The query-string `role` was removed; the verified identity is now resolved first. |
+| **`/yjs` accepted any connection** | High | **Fixed.** The `projectId` is parsed from the room name and authorized; unrecognised room shapes are refused. |
+| **Unauthenticated Git writes** | High | **Fixed.** `POST /api/git/init` now requires `owner`/`editor`. Re-tested: returns `503`/`403`. |
+| **Backend ignored `.env`** | Medium | **Fixed.** The server now loads `.env.local` / `.env` via `process.loadEnvFile()`, so `SUPABASE_*` is actually present locally. Previously auth silently disabled itself. |
+| **No container sandboxing** | High | **Open.** Terminal processes run on the host OS with a sanitized environment and workspace path confinement, but no container/microVM isolation. |
+| **Path traversal** | Mitigated | `../../../../etc` and URL-encoded traversal in `projectId` are rejected with `400`. |
+| **No TURN server** | Low | WebRTC uses public STUN only; symmetric NATs fail without a TURN relay. |
+| **Dual persistence** | Low | Comments and DMs persist to local JSON rather than Supabase tables. |
+| **Vulnerable `next@14.2.15`** | High | **Open.** Includes unauthenticated RCE on Windows hosts (GHSA-p293-qw3h-jr36). Requires a Next.js major upgrade — see [Limitations](#limitations). |
+
+> [!IMPORTANT]
+> With `authorizeProject()` in place the backend is no longer trivially exploitable, but
+> the absence of container isolation still means a compromised account yields host-level
+> code execution. Treat the backend as trusted-network infrastructure and keep
+> `RADIUX_ALLOW_ANONYMOUS` unset outside local development.
 
 ---
 
@@ -1451,9 +1511,63 @@ npm run lint
 
 ## Testing
 
-### Current Test Strategy
+### Test Stack
 
-Radiux currently relies on **manual verification scripts** rather than an automated test suite:
+| Layer | Tool | Config | Command |
+| :--- | :--- | :--- | :--- |
+| **Unit + Integration** | Vitest 2.1.9 | `vitest.config.mts` | `npm test` |
+| **Coverage** | `@vitest/coverage-v8` (v8 provider) | `vitest.config.mts` | `npm run test:coverage` |
+| **E2E** | Playwright 1.63 | `playwright.config.ts` | `npm run test:e2e` |
+| **Component** | Testing Library + jsdom | `src/__tests__/setup.ts` | — |
+
+### Test Suite Inventory (14 files, 256 tests)
+
+| Area | Files | Tests |
+| :--- | :---: | :---: |
+| **Unit** — `cache-utils`, `config`, `themes`, `types`, `useDebounce`, `smoke` | 6 | 67 |
+| **Component** — `AuthModal`, `FileIcon`, `FileTree`, `OpenTabs`, `UserMenu` | 5 | 109 |
+| **Integration (server)** — `git-manager`, `websocket-server`, `workspace-manager` | 3 | 80 |
+| **Total** | **14** | **256** |
+
+### Current Results
+
+Measured on Windows / Node v24.19.0:
+
+| Metric | Value |
+| :--- | :--- |
+| Tests passing | **245 / 256** |
+| Tests failing | **11** (all test-side defects, not product regressions) |
+| Statement coverage (`src/**`) | **4.21%** (1651 / 39125) |
+| Branch coverage | **66.13%** (293 / 443) |
+| Function coverage | **27.83%** (59 / 212) |
+| `tsc --noEmit` — app source | **0 errors** |
+| `tsc --noEmit` — test files | **419 errors** (test-runner globals untyped) |
+| `next build` | **passes** (exit 0) |
+
+> [!NOTE]
+> Coverage is low in absolute terms because the denominator spans the entire component
+> tree including `Workspace.tsx` (~190 kB route bundle). The utilities under test are
+> well covered; the Zodiac agent, all API routes, and most workspace panels have
+> **no automated coverage at all**.
+
+### Known Test Defects
+
+- **`tsconfig.json` omits test-runner types** — `describe`/`it`/`expect`/`vi` are
+  untyped, producing 419 type errors. Add `"types": ["vitest/globals"]`.
+- **`npm run lint` cannot run non-interactively** — no `.eslintrc*` exists and
+  `eslint` is not installed, so `next lint` drops into its interactive setup prompt.
+- **`npm run test:coverage` requires `@vitest/coverage-v8`**, pinned to the vitest
+  major version (install `@vitest/coverage-v8@2.1.9`, not `@5`).
+- **11 failing assertions:**
+  - `AuthModal` (3) — validation-message assertions do not match rendered output.
+  - `FileTree` (3) — `window.confirm` not stubbed; rename/active-class expectations unmet.
+  - `OpenTabs` (1) — `getByTitle('Close (Ctrl+W)')` is ambiguous with multiple tabs.
+  - `workspace-manager` (4) — `node-pty` is not mocked, so a real `cmd.exe` spawn is attempted.
+- **`e2e/auth.spec.ts`** passes `ignoreCase` to `toHaveText`, which Playwright does not support.
+
+### Manual Verification Scripts
+
+These remain useful for verifying live AI and sync behaviour:
 
 | Script | Purpose |
 | :--- | :--- |

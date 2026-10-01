@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { 
   Code2, 
@@ -21,13 +21,15 @@ import { DataService } from '@/lib/data-service';
 import { FileItem, ProjectMember } from '@/lib/types';
 
 interface PublicProjectPageProps {
-  params: {
-    id: string;
-  };
+  // Next.js 15+ delivers dynamic route params as a Promise. This page is a client
+  // component, so the resolved value is handed down through React state below.
+  params: Promise<{ id: string }>;
 }
 
 export default function PublicProjectPage({ params }: PublicProjectPageProps) {
-  const { id } = params;
+  // `use()` unwraps the params promise inside a client component without suspending
+  // the whole tree. Equivalent to `await params` on the server.
+  const { id } = use(params) as { id: string };
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);

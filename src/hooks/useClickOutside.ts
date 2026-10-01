@@ -6,7 +6,8 @@ import { useEffect, RefObject } from 'react';
  * and handles window blur (e.g. clicking into an iframe like Web Preview) as well as the Escape key.
  */
 export function useClickOutside<T extends HTMLElement = HTMLElement>(
-  ref: RefObject<T>,
+  // React 19 widened `useRef<T>(null)` to `RefObject<T | null>`; accept both shapes.
+  ref: RefObject<T | null>,
   handler: (event: MouseEvent | TouchEvent | KeyboardEvent) => void,
   enabled: boolean = true
 ) {

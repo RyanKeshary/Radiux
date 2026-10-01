@@ -2,10 +2,10 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { spawn, execSync } from 'child_process';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-const pty = require('node-pty');
+// Static ESM import (rather than createRequire + require) so the module resolves through
+// the standard loader. Behaviour is identical for this CommonJS dependency, but it keeps
+// the module mockable from tests.
+import pty from 'node-pty';
 
 const WORKSPACES_ROOT = path.resolve(process.cwd(), '.workspaces');
 
@@ -21,8 +21,15 @@ const activeSessions = new Map();
 const projectSessions = new Map();
 
 // Helper to sanitize environment variables so user terminal cannot access DB credentials or app secrets
+/**
+ * Build the environment handed to spawned shells.
+ * Explicitly typed as a string map: without this, TypeScript infers a narrow object
+ * shape from the literal assignments below and rejects dynamic key access.
+ *
+ * @returns {Record<string, string>}
+ */
 export function getSanitizedEnv() {
-  const safeEnv = {};
+  const safeEnv = /** @type {Record<string, string>} */ ({});
   for (const [k, v] of Object.entries(process.env)) {
     const isSensitive = /SUPABASE|GROQ|SECRET|KEY|TOKEN|PASSWORD|DATABASE|CREDENTIAL|AUTH|RENDER|ALLOWED_ORIGIN|COOKIE|PRIVATE/i.test(k);
     if (!isSensitive) {

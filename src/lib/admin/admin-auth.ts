@@ -4,9 +4,24 @@ import path from 'path';
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export const LEAD_ADMIN_EMAIL = 'ryankeshary@gmail.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123456';
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'radiux-master-admin-secret-key-2026';
+export const LEAD_ADMIN_EMAIL =
+  process.env.ADMIN_EMAIL || 'admin@example.com';
+
+/**
+ * Admin credentials are read from the environment ONLY.
+ *
+ * There are deliberately no hard-coded fallback values: this file is committed to a
+ * public repository, so any literal secret here would be publicly known and would allow
+ * unauthenticated admin logins and forged admin session tokens. When the variables are
+ * absent the admin surface fails closed.
+ */
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
+
+/** True only when both admin secrets are supplied by the environment. */
+export function isAdminAuthConfigured(): boolean {
+  return Boolean(ADMIN_PASSWORD && ADMIN_SECRET);
+}
 
 const ADMIN_STORE_PATH = path.resolve(process.cwd(), '.workspaces', 'admins.json');
 
@@ -195,13 +210,18 @@ function getSupabaseAdmin() {
  * Check if the provided credentials match the master admin credentials
  */
 export function validateMasterAdmin(identifier: string, password: string): boolean {
+  // Fail closed: without configured secrets there is no valid credential.
+  if (!isAdminAuthConfigured()) return false;
   if (!identifier || !password) return false;
+
   const cleanId = identifier.trim().toLowerCase();
   const cleanPass = password.trim();
 
   const isEmailMatch = isUserAdminEmail(cleanId);
-  const isUsernameMatch = cleanId === 'admin' || cleanId === 'ryankeshary';
-  const isPassMatch = cleanPass === ADMIN_PASSWORD;
+  const isUsernameMatch = cleanId === 'admin';
+  const isPassMatch =
+    cleanPass.length === ADMIN_PASSWORD.length &&
+    crypto.timingSafeEqual(Buffer.from(cleanPass), Buffer.from(ADMIN_PASSWORD));
 
   return (isEmailMatch || isUsernameMatch) && isPassMatch;
 }

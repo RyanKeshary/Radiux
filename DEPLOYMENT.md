@@ -1,4 +1,4 @@
-# CodeCollab — Production Deployment Guide
+﻿# CodeCollab â€” Production Deployment Guide
 
 This document describes the production deployment architecture and step-by-step setup for CodeCollab.
 
@@ -8,37 +8,37 @@ This document describes the production deployment architecture and step-by-step 
 
 ```text
                          INTERNET
-                            │
-                            ▼
-                  ┌────────────────────┐
-                  │      Vercel        │
-                  │   Next.js Frontend │
-                  └─────────┬──────────┘
-                            │
+                            â”‚
+                            â–¼
+                  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+                  â”‚      Vercel        â”‚
+                  â”‚   Next.js Frontend â”‚
+                  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                            â”‚
                      HTTPS / WSS
-                            │
-                            ▼
-                  ┌────────────────────┐
-                  │       Render       │
-                  │   Node Backend     │
-                  │                    │
-                  │ WebSockets         │
-                  │ Terminal / PTY     │
-                  │ Git                │
-                  │ Workspace          │
-                  │ Dev Server Proxy   │
-                  │ REST API           │
-                  └─────────┬──────────┘
-                            │
-                            ▼
-                  ┌────────────────────┐
-                  │     Supabase       │
-                  │                    │
-                  │ Auth               │
-                  │ PostgreSQL         │
-                  │ Storage            │
-                  │ Realtime           │
-                  └────────────────────┘
+                            â”‚
+                            â–¼
+                  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+                  â”‚       Render       â”‚
+                  â”‚   Node Backend     â”‚
+                  â”‚                    â”‚
+                  â”‚ WebSockets         â”‚
+                  â”‚ Terminal / PTY     â”‚
+                  â”‚ Git                â”‚
+                  â”‚ Workspace          â”‚
+                  â”‚ Dev Server Proxy   â”‚
+                  â”‚ REST API           â”‚
+                  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                            â”‚
+                            â–¼
+                  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+                  â”‚     Supabase       â”‚
+                  â”‚                    â”‚
+                  â”‚ Auth               â”‚
+                  â”‚ PostgreSQL         â”‚
+                  â”‚ Storage            â”‚
+                  â”‚ Realtime           â”‚
+                  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ### Hosting Roles & Responsibilities
@@ -73,7 +73,7 @@ Set these environment variables in your Vercel Project Settings (**Settings** ->
 
 | Variable | Description | Example Production Value |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL | `https://rdhwzezrmgkgsbpwznrz.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL | `https://your-project.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public Supabase client anon key | `sb_publishable_...` |
 | `NEXT_PUBLIC_APP_URL` | Public production frontend URL | `https://radiux-ryankeshary-3251s-projects.vercel.app` |
 | `NEXT_PUBLIC_WS_URL` | Public WSS URL of Render backend | `wss://codecollab-backend-isjt.onrender.com` |
@@ -91,7 +91,7 @@ Set these environment variables in your Render Web Service dashboard (**Environm
 | `PORT` | Dynamically assigned port (or defaults to 10000) | `10000` |
 | `NODE_ENV` | Node production environment flag | `production` |
 | `ALLOWED_ORIGIN` | Allowed CORS origins (comma-separated if multiple) | `https://radiux-ryankeshary-3251s-projects.vercel.app,https://radiux-git-main-ryankeshary-3251s-projects.vercel.app,http://localhost:3000` |
-| `SUPABASE_URL` | Your Supabase project URL | `https://rdhwzezrmgkgsbpwznrz.supabase.co` |
+| `SUPABASE_URL` | Your Supabase project URL | `https://your-project.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase Service Role Secret | `<your-supabase-service-role-secret>` |
 
 ---
@@ -128,8 +128,8 @@ Set these environment variables in your Render Web Service dashboard (**Environm
    - **Build Command**: `next build` (default)
    - **Output Directory**: `.next` (default)
 5. Expand **Environment Variables** and add:
-   - `NEXT_PUBLIC_SUPABASE_URL`: `https://rdhwzezrmgkgsbpwznrz.supabase.co`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: `sb_publishable_LJNOLmfuxnsbaxnRBcbQNg_TLDDbUfL`
+   - `NEXT_PUBLIC_SUPABASE_URL`: `https://your-project.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: `sb_publishable_...`
    - `NEXT_PUBLIC_APP_URL`: `https://radiux-ryankeshary-3251s-projects.vercel.app`
    - `NEXT_PUBLIC_WS_URL`: `wss://codecollab-backend-isjt.onrender.com`
    - `NEXT_PUBLIC_API_URL`: `https://codecollab-backend-isjt.onrender.com`
@@ -159,11 +159,11 @@ Once your Vercel URL is generated:
      ```
 2. **Google OAuth** (if enabled):
    - In Google Cloud Console -> APIs & Services -> Credentials -> Authorized redirect URIs:
-     Add: `https://rdhwzezrmgkgsbpwznrz.supabase.co/auth/v1/callback`
+     Add: `https://your-project.supabase.co/auth/v1/callback`
 3. **GitHub OAuth** (if enabled):
    - In GitHub Settings -> Developer settings -> OAuth Apps:
      - Homepage URL: `https://radiux-ryankeshary-3251s-projects.vercel.app`
-     - Authorization callback URL: `https://rdhwzezrmgkgsbpwznrz.supabase.co/auth/v1/callback`
+     - Authorization callback URL: `https://your-project.supabase.co/auth/v1/callback`
 
 ---
 
