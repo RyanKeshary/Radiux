@@ -876,9 +876,9 @@ export class ToolExecutor {
         // ----------------------------------------------------------------------
         case 'inspect_package_json': {
           let pkgPath = this.getWorkspacePath(projectId, 'package.json');
-          if (!fs.existsSync(pkgPath)) {
+          if (!fs.existsSync(/*turbopackIgnore: true*/ pkgPath)) {
             const rootPkg = path.resolve(process.cwd(), 'package.json');
-            if (fs.existsSync(rootPkg)) {
+            if (fs.existsSync(/*turbopackIgnore: true*/ rootPkg)) {
               pkgPath = rootPkg;
             } else {
               return {
@@ -890,7 +890,7 @@ export class ToolExecutor {
           }
 
           try {
-            const raw = fs.readFileSync(pkgPath, 'utf8');
+            const raw = fs.readFileSync(/*turbopackIgnore: true*/ pkgPath, 'utf8');
             const pkg = JSON.parse(raw);
             const formatted = {
               name: pkg.name,

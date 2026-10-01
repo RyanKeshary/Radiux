@@ -2,7 +2,6 @@
 const nextConfig = {
   reactStrictMode: false, // Monaco + Yjs work best without double mount in dev
   compress: true,
-  swcMinify: true,
   images: {
     formats: ['image/avif', 'image/webp'],
     remotePatterns: [

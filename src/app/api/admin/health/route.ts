@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   // 1. Frontend & Next.js Core
   const mem = process.memoryUsage();
   results.frontend = {
-    name: 'Frontend Engine (Next.js 14)',
+    name: 'Frontend Engine (Next.js 16)',
     status: 'HEALTHY',
     latencyMs: 1,
     message: `Uptime: ${Math.round(process.uptime())}s | RSS: ${Math.round(mem.rss / 1024 / 1024)}MB`,

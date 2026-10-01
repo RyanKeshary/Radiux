@@ -294,8 +294,16 @@ export const StorageMock = {
 
   // Level 7: Profiles, Coding Partners & Notifications
   getProfile(userId: string): UserProfile | null {
+    const clean = userId.replace(/^@/, '').toLowerCase().trim();
     const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, []);
-    return users.find(u => u.id === userId) || null;
+    return (
+      users.find(
+        (u) =>
+          u.id === userId ||
+          u.username?.toLowerCase() === clean ||
+          u.email?.toLowerCase() === clean
+      ) || null
+    );
   },
 
   updateProfile(userId: string, updates: Partial<UserProfile>): UserProfile {
@@ -376,6 +384,17 @@ export const StorageMock = {
         u.email !== 'radiux_verifier_559224@gmail.com' &&
         u.full_name?.toLowerCase() !== 'not ryan keshary'
     );
+  },
+
+  saveProfile(profile: UserProfile): void {
+    const users = getStored<UserProfile[]>(STORAGE_KEY_USERS, []);
+    const existingIndex = users.findIndex(u => u.id === profile.id);
+    if (existingIndex >= 0) {
+      users[existingIndex] = profile;
+    } else {
+      users.push(profile);
+    }
+    setStored(STORAGE_KEY_USERS, users);
   },
 
   getDirectMessages(user1Id: string, user2Id: string): DirectMessage[] {

@@ -5,7 +5,7 @@ import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export const LEAD_ADMIN_EMAIL =
-  process.env.ADMIN_EMAIL || 'admin@example.com';
+  process.env.ADMIN_EMAIL || 'ryankeshary@gmail.com';
 
 /**
  * Admin credentials are read from the environment ONLY.
@@ -233,6 +233,9 @@ export function generateAdminToken(
   email: string = LEAD_ADMIN_EMAIL,
   role: 'lead_admin' | 'admin' = isLeadAdminEmail(email) ? 'lead_admin' : 'admin'
 ): string {
+  if (!ADMIN_SECRET) {
+    throw new Error('Cannot generate admin token: ADMIN_SECRET is not configured.');
+  }
   const payload = {
     role,
     email: email.trim().toLowerCase(),
@@ -254,7 +257,7 @@ export function generateAdminToken(
 export function verifyMasterAdminToken(
   token: string
 ): { valid: boolean; role?: 'lead_admin' | 'admin'; email?: string; userId?: string } {
-  if (!token || !token.startsWith('rad_adm.')) return { valid: false };
+  if (!token || !token.startsWith('rad_adm.') || !ADMIN_SECRET) return { valid: false };
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return { valid: false };
@@ -265,7 +268,12 @@ export function verifyMasterAdminToken(
       .update(payloadBase64)
       .digest('base64url');
 
-    if (signature !== expectedSig) return { valid: false };
+    if (
+      signature.length !== expectedSig.length ||
+      !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))
+    ) {
+      return { valid: false };
+    }
 
     const payload = JSON.parse(Buffer.from(payloadBase64, 'base64url').toString('utf8'));
     if ((payload.role !== 'admin' && payload.role !== 'lead_admin') || payload.exp < Date.now()) {
