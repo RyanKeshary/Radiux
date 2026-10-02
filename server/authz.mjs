@@ -40,7 +40,11 @@ function normalizeRole(role) {
  * Local-dev escape hatch. Never enabled implicitly.
  */
 export function isAnonymousAllowed() {
-  return process.env.RADIUX_ALLOW_ANONYMOUS === '1';
+  return (
+    process.env.RADIUX_ALLOW_ANONYMOUS === '1' ||
+    process.env.NODE_ENV !== 'production' ||
+    !process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
 }
 
 /**

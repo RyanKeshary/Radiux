@@ -183,6 +183,16 @@ export function ChatPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const isDuplicateMessage = (existing: ChatMessage[], candidate: ChatMessage) => {
+    return existing.some(
+      (m) =>
+        m.id === candidate.id ||
+        (m.user_id === candidate.user_id &&
+          m.content === candidate.content &&
+          Math.abs(new Date(m.created_at).getTime() - new Date(candidate.created_at).getTime()) < 3500)
+    );
+  };
+
   // 1. Fetch initial persistent chat history & set up background sync
   useEffect(() => {
     let isMounted = true;
@@ -192,8 +202,7 @@ export function ChatPanel({
         if (isMounted) {
           setMessages((prev) => {
             if (prev.length === 0) return msgs;
-            const existingIds = new Set(prev.map((m) => m.id));
-            const newOnes = msgs.filter((m) => !existingIds.has(m.id));
+            const newOnes = msgs.filter((m) => !isDuplicateMessage(prev, m));
             if (newOnes.length > 0) {
               const merged = [...prev, ...newOnes].sort(
                 (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -251,12 +260,14 @@ export function ChatPanel({
           const data = JSON.parse(event.data);
           if (data.type === 'chat_message' && data.message) {
             const newMsg: ChatMessage = data.message;
+            // Ignore own messages echoed back from websocket
+            if (newMsg.user_id === userId) return;
             setMessages((prev) => {
-              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              if (isDuplicateMessage(prev, newMsg)) return prev;
               return [...prev, newMsg];
             });
             setTimeout(scrollToBottom, 50);
-            if (onNewMessageReceived && newMsg.user_id !== userId) {
+            if (onNewMessageReceived) {
               onNewMessageReceived();
             }
           }
@@ -291,15 +302,15 @@ export function ChatPanel({
     supabaseChannelRef.current = ch;
     ch.on('broadcast', { event: 'chat_message' }, ({ payload }) => {
       if (payload && payload.project_id === projectId) {
+        // Ignore own messages broadcasted back
+        if (payload.user_id === userId) return;
         setMessages((prev) => {
-          if (prev.some((m) => m.id === payload.id)) return prev;
+          if (isDuplicateMessage(prev, payload)) return prev;
           return [...prev, payload];
         });
         setTimeout(scrollToBottom, 50);
-        if (payload.user_id !== userId) {
-          soundManager.playNotification();
-          if (onNewMessageReceived) onNewMessageReceived();
-        }
+        soundManager.playNotification();
+        if (onNewMessageReceived) onNewMessageReceived();
       }
     });
 
@@ -351,6 +362,26 @@ export function ChatPanel({
         }
       : undefined;
 
+    // Generate optimistic temporary message for INSTANT zero-delay rendering
+    const tempId = `opt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      project_id: projectId,
+      user_id: userId,
+      user_name: userName,
+      user_avatar: userAvatar,
+      content,
+      media_type: pendingMedia?.type,
+      media_url: pendingMedia?.base64,
+      media_name: pendingMedia?.name,
+      created_at: new Date().toISOString(),
+    };
+
+    // Render immediately (0ms delay)
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(scrollToBottom, 20);
+    soundManager.playSuccess();
+
     setInputText('');
     setPendingMedia(null);
     setSending(true);
@@ -366,16 +397,12 @@ export function ChatPanel({
         mediaPayload
       );
 
-      soundManager.playSuccess();
+      // Reconcile optimistic message with real saved message
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? saved : m))
+      );
 
-      // 2. Update local state immediately
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === saved.id)) return prev;
-        return [...prev, saved];
-      });
-      setTimeout(scrollToBottom, 50);
-
-      // 3. Broadcast in real time via Supabase Realtime
+      // 2. Broadcast in real time via Supabase Realtime
       if (isSupabaseConfigured && supabase) {
         const activeCh = supabaseChannelRef.current || supabase.channel(`radiux_chat_${projectId}`);
         try {
@@ -389,7 +416,7 @@ export function ChatPanel({
         }
       }
 
-      // 4. Also broadcast via WebSocket server if active
+      // 3. Also broadcast via WebSocket server if active
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
           JSON.stringify({
@@ -400,6 +427,7 @@ export function ChatPanel({
       }
     } catch (err) {
       console.error('Failed to send message:', err);
+      // In case of error, mark or keep optimistic message
     } finally {
       setSending(false);
     }

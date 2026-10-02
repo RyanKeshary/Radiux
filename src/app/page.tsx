@@ -21,6 +21,7 @@ const GlobalDirectMessageModal = dynamic(() => import('@/components/profile/Dire
 
 const EditorSettingsModal = dynamic(() => import('@/components/workspace/EditorSettingsModal').then(m => m.EditorSettingsModal), { ssr: false });
 const DeveloperDiscoveryModal = dynamic(() => import('@/components/profile/DeveloperDiscoveryModal').then(m => m.DeveloperDiscoveryModal), { ssr: false });
+const SocialMessagesModal = dynamic(() => import('@/components/profile/SocialMessagesModal').then(m => m.SocialMessagesModal), { ssr: false });
 const NotificationCenter = dynamic(() => import('@/components/workspace/NotificationCenter').then(m => m.NotificationCenter), { ssr: false });
 import type { EditorSettings } from '@/components/workspace/EditorSettingsModal';
 import { 
@@ -58,7 +59,8 @@ import {
   UserPlus,
   CheckCircle2,
   Compass,
-  AlertCircle
+  AlertCircle,
+  MessageSquare
 } from 'lucide-react';
 import { soundManager } from '@/lib/sound';
 import { ReportIssueModal } from '@/components/common/ReportIssueModal';
@@ -76,9 +78,10 @@ export default function DashboardPage() {
   const [exportingWorkspace, setExportingWorkspace] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [profileModalTab, setProfileModalTab] = useState<'profile' | 'preferences' | 'partners' | 'account'>('profile');
+  const [profileModalTab, setProfileModalTab] = useState<'profile' | 'preferences' | 'partners' | 'account' | 'social'>('profile');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCollaboratorsOpen, setIsCollaboratorsOpen] = useState(false);
+  const [isSocialOpen, setIsSocialOpen] = useState(false);
 
   // Search & Filter State (debounced to avoid re-rendering on every keystroke)
   const [searchQuery, setSearchQuery] = useState('');
@@ -430,6 +433,16 @@ export default function DashboardPage() {
               >
                 <Settings className="w-3.5 h-3.5 text-indigo-400 group-hover:rotate-45 transition-transform duration-300" />
                 <span className="hidden sm:inline">Settings</span>
+              </button>
+
+              {/* Direct Messages & Social Hub */}
+              <button
+                onClick={() => setIsSocialOpen(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-transparent hover:border-white/10 hover:bg-white/5 transition-all flex items-center gap-1.5 group cursor-pointer"
+                title="Direct Messages & Social Chats"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-pink-400 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Messages</span>
               </button>
 
               {/* Realtime Notification Center on Dashboard */}
@@ -1244,6 +1257,12 @@ export default function DashboardPage() {
           <DeveloperDiscoveryModal
             isOpen={isCollaboratorsOpen}
             onClose={() => setIsCollaboratorsOpen(false)}
+          />
+
+          <SocialMessagesModal
+            isOpen={isSocialOpen}
+            onClose={() => setIsSocialOpen(false)}
+            currentUser={user}
           />
 
           <GlobalDirectMessageModal currentUser={user} />

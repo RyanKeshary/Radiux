@@ -41,7 +41,7 @@ const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || null; // null = allow all (
 
 // Server-side Supabase client used to verify JWTs and resolve project roles.
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 let supabaseAdmin = null;
 
 if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
@@ -1226,7 +1226,7 @@ function handleCommConnection(ws, projectId, verifiedUser, queryUserId) {
           message: savedMsg,
         });
         room.forEach((client) => {
-          if (client.ws.readyState === 1) {
+          if (client.ws.readyState === 1 && client.ws !== ws) {
             client.ws.send(chatPayload);
           }
         });
@@ -1483,10 +1483,10 @@ server.on('upgrade', async (request, socket, head) => {
   }
 
   // Route 3: Yjs document & presence sync rooms
-  // Room names follow `project-<projectId>-file-<fileId>`. The projectId is parsed out
-  // and authorized so document sync is not open to anonymous callers.
+  // Room names follow `project-<projectId>-file-<fileId>` or `project-<projectId>-workspace-presence`.
+  // The projectId is parsed out and authorized so document sync is not open to anonymous callers.
   const roomName = parsedUrl.searchParams.get('room') || '';
-  const roomProjectMatch = /^project-([0-9a-fA-F-]{36})-file-/.exec(roomName);
+  const roomProjectMatch = /^project-([0-9a-fA-F-]{36})-(file|workspace-presence)/.exec(roomName);
   const roomProjectId = roomProjectMatch ? roomProjectMatch[1] : null;
 
   if (roomProjectId) {

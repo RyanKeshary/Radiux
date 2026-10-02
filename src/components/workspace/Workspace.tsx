@@ -52,6 +52,7 @@ const EditorSettingsModal = dynamic(() => import('./EditorSettingsModal').then(m
 const GitHubModal = dynamic(() => import('./GitHubModal').then(m => m.GitHubModal), { ssr: false });
 const UserProfileModal = dynamic(() => import('./UserProfileModal').then(m => m.UserProfileModal), { ssr: false });
 const GlobalDirectMessageModal = dynamic(() => import('@/components/profile/DirectMessageModal').then(m => m.GlobalDirectMessageModal), { ssr: false });
+const SocialMessagesModal = dynamic(() => import('@/components/profile/SocialMessagesModal').then(m => m.SocialMessagesModal), { ssr: false });
 const PublicProfileModal = dynamic(() => import('./PublicProfileModal').then(m => m.PublicProfileModal), { ssr: false });
 const DeveloperDiscoveryModal = dynamic(() => import('@/components/profile/DeveloperDiscoveryModal').then(m => m.DeveloperDiscoveryModal), { ssr: false });
 const ProjectSwitcherModal = dynamic(() => import('./ProjectSwitcherModal').then(m => m.ProjectSwitcherModal), { ssr: false });
@@ -305,7 +306,8 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGitHubOpen, setIsGitHubOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [profileModalTab, setProfileModalTab] = useState<'profile' | 'preferences' | 'partners' | 'account'>('profile');
+  const [profileModalTab, setProfileModalTab] = useState<'profile' | 'preferences' | 'partners' | 'account' | 'social'>('profile');
+  const [isSocialOpen, setIsSocialOpen] = useState(false);
   const [selectedPublicUserId, setSelectedPublicUserId] = useState<string | null>(null);
   const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
   const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(false);
@@ -1863,10 +1865,15 @@ export function Workspace({ projectId }: WorkspaceProps) {
             }}
           />
 
-
-
-
-          {/* User Account Menu */}
+          {/* Social Messages Hub */}
+          <button
+            onClick={() => setIsSocialOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium text-neutral-300 hover:text-white border border-white/[0.1] hover:border-white/[0.2] hover:bg-white/[0.07] transition-all active:scale-[0.98]"
+            title="Messages & Social Hub"
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-pink-400" />
+            <span className="hidden sm:inline">Messages</span>
+          </button>
           <UserMenu 
             onOpenProfileModal={(tab) => {
               setProfileModalTab(tab || 'profile');
@@ -1876,6 +1883,7 @@ export function Workspace({ projectId }: WorkspaceProps) {
               setProfileModalTab('partners');
               setIsProfileModalOpen(true);
             }}
+            onOpenSocial={() => setIsSocialOpen(true)}
             onOpenSettingsModal={() => setIsSettingsOpen(true)}
             onOpenShortcutsModal={() => setIsShortcutsOpen(true)}
             onOpenDiscoveryModal={() => setIsDiscoveryOpen(true)}
@@ -2670,6 +2678,11 @@ export function Workspace({ projectId }: WorkspaceProps) {
             onUpdateSettings={updateSettings}
           />
           <GlobalDirectMessageModal currentUser={user} />
+          <SocialMessagesModal
+            isOpen={isSocialOpen}
+            onClose={() => setIsSocialOpen(false)}
+            currentUser={user}
+          />
         </>
       )}
 

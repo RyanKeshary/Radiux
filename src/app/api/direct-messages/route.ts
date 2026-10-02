@@ -119,8 +119,78 @@ async function broadcastDM(supabase: any, message: any, senderName?: string) {
 // GET: fetch chat history between two users
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const user1Id = searchParams.get('user1Id');
+  const user1Id = searchParams.get('user1Id') || searchParams.get('userId');
   const user2Id = searchParams.get('user2Id');
+  const isConversationsRequest = searchParams.get('conversations') === 'true' || (!user2Id && Boolean(user1Id));
+
+  // 1. Fetch conversations summary (Instagram-style inbox)
+  if (isConversationsRequest && user1Id) {
+    const all = loadLocalDMs();
+    const myDMs = all.filter(
+      (m) => m.sender_id === user1Id || m.receiver_id === user1Id
+    );
+
+    // Group by peer
+    const convMap = new Map<string, { peerId: string; lastMessage: any; unreadCount: number }>();
+    myDMs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    for (const msg of myDMs) {
+      const peerId = msg.sender_id === user1Id ? msg.receiver_id : msg.sender_id;
+      if (!convMap.has(peerId)) {
+        convMap.set(peerId, {
+          peerId,
+          lastMessage: msg,
+          unreadCount: 0,
+        });
+      }
+      const conv = convMap.get(peerId)!;
+      conv.lastMessage = msg;
+      if (msg.receiver_id === user1Id && !msg.read) {
+        conv.unreadCount += 1;
+      }
+    }
+
+    // Enrich with profiles
+    const peerIds = Array.from(convMap.keys());
+    const profilesMap = new Map<string, any>();
+    if (peerIds.length > 0) {
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const { data } = await supabase.from('profiles').select('*').in('id', peerIds);
+          if (data) {
+            data.forEach((p: any) => profilesMap.set(p.id, p));
+          }
+        } catch (e) {}
+      }
+    }
+
+    const conversations = Array.from(convMap.values())
+      .map((c) => {
+        const p = profilesMap.get(c.peerId);
+        return {
+          peerId: c.peerId,
+          peer: p
+            ? {
+                id: p.id,
+                full_name: p.full_name || p.username || p.email?.split('@')[0] || 'Developer',
+                username: p.username || p.email?.split('@')[0],
+                avatar_url: p.avatar_url,
+                email: p.email,
+              }
+            : {
+                id: c.peerId,
+                full_name: c.lastMessage.sender_name || 'Developer',
+                username: c.peerId.slice(0, 8),
+              },
+          lastMessage: c.lastMessage,
+          unreadCount: c.unreadCount,
+        };
+      })
+      .sort((a, b) => new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime());
+
+    return NextResponse.json({ conversations });
+  }
 
   if (!user1Id || !user2Id) {
     return NextResponse.json({ error: 'Missing user1Id or user2Id' }, { status: 400 });

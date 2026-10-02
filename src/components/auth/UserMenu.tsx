@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   Code2,
   Users,
-  Compass
+  Compass,
+  MessageSquare
 } from 'lucide-react';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { EditorSettingsModal, EditorSettings } from '@/components/workspace/EditorSettingsModal';
@@ -23,8 +24,9 @@ import { KeyboardShortcutsModal } from '@/components/workspace/KeyboardShortcuts
 import { applyThemeVariables, ThemeId } from '@/lib/themes';
 
 export interface UserMenuProps {
-  onOpenProfileModal?: (tab?: 'profile' | 'preferences' | 'partners' | 'account') => void;
+  onOpenProfileModal?: (tab?: 'profile' | 'preferences' | 'partners' | 'account' | 'social') => void;
   onOpenPartnersModal?: () => void;
+  onOpenSocial?: () => void;
   onOpenSettingsModal?: () => void;
   onOpenShortcutsModal?: () => void;
   onViewPublicProfile?: () => void;
@@ -42,6 +44,7 @@ const DEFAULT_SETTINGS: EditorSettings = {
 export function UserMenu({ 
   onOpenProfileModal, 
   onOpenPartnersModal,
+  onOpenSocial,
   onOpenSettingsModal, 
   onOpenShortcutsModal, 
   onViewPublicProfile,
@@ -278,6 +281,25 @@ export function UserMenu({
             >
               <Users className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
               <span className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Coding Partners</span>
+            </button>
+
+            {/* Social & Messages */}
+            <button
+              onClick={() => {
+                setIsDropdownOpen(false);
+                if (onOpenSocial) {
+                  onOpenSocial();
+                } else if (onOpenProfileModal) {
+                  onOpenProfileModal('social');
+                } else {
+                  setLocalProfileTab('social' as any);
+                  setIsLocalProfileOpen(true);
+                }
+              }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-colors text-left hover:bg-black/5 dark:hover:bg-white/5 group"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-pink-400 flex-shrink-0" />
+              <span className="font-medium text-[11.5px]" style={{ color: 'var(--ide-text)' }}>Social & Messages</span>
             </button>
 
             {/* 3. Discover Developers */}

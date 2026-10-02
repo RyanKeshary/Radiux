@@ -39,20 +39,23 @@ export const DataService = {
 
   // Lookup registered user by email, ID, or username
   async findUser(identifier: string): Promise<UserProfile | null> {
-    const clean = (identifier || '').trim();
+    let raw = (identifier || '').trim();
+    if (!raw) return null;
+    const clean = raw.startsWith('@') ? raw.substring(1).trim() : raw;
     if (!clean) return null;
 
     if (isSupabaseConfigured && supabase) {
       try {
         let query = supabase.from('profiles').select('*');
         if (clean.includes('@')) {
+          // Real email
           query = query.ilike('email', clean);
         } else if (clean.length > 20 && !clean.includes(' ')) {
           // UUID or ID check
-          query = query.or(`id.eq.${clean},email.ilike.${clean}`);
+          query = query.or(`id.eq.${clean},email.ilike.${clean},username.ilike.${clean}`);
         } else {
-          // Case-insensitive wildcard match for username or full name or email
-          query = query.or(`email.ilike.%${clean}%,full_name.ilike.%${clean}%`);
+          // Case-insensitive match for username, full name, or email
+          query = query.or(`username.ilike.%${clean}%,full_name.ilike.%${clean}%,email.ilike.%${clean}%`);
         }
         const { data, error } = await query.limit(1);
         if (!error && data && data.length > 0) {
@@ -60,18 +63,33 @@ export const DataService = {
           return {
             id: user.id,
             email: user.email,
-            full_name: user.full_name || user.email?.split('@')[0],
+            username: user.username,
+            full_name: user.full_name || user.username || user.email?.split('@')[0],
             avatar_url: user.avatar_url,
           };
         }
       } catch (e) {}
     }
 
-    // Only fallback to StorageMock if Supabase is NOT configured
-    if (!isSupabaseConfigured) {
-      const mock = StorageMock.getProfile(clean);
-      if (mock) return mock;
-    }
+    // Check server developers list
+    try {
+      const res = await fetch(this.buildNextApiUrl('/api/developers'));
+      if (res.ok) {
+        const json = await res.json();
+        const developers: UserProfile[] = json.developers || [];
+        const match = developers.find(
+          (d) =>
+            d.id === clean ||
+            d.email?.toLowerCase() === clean.toLowerCase() ||
+            d.username?.toLowerCase() === clean.toLowerCase() ||
+            d.full_name?.toLowerCase() === clean.toLowerCase()
+        );
+        if (match) return match;
+      }
+    } catch (e) {}
+
+    const mock = StorageMock.getProfile(clean);
+    if (mock) return mock;
     return null;
   },
 
@@ -487,22 +505,7 @@ export const DataService = {
   // ============================================================================
 
   async getMessages(projectId: string): Promise<ChatMessage[]> {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('project_id', projectId)
-          .order('created_at', { ascending: true })
-          .limit(150);
-
-        if (!error && data && data.length > 0) {
-          return data as ChatMessage[];
-        }
-      } catch (err) {}
-    }
-
-    // Fallback to Backend API (cross-user persistent store)
+    // Fetch from Backend API (cross-user persistent store)
     try {
       const res = await fetch(this.buildNextApiUrl('/api/messages', { projectId }));
       if (res.ok) {
@@ -574,31 +577,7 @@ export const DataService = {
       created_at: new Date().toISOString(),
     };
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('messages')
-          .insert({
-            project_id: projectId,
-            user_id: userId,
-            user_name: userName,
-            user_avatar: userAvatar || '',
-            content: content.trim(),
-            media_type: media?.type,
-            media_url: mediaUrl,
-            media_name: media?.name,
-          })
-          .select()
-          .single();
-
-        if (!error && data) {
-          StorageMock.saveMessage(data);
-          return data as ChatMessage;
-        }
-      } catch (err) {}
-    }
-
-    // Persist to Backend API so all collaborators and reloads see this message
+    // Persist to Backend API so all collaborators and reloads see this message immediately
     try {
       const res = await fetch(this.buildNextApiUrl('/api/messages'), {
         method: 'POST',
@@ -1698,23 +1677,7 @@ export const DataService = {
 
   // Level 8: Direct Developer Messaging
   async getDirectMessages(user1Id: string, user2Id: string): Promise<DirectMessage[]> {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('direct_messages')
-          .select('*')
-          .or(
-            `and(sender_id.eq.${user1Id},receiver_id.eq.${user2Id}),and(sender_id.eq.${user2Id},receiver_id.eq.${user1Id})`
-          )
-          .order('created_at', { ascending: true })
-          .limit(200);
-
-        if (!error && data && data.length > 0) {
-          return data as DirectMessage[];
-        }
-      } catch (err) {}
-    }
-
+    // Fetch from Backend API (cross-user persistent store)
     try {
       const res = await fetch(this.buildNextApiUrl('/api/direct-messages', { user1Id, user2Id }));
       if (res.ok) {
@@ -1738,21 +1701,6 @@ export const DataService = {
       created_at: new Date().toISOString(),
       read: false,
     };
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('direct_messages')
-          .insert(msg)
-          .select()
-          .single();
-
-        if (!error && data) {
-          StorageMock.saveDirectMessage(data);
-          return data as DirectMessage;
-        }
-      } catch (e) {}
-    }
 
     let savedMsg = msg;
     try {
@@ -1828,6 +1776,16 @@ export const DataService = {
   },
 
   // Level 7: Coding Partners
+  async getConversations(userId: string): Promise<any[]> {
+    try {
+      const res = await fetch(this.buildNextApiUrl('/api/direct-messages', { userId, conversations: 'true' }));
+      if (res.ok) {
+        const json = await res.json();
+        return json.conversations || [];
+      }
+    } catch (e) {}
+    return [];
+  },
   async getCodingPartners(userId: string): Promise<CodingPartner[]> {
     if (isSupabaseConfigured && supabase) {
       try {
@@ -1870,9 +1828,14 @@ export const DataService = {
 
   async sendPartnerRequest(
     requester: UserProfile,
-    targetIdentifier: string
+    targetIdentifier: string | UserProfile
   ): Promise<{ success: boolean; message: string; partner?: CodingPartner }> {
-    const target = await this.findUser(targetIdentifier);
+    let target: UserProfile | null = null;
+    if (typeof targetIdentifier === 'object' && targetIdentifier !== null && targetIdentifier.id) {
+      target = targetIdentifier as UserProfile;
+    } else {
+      target = await this.findUser(String(targetIdentifier));
+    }
 
     if (!target) {
       return { success: false, message: `No registered developer found matching "${targetIdentifier}". Please check their email or username.` };
@@ -1893,7 +1856,33 @@ export const DataService = {
         return { success: false, message: 'You are already coding partners!' };
       }
       if (duplicate.status === 'pending') {
-        return { success: false, message: 'A partner request is already pending between you two.' };
+        // Re-deliver notification instantly to receiver so they never miss it!
+        try {
+          const { NotificationService } = await import('@/lib/notifications/notification-service');
+          await NotificationService.sendNotification({
+            recipient_id: target.id,
+            actor_id: requester.id,
+            actor_name: requester.full_name || requester.username || 'A developer',
+            type: 'action',
+            category: 'partner_request',
+            title: 'Coding Partner Request',
+            body: `${requester.full_name || requester.username || 'A developer'} sent you a coding partner request!`,
+            metadata: {
+              dedup_key: `partner_request:${duplicate.id}:${Date.now()}`,
+              partnerRequestId: duplicate.id,
+              requesterId: requester.id,
+              requesterName: requester.full_name || requester.username,
+              requesterEmail: requester.email,
+              receiverName: target.full_name || target.username,
+            },
+            action_state: 'pending',
+          });
+        } catch (e) {}
+        return { 
+          success: true, 
+          message: `Partner request notification re-sent to ${target.full_name || target.username || 'developer'}!`,
+          partner: duplicate 
+        };
       }
     }
 
@@ -1907,24 +1896,7 @@ export const DataService = {
       profile: target,
     };
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('coding_partners')
-          .insert({
-            requester_id: requester.id,
-            receiver_id: target.id,
-            status: 'pending',
-          })
-          .select()
-          .single();
-        if (!error && data) {
-          createdPartner = { ...data, profile: target };
-        }
-      } catch (err) {}
-    }
-
-    // 2. Sync to Backend API
+    // Sync to Backend API
     try {
       await fetch(this.buildNextApiUrl('/api/partners'), {
         method: 'POST',

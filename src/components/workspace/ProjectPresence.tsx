@@ -26,6 +26,8 @@ interface ProjectPresenceProps {
   onPresenceChange?: (peers: ExtendedPresenceUser[]) => void;
 }
 
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+
 export function ProjectPresence({
   projectId,
   activeFileId,
@@ -39,6 +41,9 @@ export function ProjectPresence({
   const [onlineUsers, setOnlineUsers] = useState<ExtendedPresenceUser[]>([]);
   const [showDrawer, setShowDrawer] = useState(false);
   const providerRef = useRef<WebsocketProvider | null>(null);
+  const supabasePresenceRef = useRef<any>(null);
+  const yjsUsersRef = useRef<ExtendedPresenceUser[]>([]);
+  const supabaseUsersRef = useRef<ExtendedPresenceUser[]>([]);
   const drawerRef = useRef<HTMLDivElement>(null);
 
   useClickOutside(drawerRef, () => setShowDrawer(false), showDrawer);
@@ -48,7 +53,29 @@ export function ProjectPresence({
     onPresenceChangeRef.current = onPresenceChange;
   }, [onPresenceChange]);
 
-  // 1. Maintain single persistent WebsocketProvider for workspace presence
+  const mergeAndPublishPeers = (initialUser: ExtendedPresenceUser) => {
+    const peerMap = new Map<string, ExtendedPresenceUser>();
+    peerMap.set(initialUser.id, initialUser);
+
+    yjsUsersRef.current.forEach((u) => {
+      if (u.id) peerMap.set(u.id, u);
+    });
+
+    supabaseUsersRef.current.forEach((u) => {
+      if (u.id) {
+        const existing = peerMap.get(u.id);
+        peerMap.set(u.id, { ...existing, ...u });
+      }
+    });
+
+    const merged = Array.from(peerMap.values());
+    setOnlineUsers(merged);
+    if (onPresenceChangeRef.current) {
+      onPresenceChangeRef.current(merged);
+    }
+  };
+
+  // 1. Maintain persistent WebsocketProvider & Supabase Presence for workspace presence
   useEffect(() => {
     const ydoc = new Y.Doc();
     const wsUrl = config.wsUrl;
@@ -67,14 +94,11 @@ export function ProjectPresence({
       color: userColor,
       currentFileId: activeFileId,
       fileName: activeFileName || undefined,
+      inVoice: isInVoice,
     };
 
-    // Set local state immediately so user sees at least 1 online (themselves) right away
     awareness.setLocalStateField('user', initialUser);
-    setOnlineUsers([initialUser]);
-    if (onPresenceChangeRef.current) {
-      onPresenceChangeRef.current([initialUser]);
-    }
+    mergeAndPublishPeers(initialUser);
 
     const handleAwarenessChange = () => {
       const states = awareness.getStates();
@@ -93,34 +117,72 @@ export function ProjectPresence({
           });
         }
       });
-      // Always ensure at least the local user is present
-      const finalUsers = users.length === 0 ? [initialUser] : users;
-      setOnlineUsers(finalUsers);
-      if (onPresenceChangeRef.current) {
-        onPresenceChangeRef.current(finalUsers);
-      }
+      yjsUsersRef.current = users;
+      mergeAndPublishPeers(initialUser);
     };
 
     awareness.on('change', handleAwarenessChange);
-
-    // Immediate check if awareness already has peers
     handleAwarenessChange();
+
+    // Connect Supabase Cloud Presence for 100% reliable cross-device sync
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const presenceCh = supabase.channel(`radiux_presence_${projectId}`, {
+          config: { presence: { key: user?.id || 'guest' } },
+        });
+        supabasePresenceRef.current = presenceCh;
+
+        presenceCh
+          .on('presence', { event: 'sync' }, () => {
+            const state = presenceCh.presenceState();
+            const sbUsers: ExtendedPresenceUser[] = [];
+            Object.values(state).forEach((presences: any) => {
+              if (Array.isArray(presences)) {
+                presences.forEach((p) => {
+                  if (p && p.id) {
+                    sbUsers.push({
+                      id: p.id,
+                      name: p.name,
+                      email: p.email,
+                      avatar_url: p.avatar_url,
+                      color: p.color,
+                      currentFileId: p.currentFileId,
+                      fileName: p.fileName,
+                      inVoice: Boolean(p.inVoice),
+                    });
+                  }
+                });
+              }
+            });
+            supabaseUsersRef.current = sbUsers;
+            mergeAndPublishPeers(initialUser);
+          })
+          .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+              await presenceCh.track(initialUser);
+            }
+          });
+      } catch (e) {
+        console.warn('[ProjectPresence] Supabase Presence setup error:', e);
+      }
+    }
 
     return () => {
       awareness.off('change', handleAwarenessChange);
       provider.destroy();
       ydoc.destroy();
       providerRef.current = null;
+      if (supabasePresenceRef.current && supabase) {
+        supabase.removeChannel(supabasePresenceRef.current);
+        supabasePresenceRef.current = null;
+      }
     };
   }, [projectId, user?.id]);
 
-  // 2. Update local presence state (active file, name, avatar) without tearing down websocket connection!
+  // 2. Update local presence state (active file, name, avatar, voice) without tearing down connection!
   useEffect(() => {
-    if (!providerRef.current) return;
-    const awareness = providerRef.current.awareness;
     const userColor = getUserColor(user?.id || 'guest');
-
-    const currentUserState = {
+    const currentUserState: ExtendedPresenceUser = {
       id: user?.id || 'guest',
       name: user?.full_name || 'Anonymous Peer',
       email: user?.email || '',
@@ -131,7 +193,15 @@ export function ProjectPresence({
       inVoice: isInVoice,
     };
 
-    awareness.setLocalStateField('user', currentUserState);
+    if (providerRef.current) {
+      providerRef.current.awareness.setLocalStateField('user', currentUserState);
+    }
+    if (supabasePresenceRef.current) {
+      try {
+        supabasePresenceRef.current.track(currentUserState);
+      } catch (e) {}
+    }
+    mergeAndPublishPeers(currentUserState);
   }, [activeFileId, activeFileName, user?.full_name, user?.email, user?.avatar_url, isInVoice]);
 
   return (

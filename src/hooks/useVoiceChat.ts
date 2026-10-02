@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { VoicePeer } from '@/lib/types';
 import { config } from '@/lib/config';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
 interface UseVoiceChatOptions {
   projectId: string;
@@ -36,7 +37,8 @@ export function useVoiceChat({
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const remoteAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
-  const myPeerIdRef = useRef<string | null>(null);
+  const supabaseVoiceChRef = useRef<any>(null);
+  const myPeerIdRef = useRef<string>(userId);
 
   // Clean up a specific peer connection
   const closePeer = useCallback((peerId: string) => {
@@ -71,16 +73,34 @@ export function useVoiceChat({
       });
     }
 
+    // Universal Signaling sender across WebSocket and Supabase Realtime
+    const sendSignaling = (msg: any) => {
+      // 1. WebSocket send
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify(msg));
+        } catch (e) {}
+      }
+      // 2. Supabase Realtime broadcast send
+      if (supabaseVoiceChRef.current) {
+        try {
+          supabaseVoiceChRef.current.send({
+            type: 'broadcast',
+            event: 'voice_signal',
+            payload: { ...msg, fromPeerId: myPeerIdRef.current },
+          });
+        } catch (e) {}
+      }
+    };
+
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
-      if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: 'voice_ice_candidate',
-            targetPeerId: peerId,
-            candidate: event.candidate,
-          })
-        );
+      if (event.candidate) {
+        sendSignaling({
+          type: 'voice_ice_candidate',
+          targetPeerId: peerId,
+          candidate: event.candidate,
+        });
       }
     };
 
@@ -106,7 +126,7 @@ export function useVoiceChat({
 
     pc.oniceconnectionstatechange = () => {
       if (pc.iceConnectionState === 'failed') {
-        console.warn(`[WebRTC] ICE connection to peer ${peerId} failed. Direct P2P STUN traversal failed; TURN relay server required for restrictive NATs/firewalls.`);
+        console.warn(`[WebRTC] ICE connection to peer ${peerId} failed.`);
         closePeer(peerId);
       }
     };
@@ -116,14 +136,12 @@ export function useVoiceChat({
       pc.createOffer({ offerToReceiveAudio: true })
         .then((offer) => pc.setLocalDescription(offer))
         .then(() => {
-          if (wsRef.current?.readyState === WebSocket.OPEN && pc.localDescription) {
-            wsRef.current.send(
-              JSON.stringify({
-                type: 'voice_offer',
-                targetPeerId: peerId,
-                offer: pc.localDescription,
-              })
-            );
+          if (pc.localDescription) {
+            sendSignaling({
+              type: 'voice_offer',
+              targetPeerId: peerId,
+              offer: pc.localDescription,
+            });
           }
         })
         .catch((err) => console.error('[WebRTC] Offer error:', err));
@@ -132,10 +150,158 @@ export function useVoiceChat({
     return pc;
   }, [closePeer]);
 
-  // Connect to signaling WebSocket only when actively participating in voice
+  // Connect to signaling (WebSocket + Supabase Realtime) only when actively participating in voice
   useEffect(() => {
     if (!isInVoice || !projectId) return;
 
+    const sendSignaling = (msg: any) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify(msg));
+        } catch (e) {}
+      }
+      if (supabaseVoiceChRef.current) {
+        try {
+          supabaseVoiceChRef.current.send({
+            type: 'broadcast',
+            event: 'voice_signal',
+            payload: { ...msg, fromPeerId: myPeerIdRef.current },
+          });
+        } catch (e) {}
+      }
+    };
+
+    const handleSignalingPayload = async (msg: any) => {
+      if (!msg) return;
+
+      // Ignore messages sent by ourselves
+      if (msg.fromPeerId && msg.fromPeerId === myPeerIdRef.current) return;
+      if (msg.userId && msg.userId === userId) return;
+
+      // Filter targeted messages
+      if (msg.targetPeerId && msg.targetPeerId !== myPeerIdRef.current && msg.targetPeerId !== userId) {
+        return;
+      }
+
+      // Assigned own peerId from server
+      if (msg.type === 'assigned_peer_id') {
+        myPeerIdRef.current = msg.peerId;
+        return;
+      }
+
+      // Peer joined or announced
+      if (msg.type === 'voice_join') {
+        const peerId = msg.peerId || msg.fromPeerId || msg.userId;
+        if (peerId && peerId !== myPeerIdRef.current) {
+          setVoicePeers((prev) => {
+            if (prev.some((p) => p.peerId === peerId)) return prev;
+            return [...prev, {
+              peerId,
+              userId: msg.userId || peerId,
+              userName: msg.userName || 'Collaborator',
+              userColor: msg.userColor || '#38bdf8',
+              isMuted: Boolean(msg.isMuted),
+            }];
+          });
+          // Initiate connection to the joined peer
+          createPeerConnection(peerId, true);
+        }
+        return;
+      }
+
+      // Existing peers in voice call
+      if (msg.type === 'voice_room_peers') {
+        setVoicePeers(msg.peers || []);
+        if (msg.peers) {
+          for (const peer of msg.peers) {
+            if (peer.peerId !== myPeerIdRef.current) {
+              createPeerConnection(peer.peerId, true);
+            }
+          }
+        }
+        setConnectionState('connected');
+        return;
+      }
+
+      // A new peer joined the voice room
+      if (msg.type === 'voice_peer_joined') {
+        const peerId = msg.peerId || msg.fromPeerId;
+        if (peerId && peerId !== myPeerIdRef.current) {
+          setVoicePeers((prev) => {
+            if (prev.some((p) => p.peerId === peerId)) return prev;
+            return [...prev, {
+              peerId,
+              userId: msg.userId || peerId,
+              userName: msg.userName || 'Collaborator',
+              userColor: msg.userColor || '#38bdf8',
+              isMuted: Boolean(msg.isMuted),
+            }];
+          });
+        }
+        return;
+      }
+
+      // A peer left voice
+      if (msg.type === 'voice_peer_left' || msg.type === 'voice_leave') {
+        const peerId = msg.peerId || msg.fromPeerId;
+        if (peerId) closePeer(peerId);
+        return;
+      }
+
+      // A peer toggled mute
+      if (msg.type === 'voice_peer_muted' || msg.type === 'voice_mute') {
+        const peerId = msg.peerId || msg.fromPeerId;
+        if (peerId) {
+          setVoicePeers((prev) =>
+            prev.map((p) => (p.peerId === peerId ? { ...p, isMuted: Boolean(msg.isMuted) } : p))
+          );
+        }
+        return;
+      }
+
+      // Received WebRTC Offer
+      if (msg.type === 'voice_offer') {
+        const fromId = msg.fromPeerId || msg.senderId;
+        if (!fromId) return;
+        const pc = createPeerConnection(fromId, false);
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        sendSignaling({
+          type: 'voice_answer',
+          targetPeerId: fromId,
+          answer,
+        });
+        return;
+      }
+
+      // Received WebRTC Answer
+      if (msg.type === 'voice_answer') {
+        const fromId = msg.fromPeerId || msg.senderId;
+        const pc = fromId ? peerConnectionsRef.current.get(fromId) : null;
+        if (pc && msg.answer) {
+          await pc.setRemoteDescription(new RTCSessionDescription(msg.answer));
+        }
+        return;
+      }
+
+      // Received ICE Candidate
+      if (msg.type === 'voice_ice_candidate') {
+        const fromId = msg.fromPeerId || msg.senderId;
+        const pc = fromId ? peerConnectionsRef.current.get(fromId) : null;
+        if (pc && msg.candidate) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          } catch (e) {
+            console.error('[WebRTC] ICE candidate error:', e);
+          }
+        }
+        return;
+      }
+    };
+
+    // A. Connect local WebSocket signaling
     const wsUrl = config.buildWsUrl('/comm', { projectId });
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -160,108 +326,49 @@ export function useVoiceChat({
     ws.onmessage = async (event) => {
       try {
         const msg = JSON.parse(event.data);
-
-        // Assigned own peerId from server
-        if (msg.type === 'assigned_peer_id') {
-          myPeerIdRef.current = msg.peerId;
-          return;
-        }
-
-        // Existing peers in voice call
-        if (msg.type === 'voice_room_peers') {
-          setVoicePeers(msg.peers || []);
-          // Connect to each existing peer (we are the initiator)
-          if (msg.peers) {
-            for (const peer of msg.peers) {
-              createPeerConnection(peer.peerId, true);
-            }
-          }
-          setConnectionState('connected');
-          return;
-        }
-
-        // A new peer joined the voice room
-        if (msg.type === 'voice_peer_joined') {
-          setVoicePeers((prev) => {
-            if (prev.some((p) => p.peerId === msg.peerId)) return prev;
-            return [...prev, {
-              peerId: msg.peerId,
-              userId: msg.userId,
-              userName: msg.userName,
-              userColor: msg.userColor,
-              isMuted: msg.isMuted,
-            }];
-          });
-          return;
-        }
-
-        // A peer left voice
-        if (msg.type === 'voice_peer_left') {
-          closePeer(msg.peerId);
-          return;
-        }
-
-        // A peer toggled mute
-        if (msg.type === 'voice_peer_muted') {
-          setVoicePeers((prev) =>
-            prev.map((p) => (p.peerId === msg.peerId ? { ...p, isMuted: msg.isMuted } : p))
-          );
-          return;
-        }
-
-        // Received WebRTC Offer
-        if (msg.type === 'voice_offer') {
-          const pc = createPeerConnection(msg.fromPeerId, false);
-          await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(
-              JSON.stringify({
-                type: 'voice_answer',
-                targetPeerId: msg.fromPeerId,
-                answer,
-              })
-            );
-          }
-          return;
-        }
-
-        // Received WebRTC Answer
-        if (msg.type === 'voice_answer') {
-          const pc = peerConnectionsRef.current.get(msg.fromPeerId);
-          if (pc) {
-            await pc.setRemoteDescription(new RTCSessionDescription(msg.answer));
-          }
-          return;
-        }
-
-        // Received ICE Candidate
-        if (msg.type === 'voice_ice_candidate') {
-          const pc = peerConnectionsRef.current.get(msg.fromPeerId);
-          if (pc && msg.candidate) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-            } catch (e) {
-              console.error('[WebRTC] ICE candidate error:', e);
-            }
-          }
-          return;
-        }
+        await handleSignalingPayload(msg);
       } catch (err) {
-        console.error('[WebRTC] Signaling message error:', err);
+        console.error('[WebRTC] WS parse error:', err);
       }
     };
 
-    return () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        try {
-          ws.send(JSON.stringify({ type: 'voice_leave' }));
-        } catch (e) {}
+    // B. Connect Supabase Realtime broadcast channel for cross-device signaling
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const ch = supabase.channel(`radiux_voice_${projectId}`);
+        supabaseVoiceChRef.current = ch;
+        ch.on('broadcast', { event: 'voice_signal' }, async ({ payload }: any) => {
+          await handleSignalingPayload(payload);
+        });
+        ch.subscribe((status: string) => {
+          if (status === 'SUBSCRIBED') {
+            ch.send({
+              type: 'broadcast',
+              event: 'voice_signal',
+              payload: {
+                type: 'voice_join',
+                userId,
+                peerId: myPeerIdRef.current,
+                userName,
+                userColor,
+                isMuted: false,
+              },
+            });
+          }
+        });
+      } catch (e) {
+        console.warn('[WebRTC] Supabase channel error:', e);
       }
+    }
+
+    return () => {
+      sendSignaling({ type: 'voice_leave', peerId: myPeerIdRef.current });
       ws.close();
       wsRef.current = null;
+      if (supabaseVoiceChRef.current && supabase) {
+        supabase.removeChannel(supabaseVoiceChRef.current);
+        supabaseVoiceChRef.current = null;
+      }
     };
   }, [isInVoice, projectId, userId, userName, userColor, closePeer, createPeerConnection]);
 
@@ -269,7 +376,6 @@ export function useVoiceChat({
   const joinVoice = async () => {
     try {
       setConnectionState('connecting');
-      // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -282,15 +388,6 @@ export function useVoiceChat({
       localStreamRef.current = stream;
       setIsInVoice(true);
       setIsMuted(false);
-
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: 'voice_join',
-            isMuted: false,
-          })
-        );
-      }
 
       if (onActivityEvent) {
         onActivityEvent(`${userName} joined voice chat`);
@@ -309,11 +406,9 @@ export function useVoiceChat({
       localStreamRef.current = null;
     }
 
-    // Close all active peer connections
     peerConnectionsRef.current.forEach((pc) => pc.close());
     peerConnectionsRef.current.clear();
 
-    // Clean up audio elements
     remoteAudioElementsRef.current.forEach((el) => {
       el.pause();
       el.srcObject = null;
@@ -323,6 +418,15 @@ export function useVoiceChat({
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'voice_leave' }));
+    }
+    if (supabaseVoiceChRef.current) {
+      try {
+        supabaseVoiceChRef.current.send({
+          type: 'broadcast',
+          event: 'voice_signal',
+          payload: { type: 'voice_leave', peerId: myPeerIdRef.current },
+        });
+      } catch (e) {}
     }
 
     setVoicePeers([]);
@@ -344,13 +448,22 @@ export function useVoiceChat({
     });
     setIsMuted(newMuted);
 
+    const mutePayload = {
+      type: 'voice_mute',
+      peerId: myPeerIdRef.current,
+      isMuted: newMuted,
+    };
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({
-          type: 'voice_mute',
-          isMuted: newMuted,
-        })
-      );
+      wsRef.current.send(JSON.stringify(mutePayload));
+    }
+    if (supabaseVoiceChRef.current) {
+      try {
+        supabaseVoiceChRef.current.send({
+          type: 'broadcast',
+          event: 'voice_signal',
+          payload: mutePayload,
+        });
+      } catch (e) {}
     }
   };
 

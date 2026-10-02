@@ -13,6 +13,7 @@ interface DirectMessageModalProps {
   onClose: () => void;
   targetUser: UserProfile | any;
   user?: UserProfile | null;
+  initialMessage?: DirectMessage | null;
 }
 
 export function DirectMessageModal({
@@ -20,18 +21,29 @@ export function DirectMessageModal({
   onClose,
   targetUser,
   user: propUser,
+  initialMessage,
 }: DirectMessageModalProps) {
   const { user: authUser } = useAuth();
   const user = propUser || authUser;
-  const [messages, setMessages] = useState<DirectMessage[]>([]);
+  const [messages, setMessages] = useState<DirectMessage[]>(() => initialMessage ? [initialMessage] : []);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Clear or seed messages when switching target users
+  useEffect(() => {
+    if (initialMessage) {
+      setMessages([initialMessage]);
+    } else {
+      setMessages([]);
+    }
+    setLoading(true);
+  }, [targetUser?.id, initialMessage?.id]);
+
   // 1. Initial Load & Background Polling Sync
   useEffect(() => {
-    if (!isOpen || !user) return;
+    if (!isOpen || !user || !targetUser?.id) return;
     let isMounted = true;
 
     const loadMessages = async (showLoading = false) => {
@@ -71,7 +83,7 @@ export function DirectMessageModal({
       isMounted = false;
       clearInterval(interval);
     };
-  }, [isOpen, user, targetUser.id]);
+  }, [isOpen, user, targetUser?.id]);
 
   const channelRef = useRef<any>(null);
 
@@ -138,15 +150,26 @@ export function DirectMessageModal({
     if (e) e.preventDefault();
     if (!user || !inputValue.trim() || sending) return;
     const content = inputValue.trim();
+    const tempId = `opt-dm-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const optimisticMsg: DirectMessage = {
+      id: tempId,
+      sender_id: user.id,
+      receiver_id: targetUser.id,
+      content,
+      created_at: new Date().toISOString(),
+      read: false,
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
     setInputValue('');
     setSending(true);
+    soundManager.playSuccess();
+
     try {
       const newMsg = await DataService.sendDirectMessage(user, targetUser.id, content);
-      soundManager.playSuccess();
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === newMsg.id)) return prev;
-        return [...prev, newMsg];
-      });
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? newMsg : m))
+      );
 
       // Broadcast immediately to counterparty via persistent channel
       if (channelRef.current) {
@@ -299,12 +322,14 @@ export function DirectMessageModal({
 
 export function GlobalDirectMessageModal({ currentUser }: { currentUser: any }) {
   const [targetUser, setTargetUser] = useState<any | null>(null);
+  const [initialMessage, setInitialMessage] = useState<any | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     const handleOpen = (e: any) => {
       if (e.detail?.targetUser) {
         setTargetUser(e.detail.targetUser);
+        setInitialMessage(e.detail.initialMessage || null);
         setIsOpen(true);
       }
     };
@@ -320,9 +345,11 @@ export function GlobalDirectMessageModal({ currentUser }: { currentUser: any }) 
       onClose={() => {
         setIsOpen(false);
         setTargetUser(null);
+        setInitialMessage(null);
       }}
       user={currentUser}
       targetUser={targetUser}
+      initialMessage={initialMessage}
     />
   );
 }

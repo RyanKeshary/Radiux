@@ -258,19 +258,21 @@ export function DeveloperDiscoveryModal({
                       <span>Profile</span>
                     </button>
 
-                    {onOpenMessage && (
-                      <button
-                        onClick={() => {
-                          onClose();
+                    <button
+                      onClick={() => {
+                        onClose();
+                        if (onOpenMessage) {
                           onOpenMessage(dev);
-                        }}
-                        className="p-1.5 rounded border hover:bg-white/10 transition-colors"
-                        style={{ borderColor: 'var(--ide-border)' }}
-                        title="Direct Message"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
-                      </button>
-                    )}
+                        } else {
+                          window.dispatchEvent(new CustomEvent('open-direct-message', { detail: { targetUser: dev } }));
+                        }
+                      }}
+                      className="p-1.5 rounded border hover:bg-white/10 transition-colors"
+                      style={{ borderColor: 'var(--ide-border)' }}
+                      title="Direct Message"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
+                    </button>
 
                     {isReqSent ? (
                       <button
