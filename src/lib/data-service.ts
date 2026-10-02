@@ -1813,6 +1813,31 @@ export const DataService = {
 
     StorageMock.saveCodingPartner(createdPartner);
 
+    // 3. Send instant actionable notification to target user
+    try {
+      const { NotificationService } = await import('@/lib/notifications/notification-service');
+      await NotificationService.sendNotification({
+        recipient_id: target.id,
+        actor_id: requester.id,
+        actor_name: requester.full_name || requester.username || 'A developer',
+        type: 'action',
+        category: 'partner_request',
+        title: 'Coding Partner Request',
+        body: `${requester.full_name || requester.username || 'A developer'} sent you a coding partner request!`,
+        metadata: {
+          dedup_key: `partner_request:${createdPartner.id}`,
+          partnerRequestId: createdPartner.id,
+          requesterId: requester.id,
+          requesterName: requester.full_name || requester.username,
+          requesterEmail: requester.email,
+          receiverName: target.full_name || target.username,
+        },
+        action_state: 'pending',
+      });
+    } catch (e) {
+      console.warn('[DataService] Failed to send partner request notification:', e);
+    }
+
     return { 
       success: true, 
       message: `Partner request sent to ${target.full_name || target.username || 'developer'}!`,
@@ -1822,7 +1847,8 @@ export const DataService = {
 
   async respondToPartnerRequest(
     requestId: string, 
-    action: 'accept' | 'ignore' | 'reject' | 'cancel' | boolean
+    action: 'accept' | 'ignore' | 'reject' | 'cancel' | boolean,
+    responderUser?: UserProfile
   ): Promise<void> {
     let status: 'accepted' | 'ignored' | 'rejected' | 'cancelled' | 'declined';
     if (typeof action === 'boolean') {
@@ -1855,6 +1881,31 @@ export const DataService = {
     } catch (e) {}
 
     StorageMock.updateCodingPartner(requestId, status);
+
+    // If accepted or declined, notify the original requester and update any matching notification
+    try {
+      const allPartners = await this.getCodingPartners(responderUser?.id || '');
+      const matched = allPartners.find(p => p.id === requestId);
+      const requesterId = matched ? (matched.requester_id === responderUser?.id ? matched.receiver_id : matched.requester_id) : null;
+      if (requesterId && (status === 'accepted' || status === 'declined')) {
+        const { NotificationService } = await import('@/lib/notifications/notification-service');
+        await NotificationService.sendNotification({
+          recipient_id: requesterId,
+          actor_id: responderUser?.id,
+          actor_name: responderUser?.full_name || 'Your peer',
+          type: 'information',
+          category: 'partner_response',
+          title: status === 'accepted' ? 'Partner Request Accepted!' : 'Partner Request Declined',
+          body: status === 'accepted'
+            ? `${responderUser?.full_name || 'Your peer'} accepted your coding partner request! You are now coding partners.`
+            : `${responderUser?.full_name || 'Your peer'} declined your coding partner request.`,
+          metadata: {
+            partnerRequestId: requestId,
+            status,
+          },
+        });
+      }
+    } catch (e) {}
   },
 
   async removePartner(partnerId: string): Promise<void> {

@@ -3,6 +3,8 @@ export type NotificationType = 'action' | 'information' | 'collaboration';
 export type NotificationCategory = 
   | 'project_invitation' 
   | 'join_request'
+  | 'partner_request'
+  | 'partner_response'
   | 'review_request' 
   | 'permission_request' 
   | 'deployment' 

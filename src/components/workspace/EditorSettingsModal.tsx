@@ -205,7 +205,7 @@ export function EditorSettingsModal({
   };
 
   const handlePartnerAction = async (requestId: string, action: 'accept' | 'ignore' | 'reject') => {
-    await DataService.respondToPartnerRequest(requestId, action);
+    await DataService.respondToPartnerRequest(requestId, action, (profile || user) ?? undefined);
     if (user) {
       const parts = await DataService.getCodingPartners(user.id);
       setPartners(parts);

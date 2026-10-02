@@ -42,6 +42,20 @@ function saveLocalNotifications(userId: string, notifications: AppNotification[]
   } catch (e) {}
 }
 
+// Supabase Realtime Broadcast Channel Singleton
+let realtimeBroadcastChannel: any = null;
+
+function getRealtimeChannel() {
+  if (realtimeBroadcastChannel) return realtimeBroadcastChannel;
+  if (isSupabaseConfigured && supabase) {
+    try {
+      realtimeBroadcastChannel = supabase.channel('radiux_notifications_realtime');
+      realtimeBroadcastChannel.subscribe();
+    } catch (e) {}
+  }
+  return realtimeBroadcastChannel;
+}
+
 export const NotificationService = {
   /**
    * Fetch persistent notifications for a user (ordered newest first)
@@ -75,16 +89,14 @@ export const NotificationService = {
         if (!error && data) {
           return data as AppNotification[];
         }
-      } catch (err) {
-        console.warn('[NotificationService] Supabase direct fetch failed:', err);
-      }
+      } catch (err) {}
     }
 
     return getLocalNotifications(userId);
   },
 
   /**
-   * Send a new notification to a recipient with idempotency deduplication
+   * Send a new notification to a recipient with idempotency deduplication and instant broadcast
    */
   async sendNotification(
     payload: Omit<AppNotification, 'id' | 'created_at'>
@@ -94,6 +106,8 @@ export const NotificationService = {
       console.log(`[NotificationService] Deduplicated notification: ${dedupKey}`);
       return null;
     }
+
+    let createdRecord: AppNotification | null = null;
 
     // 1. Try server API first for guaranteed cross-device delivery
     try {
@@ -105,51 +119,69 @@ export const NotificationService = {
       if (res.ok) {
         const data = await res.json();
         if (data.notification) {
-          return data.notification;
+          createdRecord = data.notification;
         }
       }
     } catch (e) {}
 
-    const newRecord: AppNotification = {
-      ...payload,
-      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `notif_${Date.now()}`,
-      created_at: new Date().toISOString(),
-      read_at: null,
-      action_state: payload.action_state ?? (payload.type === 'action' ? 'pending' : null),
-    };
+    if (!createdRecord) {
+      const newRecord: AppNotification = {
+        ...payload,
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `notif_${Date.now()}`,
+        created_at: new Date().toISOString(),
+        read_at: null,
+        action_state: payload.action_state ?? (payload.type === 'action' ? 'pending' : null),
+      };
 
-    // 2. Direct Supabase fallback
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('notifications')
-          .insert({
-            recipient_id: payload.recipient_id,
-            actor_id: payload.actor_id || null,
-            project_id: payload.project_id || null,
-            type: payload.type,
-            category: payload.category,
-            title: payload.title,
-            body: payload.body,
-            metadata: payload.metadata || {},
-            action_state: newRecord.action_state,
-          })
-          .select()
-          .single();
+      // 2. Direct Supabase fallback
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('notifications')
+            .insert({
+              recipient_id: payload.recipient_id,
+              actor_id: payload.actor_id || null,
+              project_id: payload.project_id || null,
+              type: payload.type,
+              category: payload.category,
+              title: payload.title,
+              body: payload.body,
+              metadata: payload.metadata || {},
+              action_state: newRecord.action_state,
+            })
+            .select()
+            .single();
 
-        if (!error && data) {
-          return data as AppNotification;
-        }
-      } catch (err) {
-        console.warn('[NotificationService] Supabase direct insert failed, saving locally:', err);
+          if (!error && data) {
+            createdRecord = data as AppNotification;
+          }
+        } catch (err) {}
+      }
+
+      if (!createdRecord) {
+        // 3. Local fallback
+        const local = getLocalNotifications(payload.recipient_id);
+        local.unshift(newRecord);
+        saveLocalNotifications(payload.recipient_id, local);
+        createdRecord = newRecord;
       }
     }
 
-    // 3. Local fallback
-    const local = getLocalNotifications(payload.recipient_id);
-    local.unshift(newRecord);
-    saveLocalNotifications(payload.recipient_id, local);
-    return newRecord;
+    // 4. Instant Realtime Delivery via Supabase Realtime Broadcast
+    if (createdRecord) {
+      const ch = getRealtimeChannel();
+      if (ch) {
+        try {
+          ch.send({
+            type: 'broadcast',
+            event: 'notification',
+            payload: createdRecord,
+          });
+        } catch (e) {}
+      }
+    }
+
+    return createdRecord;
   },
 
   /**
@@ -217,13 +249,16 @@ export const NotificationService = {
   },
 
   /**
-   * Action handler: Accept or Decline an actionable notification (mutates real state)
+   * Action handler: Accept or Decline an actionable notification (mutates real state and sends instant response)
    */
   async respondToAction(
     notification: AppNotification,
     action: 'accept' | 'decline'
   ): Promise<boolean> {
-    // 1. Call server API to handle mutation, membership grant, and feedback notification
+    const newState: ActionState = action === 'accept' ? 'accepted' : 'declined';
+    const readAt = new Date().toISOString();
+
+    // 1. Call server API to handle mutation, membership grant, partner updates, and feedback notification
     try {
       const res = await fetch('/api/notifications/respond', {
         method: 'POST',
@@ -231,16 +266,24 @@ export const NotificationService = {
         body: JSON.stringify({ notification, action }),
       });
       if (res.ok) {
+        // Broadcast local update
+        const ch = getRealtimeChannel();
+        if (ch) {
+          try {
+            ch.send({
+              type: 'broadcast',
+              event: 'notification_update',
+              payload: { ...notification, action_state: newState, read_at: readAt },
+            });
+          } catch (e) {}
+        }
         return true;
       }
     } catch (e) {
       console.warn('[NotificationService] Server respondToAction failed, attempting client fallback:', e);
     }
 
-    // 2. Direct client fallback
-    const newState: ActionState = action === 'accept' ? 'accepted' : 'declined';
-    const readAt = new Date().toISOString();
-
+    // 2. Direct client fallback for project members
     if (action === 'accept' && notification.project_id && isSupabaseConfigured && supabase) {
       const isJoinRequest = notification.category === 'join_request' || notification.category === 'permission_request';
       const targetUserId = isJoinRequest
@@ -263,6 +306,16 @@ export const NotificationService = {
       }
     }
 
+    // Direct client fallback for partner requests
+    if (notification.category === 'partner_request' && notification.metadata?.partnerRequestId && isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('coding_partners')
+          .update({ status: newState, updated_at: readAt })
+          .eq('id', notification.metadata.partnerRequestId);
+      } catch (err) {}
+    }
+
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase
@@ -282,11 +335,24 @@ export const NotificationService = {
       target.read_at = readAt;
       saveLocalNotifications(notification.recipient_id, local);
     }
+
+    // Broadcast update
+    const ch = getRealtimeChannel();
+    if (ch) {
+      try {
+        ch.send({
+          type: 'broadcast',
+          event: 'notification_update',
+          payload: { ...notification, action_state: newState, read_at: readAt },
+        });
+      } catch (e) {}
+    }
+
     return true;
   },
 
   /**
-   * Realtime subscription for instant event delivery without polling
+   * Realtime subscription for instant event delivery without delay
    */
   subscribe(
     userId: string,
@@ -296,62 +362,63 @@ export const NotificationService = {
       return () => {};
     }
 
-    let channel: any = null;
+    const knownState = new Map<string, string>();
+    let isInitialLoad = true;
+
+    // 1. Supabase Realtime Broadcast Listener (< 50ms instant cross-device delivery)
+    let broadcastSub: any = null;
     if (isSupabaseConfigured && supabase) {
       try {
-        channel = supabase
-          .channel(`realtime:notifications:${userId}`)
-          .on(
-            'postgres_changes',
-            {
-              event: 'INSERT',
-              schema: 'public',
-              table: 'notifications',
-              filter: `recipient_id=eq.${userId}`,
-            },
-            (payload) => {
-              if (payload.new) {
-                onEvent(payload.new as AppNotification);
-              }
+        broadcastSub = supabase
+          .channel(`notifs_client_${userId}_${Date.now()}`)
+          .on('broadcast', { event: 'notification' }, ({ payload }) => {
+            if (payload && payload.recipient_id === userId) {
+              const stateKey = `${payload.action_state}_${payload.read_at}`;
+              knownState.set(payload.id, stateKey);
+              onEvent(payload as AppNotification);
             }
-          )
-          .on(
-            'postgres_changes',
-            {
-              event: 'UPDATE',
-              schema: 'public',
-              table: 'notifications',
-              filter: `recipient_id=eq.${userId}`,
-            },
-            (payload) => {
-              if (payload.new) {
-                onEvent(payload.new as AppNotification);
-              }
+          })
+          .on('broadcast', { event: 'notification_update' }, ({ payload }) => {
+            if (payload && (payload.recipient_id === userId || payload.actor_id === userId)) {
+              const stateKey = `${payload.action_state}_${payload.read_at}`;
+              knownState.set(payload.id, stateKey);
+              onEvent(payload as AppNotification);
             }
-          )
+          })
           .subscribe();
       } catch (e) {}
     }
 
-    // Periodic check for new notifications (every 8 seconds) to support polling fallback
-    const interval = setInterval(async () => {
+    // 2. High-frequency Polling Fallback (every 2.5s) to guarantee delivery even if WebSockets are offline
+    const checkSync = async () => {
       try {
         const notifs = await NotificationService.fetchNotifications(userId);
-        if (notifs && notifs.length > 0) {
-          // If first notification was created in last 10 seconds
-          const newest = notifs[0];
-          const diffMs = Date.now() - new Date(newest.created_at).getTime();
-          if (diffMs < 12000) {
-            onEvent(newest);
+        if (Array.isArray(notifs)) {
+          for (const notif of notifs) {
+            const stateKey = `${notif.action_state}_${notif.read_at}`;
+            const prev = knownState.get(notif.id);
+            if (!prev) {
+              knownState.set(notif.id, stateKey);
+              if (!isInitialLoad) {
+                onEvent(notif);
+              }
+            } else if (prev !== stateKey) {
+              knownState.set(notif.id, stateKey);
+              onEvent(notif);
+            }
           }
+          isInitialLoad = false;
         }
       } catch (e) {}
-    }, 8000);
+    };
+
+    checkSync();
+    const interval = setInterval(checkSync, 2500);
 
     return () => {
       clearInterval(interval);
-      if (channel && supabase) {
-        supabase.removeChannel(channel);
+      if (broadcastSub && supabase) {
+        supabase.removeChannel(broadcastSub);
       }
     };
   },

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AppNotification, NotificationCategory } from '@/lib/notifications/types';
 import { NotificationService } from '@/lib/notifications/notification-service';
+import { soundManager } from '@/lib/sound';
 
 interface NotificationCenterProps {
   userId: string;
@@ -56,6 +57,8 @@ export function NotificationCenter({ userId, onNavigateToProject }: Notification
           clone[index] = newOrUpdated;
           return clone;
         }
+        // Play notification chime on new incoming notification
+        soundManager.playNotification();
         return [newOrUpdated, ...prev];
       });
     });
@@ -99,6 +102,7 @@ export function NotificationCenter({ userId, onNavigateToProject }: Notification
     setActionInProgress(notification.id);
     const success = await NotificationService.respondToAction(notification, action);
     if (success) {
+      soundManager.playSuccess();
       setNotifications((prev) =>
         prev.map((n) =>
           n.id === notification.id
@@ -110,6 +114,9 @@ export function NotificationCenter({ userId, onNavigateToProject }: Notification
             : n
         )
       );
+      if (notification.category === 'partner_request') {
+        window.dispatchEvent(new CustomEvent('coding-partners-updated'));
+      }
       if (action === 'accept' && notification.project_id && onNavigateToProject) {
         onNavigateToProject(notification.project_id);
       }
@@ -121,6 +128,10 @@ export function NotificationCenter({ userId, onNavigateToProject }: Notification
     switch (category) {
       case 'project_invitation':
         return <UserPlus className="w-4 h-4 text-sky-400" />;
+      case 'partner_request':
+        return <Users className="w-4 h-4 text-emerald-400" />;
+      case 'partner_response':
+        return <CheckCheck className="w-4 h-4 text-emerald-400" />;
       case 'join_request':
       case 'permission_request':
         return <Shield className="w-4 h-4 text-amber-400" />;

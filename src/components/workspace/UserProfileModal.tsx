@@ -194,12 +194,12 @@ export function UserProfileModal({
   };
 
   const handleAcceptPartner = async (partnerId: string) => {
-    await DataService.respondToPartnerRequest(partnerId, true);
+    await DataService.respondToPartnerRequest(partnerId, true, currentUser);
     setPartners(prev => prev.map(p => p.id === partnerId ? { ...p, status: 'accepted' } : p));
   };
 
   const handleDeclinePartner = async (partnerId: string) => {
-    await DataService.respondToPartnerRequest(partnerId, false);
+    await DataService.respondToPartnerRequest(partnerId, false, currentUser);
     setPartners(prev => prev.filter(p => p.id !== partnerId));
   };
 

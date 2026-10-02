@@ -35,6 +35,24 @@ function saveLocalNotifications(data: any[]) {
   }
 }
 
+async function broadcastNotification(supabase: any, notif: any) {
+  if (!supabase) return;
+  try {
+    const ch = supabase.channel('radiux_notifications_realtime');
+    ch.subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') {
+        ch.send({
+          type: 'broadcast',
+          event: 'notification',
+          payload: notif,
+        }).finally(() => {
+          setTimeout(() => supabase.removeChannel(ch), 1200);
+        });
+      }
+    });
+  } catch (e) {}
+}
+
 // GET: fetch notifications for user
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -116,6 +134,7 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (!error && data) {
+          broadcastNotification(supabase, data);
           return NextResponse.json({ notification: data });
         }
       } catch (e) {}
@@ -126,11 +145,17 @@ export async function POST(request: NextRequest) {
     // Check deduplication key
     const dedupKey = newRecord.metadata?.dedup_key;
     if (dedupKey && all.some(n => n.recipient_id === newRecord.recipient_id && n.metadata?.dedup_key === dedupKey && n.action_state === 'pending')) {
-      return NextResponse.json({ notification: all.find(n => n.recipient_id === newRecord.recipient_id && n.metadata?.dedup_key === dedupKey) });
+      const existing = all.find(n => n.recipient_id === newRecord.recipient_id && n.metadata?.dedup_key === dedupKey);
+      return NextResponse.json({ notification: existing });
     }
 
     all.unshift(newRecord);
     saveLocalNotifications(all);
+
+    // Broadcast over realtime
+    if (supabase) {
+      broadcastNotification(supabase, newRecord);
+    }
 
     return NextResponse.json({ notification: newRecord });
   } catch (err: any) {

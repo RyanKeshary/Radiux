@@ -82,7 +82,39 @@ CREATE POLICY "Users can delete own notifications"
   FOR DELETE 
   USING (auth.uid() = recipient_id);
 
--- Enable Realtime publication
+-- 3. Ensure public.coding_partners Table Exists
+CREATE TABLE IF NOT EXISTS public.coding_partners (
+  id TEXT PRIMARY KEY DEFAULT ('partner-' || extract(epoch from now())::bigint || '-' || substr(md5(random()::text), 1, 6)),
+  requester_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  receiver_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'ignored', 'rejected', 'cancelled', 'declined')),
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_coding_partners_pair ON public.coding_partners(requester_id, receiver_id);
+CREATE INDEX IF NOT EXISTS idx_coding_partners_status ON public.coding_partners(status);
+
+ALTER TABLE public.coding_partners ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own coding partners" ON public.coding_partners;
+DROP POLICY IF EXISTS "Users can insert coding partners" ON public.coding_partners;
+DROP POLICY IF EXISTS "Users can update own coding partners" ON public.coding_partners;
+DROP POLICY IF EXISTS "Users can delete own coding partners" ON public.coding_partners;
+
+CREATE POLICY "Users can view own coding partners" ON public.coding_partners
+  FOR SELECT USING (auth.uid() = requester_id OR auth.uid() = receiver_id);
+
+CREATE POLICY "Users can insert coding partners" ON public.coding_partners
+  FOR INSERT WITH CHECK (auth.uid() = requester_id);
+
+CREATE POLICY "Users can update own coding partners" ON public.coding_partners
+  FOR UPDATE USING (auth.uid() = requester_id OR auth.uid() = receiver_id);
+
+CREATE POLICY "Users can delete own coding partners" ON public.coding_partners
+  FOR DELETE USING (auth.uid() = requester_id OR auth.uid() = receiver_id);
+
+-- Enable Realtime publication for notifications and coding_partners
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -91,6 +123,14 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'coding_partners'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.coding_partners;
+  END IF;
 EXCEPTION WHEN OTHERS THEN
   -- Ignore if publication does not exist or insufficient privileges
 END $$;
+

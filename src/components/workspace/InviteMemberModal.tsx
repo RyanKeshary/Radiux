@@ -91,6 +91,7 @@ export function InviteMemberModal({
             projectId: project.id,
             projectName: project.name,
             senderEmail: user?.email,
+            receiverName: targetUser.full_name || targetUser.email?.split('@')[0],
           },
           action_state: 'pending',
         });

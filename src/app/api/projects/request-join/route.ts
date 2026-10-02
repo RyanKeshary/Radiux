@@ -134,6 +134,22 @@ export async function POST(request: NextRequest) {
       saveLocalNotifications(all);
     }
 
+    // Broadcast instant real-time notification to owner
+    try {
+      const ch = supabase.channel('radiux_notifications_realtime');
+      ch.subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          ch.send({
+            type: 'broadcast',
+            event: 'notification',
+            payload: notif,
+          }).finally(() => {
+            setTimeout(() => supabase.removeChannel(ch), 1200);
+          });
+        }
+      });
+    } catch (e) {}
+
     return NextResponse.json({ success: true, notification: notif });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Failed to submit request' }, { status: 500 });
