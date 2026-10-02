@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { UserProfile, DirectMessage } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
 import { useAuth } from '@/context/AuthContext';
@@ -52,16 +52,25 @@ export function DirectMessageModal({
         const history = await DataService.getDirectMessages(user.id, targetUser.id);
         if (isMounted) {
           setMessages((prev) => {
-            const existingIds = new Set(prev.map((m) => m.id));
-            const newOnes = history.filter((m) => !existingIds.has(m.id));
-            if (newOnes.length > 0) {
-              const merged = [...prev, ...newOnes].sort(
-                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-              );
-              return merged;
-            }
             if (prev.length === 0) return history;
-            return prev;
+            const updated = [...prev];
+            for (const h of history) {
+              const matchIdx = updated.findIndex(
+                (m) =>
+                  m.id === h.id ||
+                  (m.id.startsWith('opt-dm-') &&
+                    m.sender_id === h.sender_id &&
+                    m.receiver_id === h.receiver_id &&
+                    m.content.trim() === h.content.trim() &&
+                    Math.abs(new Date(m.created_at).getTime() - new Date(h.created_at).getTime()) < 15000)
+              );
+              if (matchIdx !== -1) {
+                updated[matchIdx] = h;
+              } else {
+                updated.push(h);
+              }
+            }
+            return updated.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
           });
           await DataService.markDirectMessagesRead(targetUser.id, user.id);
         }
@@ -94,16 +103,16 @@ export function DirectMessageModal({
     // A. Listen for window-level DM events dispatched from global notifications
     const handleDmEvent = (e: any) => {
       const payload = e.detail;
-      if (payload && (payload.sender_id === targetUser.id || payload.sender_id === user.id)) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === payload.id)) return prev;
-          return [...prev, payload];
-        });
-        if (payload.sender_id === targetUser.id) {
-          soundManager.playNotification();
-          DataService.markDirectMessagesRead(targetUser.id, user.id);
-        }
-      }
+      // Discard our own messages as they are already rendered optimistically
+      if (!payload || payload.sender_id === user.id) return;
+      if (payload.sender_id !== targetUser.id) return;
+
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === payload.id)) return prev;
+        return [...prev, payload];
+      });
+      soundManager.playNotification();
+      DataService.markDirectMessagesRead(targetUser.id, user.id);
     };
     window.addEventListener('radiux-dm-received', handleDmEvent);
 
@@ -114,16 +123,16 @@ export function DirectMessageModal({
       channelRef.current = channel;
 
       channel.on('broadcast', { event: 'dm_message' }, ({ payload }) => {
-        if (payload && (payload.sender_id === targetUser.id || payload.sender_id === user.id)) {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === payload.id)) return prev;
-            return [...prev, payload];
-          });
-          if (payload.sender_id === targetUser.id) {
-            soundManager.playNotification();
-            DataService.markDirectMessagesRead(targetUser.id, user.id);
-          }
-        }
+        // Discard our own messages as they are already rendered optimistically
+        if (!payload || payload.sender_id === user.id) return;
+        if (payload.sender_id !== targetUser.id) return;
+
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === payload.id)) return prev;
+          return [...prev, payload];
+        });
+        soundManager.playNotification();
+        DataService.markDirectMessagesRead(targetUser.id, user.id);
       });
 
       channel.subscribe();
@@ -138,11 +147,31 @@ export function DirectMessageModal({
     };
   }, [isOpen, user, targetUser.id]);
 
+  const displayMessages = useMemo(() => {
+    const seenIds = new Set<string>();
+    const seenFingerprints = new Set<string>();
+    const list: DirectMessage[] = [];
+
+    for (const m of messages) {
+      if (seenIds.has(m.id)) continue;
+      seenIds.add(m.id);
+
+      // Deduplicate identical content sent between same peers within a 6-second window
+      const timeBucket = Math.floor(new Date(m.created_at).getTime() / 6000);
+      const fp = `${m.sender_id}_${m.receiver_id}_${m.content.trim()}_${timeBucket}`;
+      if (seenFingerprints.has(fp)) continue;
+      seenFingerprints.add(fp);
+
+      list.push(m);
+    }
+    return list;
+  }, [messages]);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [displayMessages]);
 
   if (!isOpen) return null;
 
@@ -244,7 +273,7 @@ export function DirectMessageModal({
               <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
               <span>Loading messages...</span>
             </div>
-          ) : messages.length === 0 ? (
+          ) : displayMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center p-6 space-y-2">
               <MessageSquare className="w-8 h-8 text-neutral-500 opacity-40" />
               <p className="text-xs font-medium" style={{ color: 'var(--ide-text-muted)' }}>
@@ -255,7 +284,7 @@ export function DirectMessageModal({
               </p>
             </div>
           ) : (
-            messages.map((m) => {
+            displayMessages.map((m: DirectMessage) => {
               const isMine = m.sender_id === user?.id;
               return (
                 <div 

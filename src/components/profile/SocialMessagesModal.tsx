@@ -44,6 +44,7 @@ export function SocialMessagesModal({
 }: SocialMessagesModalProps) {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [partners, setPartners] = useState<UserProfile[]>([]);
+  const [suggestedDevs, setSuggestedDevs] = useState<UserProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
@@ -51,15 +52,17 @@ export function SocialMessagesModal({
   const loadData = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const [convList, partnerList] = await Promise.all([
+      const [convList, partnerList, devList] = await Promise.all([
         DataService.getConversations(currentUser.id),
         DataService.getCodingPartners(currentUser.id),
+        DataService.searchDevelopers('', currentUser.id),
       ]);
       setConversations(convList || []);
       const activePartners = (partnerList || [])
-        .filter((p) => p.status === 'accepted' && p.profile)
+        .filter((p) => p.profile)
         .map((p) => p.profile!);
       setPartners(activePartners);
+      setSuggestedDevs(devList || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -127,11 +130,19 @@ export function SocialMessagesModal({
     return list;
   }, [conversations, activeTab, searchQuery]);
 
-  // Partners who haven't been talked to yet
+  // Developers & partners who haven't been talked to yet
   const newPartnerSuggestions = useMemo(() => {
     const talkedToIds = new Set(conversations.map((c) => c.peer.id));
-    return partners.filter((p) => !talkedToIds.has(p.id));
-  }, [conversations, partners]);
+    talkedToIds.add(currentUser.id);
+    const combined = [...partners, ...suggestedDevs];
+    const unique = new Map<string, UserProfile>();
+    for (const p of combined) {
+      if (p && p.id && !talkedToIds.has(p.id) && !unique.has(p.id)) {
+        unique.set(p.id, p);
+      }
+    }
+    return Array.from(unique.values());
+  }, [conversations, partners, suggestedDevs, currentUser.id]);
 
   const totalUnreadCount = useMemo(() => {
     return conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
@@ -308,9 +319,9 @@ export function SocialMessagesModal({
 
               {newPartnerSuggestions.length > 0 && (
                 <div className="pt-2 text-left max-w-sm mx-auto">
-                  <p className="text-[11px] font-semibold text-neutral-400 mb-2">Connect with partners:</p>
+                  <p className="text-[11px] font-semibold text-neutral-400 mb-2">Suggested developers to message:</p>
                   <div className="space-y-1">
-                    {newPartnerSuggestions.slice(0, 3).map((p) => (
+                    {newPartnerSuggestions.slice(0, 6).map((p) => (
                       <div
                         key={p.id}
                         onClick={() => handleStartChat(p)}

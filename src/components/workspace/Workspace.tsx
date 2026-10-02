@@ -431,6 +431,13 @@ export function Workspace({ projectId }: WorkspaceProps) {
     applyThemeVariables(settings.theme as ThemeId);
   }, [settings.theme]);
 
+  // Global listener for developer discovery modal
+  useEffect(() => {
+    const handleOpenDiscovery = () => setIsDiscoveryOpen(true);
+    window.addEventListener('open-developer-discovery', handleOpenDiscovery);
+    return () => window.removeEventListener('open-developer-discovery', handleOpenDiscovery);
+  }, []);
+
   const updateSettings = (newSettings: Partial<EditorSettings>) => {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };

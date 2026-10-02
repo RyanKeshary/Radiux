@@ -397,6 +397,12 @@ export const StorageMock = {
     setStored(STORAGE_KEY_USERS, users);
   },
 
+  getAllDirectMessages(userId?: string): DirectMessage[] {
+    const msgs = getStored<DirectMessage[]>(STORAGE_KEY_DIRECT_MESSAGES, []);
+    if (!userId) return msgs;
+    return msgs.filter(m => m.sender_id === userId || m.receiver_id === userId);
+  },
+
   getDirectMessages(user1Id: string, user2Id: string): DirectMessage[] {
     const msgs = getStored<DirectMessage[]>(STORAGE_KEY_DIRECT_MESSAGES, []);
     return msgs.filter(m => 

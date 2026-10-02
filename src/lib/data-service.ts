@@ -1723,6 +1723,11 @@ export const DataService = {
 
     StorageMock.saveDirectMessage(savedMsg);
 
+    // Notify open Social modals in this tab/window immediately
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('radiux-dm-received', { detail: savedMsg }));
+    }
+
     // Send instant notification to the recipient so they hear chime and see unread badge on any device
     try {
       const { NotificationService } = await import('@/lib/notifications/notification-service');
@@ -1775,16 +1780,54 @@ export const DataService = {
     StorageMock.markDirectMessagesRead(senderId, receiverId);
   },
 
-  // Level 7: Coding Partners
+  // Level 7: Direct Message Conversations (Instagram-style inbox)
   async getConversations(userId: string): Promise<any[]> {
+    let apiConvs: any[] = [];
     try {
       const res = await fetch(this.buildNextApiUrl('/api/direct-messages', { userId, conversations: 'true' }));
       if (res.ok) {
         const json = await res.json();
-        return json.conversations || [];
+        if (Array.isArray(json.conversations)) {
+          apiConvs = json.conversations;
+        }
       }
     } catch (e) {}
-    return [];
+
+    // Merge local client-side messages so optimistic/recent chats are instantly visible
+    const myLocalDMs = StorageMock.getAllDirectMessages(userId);
+
+    if (myLocalDMs.length === 0) {
+      return apiConvs;
+    }
+
+    const convMap = new Map<string, any>();
+    for (const c of apiConvs) {
+      convMap.set(c.peerId, c);
+    }
+
+    for (const msg of myLocalDMs) {
+      const peerId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
+      const existing = convMap.get(peerId);
+      const isNewer = !existing || new Date(msg.created_at).getTime() >= new Date(existing.lastMessage.created_at).getTime();
+
+      if (!existing || isNewer) {
+        const peerProfile = existing?.peer || StorageMock.getProfile(peerId) || {
+          id: peerId,
+          full_name: 'Developer',
+          username: peerId.slice(0, 8),
+        };
+        convMap.set(peerId, {
+          peerId,
+          peer: peerProfile,
+          lastMessage: msg,
+          unreadCount: (existing?.unreadCount || 0) + (msg.receiver_id === userId && !msg.read ? 1 : 0),
+        });
+      }
+    }
+
+    return Array.from(convMap.values()).sort(
+      (a, b) => new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime()
+    );
   },
   async getCodingPartners(userId: string): Promise<CodingPartner[]> {
     if (isSupabaseConfigured && supabase) {

@@ -160,6 +160,12 @@ export default function DashboardPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const handleOpenDiscovery = () => setIsCollaboratorsOpen(true);
+    window.addEventListener('open-developer-discovery', handleOpenDiscovery);
+    return () => window.removeEventListener('open-developer-discovery', handleOpenDiscovery);
+  }, []);
+
   // 1. Initialize Theme from user preferences
   useEffect(() => {
     if (typeof window !== 'undefined') {
