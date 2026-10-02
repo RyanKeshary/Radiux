@@ -61,6 +61,13 @@ export function NotificationCenter({ userId, onNavigateToProject }: Notification
         soundManager.playNotification();
         return [newOrUpdated, ...prev];
       });
+
+      if (
+        newOrUpdated.category === 'partner_request' ||
+        newOrUpdated.category === 'partner_response'
+      ) {
+        window.dispatchEvent(new CustomEvent('coding-partners-updated'));
+      }
     });
 
     return () => {

@@ -53,10 +53,10 @@ export function InviteMemberModal({
     setSuccessMsg('');
 
     try {
-      // 1. Find user by email in Supabase profiles
-      const targetUser = await DataService.findUserByEmail(email.trim());
+      // 1. Find user by email or username in Supabase profiles
+      const targetUser = await DataService.findUser(email.trim());
       if (!targetUser) {
-        setSearchError('No registered user found with that email. Make sure they have created an account first.');
+        setSearchError('No registered user found with that email or username. Make sure they have created an account first.');
         setLoading(false);
         return;
       }

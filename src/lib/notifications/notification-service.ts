@@ -42,16 +42,45 @@ function saveLocalNotifications(userId: string, notifications: AppNotification[]
   } catch (e) {}
 }
 
-// Supabase Realtime Broadcast Channel Singleton
+// Supabase Realtime Broadcast Channel Singleton & Event Bus
 let realtimeBroadcastChannel: any = null;
+type NotificationListener = (notification: AppNotification) => void;
+const broadcastListeners = new Set<{ userId: string; callback: NotificationListener }>();
 
 function getRealtimeChannel() {
   if (realtimeBroadcastChannel) return realtimeBroadcastChannel;
   if (isSupabaseConfigured && supabase) {
     try {
       realtimeBroadcastChannel = supabase.channel('radiux_notifications_realtime');
-      realtimeBroadcastChannel.subscribe();
-    } catch (e) {}
+      realtimeBroadcastChannel
+        .on('broadcast', { event: 'notification' }, ({ payload }: any) => {
+          if (!payload) return;
+          broadcastListeners.forEach(({ userId, callback }) => {
+            if (payload.recipient_id === userId) {
+              try {
+                callback(payload as AppNotification);
+              } catch (e) {}
+            }
+          });
+        })
+        .on('broadcast', { event: 'notification_update' }, ({ payload }: any) => {
+          if (!payload) return;
+          broadcastListeners.forEach(({ userId, callback }) => {
+            if (payload.recipient_id === userId || payload.actor_id === userId) {
+              try {
+                callback(payload as AppNotification);
+              } catch (e) {}
+            }
+          });
+        })
+        .subscribe((status: string) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('[NotificationService] Connected to radiux_notifications_realtime broadcast channel');
+          }
+        });
+    } catch (e) {
+      console.warn('[NotificationService] Failed to initialize Realtime channel:', e);
+    }
   }
   return realtimeBroadcastChannel;
 }
@@ -366,28 +395,16 @@ export const NotificationService = {
     let isInitialLoad = true;
 
     // 1. Supabase Realtime Broadcast Listener (< 50ms instant cross-device delivery)
-    let broadcastSub: any = null;
-    if (isSupabaseConfigured && supabase) {
-      try {
-        broadcastSub = supabase
-          .channel(`notifs_client_${userId}_${Date.now()}`)
-          .on('broadcast', { event: 'notification' }, ({ payload }) => {
-            if (payload && payload.recipient_id === userId) {
-              const stateKey = `${payload.action_state}_${payload.read_at}`;
-              knownState.set(payload.id, stateKey);
-              onEvent(payload as AppNotification);
-            }
-          })
-          .on('broadcast', { event: 'notification_update' }, ({ payload }) => {
-            if (payload && (payload.recipient_id === userId || payload.actor_id === userId)) {
-              const stateKey = `${payload.action_state}_${payload.read_at}`;
-              knownState.set(payload.id, stateKey);
-              onEvent(payload as AppNotification);
-            }
-          })
-          .subscribe();
-      } catch (e) {}
-    }
+    const listenerEntry = {
+      userId,
+      callback: (payload: AppNotification) => {
+        const stateKey = `${payload.action_state}_${payload.read_at}`;
+        knownState.set(payload.id, stateKey);
+        onEvent(payload);
+      },
+    };
+    broadcastListeners.add(listenerEntry);
+    getRealtimeChannel();
 
     // 2. High-frequency Polling Fallback (every 2.5s) to guarantee delivery even if WebSockets are offline
     const checkSync = async () => {
@@ -417,9 +434,7 @@ export const NotificationService = {
 
     return () => {
       clearInterval(interval);
-      if (broadcastSub && supabase) {
-        supabase.removeChannel(broadcastSub);
-      }
+      broadcastListeners.delete(listenerEntry);
     };
   },
 };

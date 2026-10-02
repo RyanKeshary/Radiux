@@ -28,6 +28,15 @@ export const DataService = {
     return isSupabaseConfigured;
   },
 
+  // Helper for internal Next.js API routes (always relative in browser, never forwarded to port 1234 backend)
+  buildNextApiUrl(path: string, params?: Record<string, string | number | undefined>): string {
+    if (!params) return path;
+    const entries = Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== '');
+    if (entries.length === 0) return path;
+    const qs = entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');
+    return `${path}?${qs}`;
+  },
+
   // Lookup registered user by email, ID, or username
   async findUser(identifier: string): Promise<UserProfile | null> {
     const clean = (identifier || '').trim();
@@ -42,7 +51,8 @@ export const DataService = {
           // UUID or ID check
           query = query.or(`id.eq.${clean},email.ilike.${clean}`);
         } else {
-          query = query.or(`email.ilike.${clean},full_name.ilike.${clean}`);
+          // Case-insensitive wildcard match for username or full name or email
+          query = query.or(`email.ilike.%${clean}%,full_name.ilike.%${clean}%`);
         }
         const { data, error } = await query.limit(1);
         if (!error && data && data.length > 0) {
@@ -56,8 +66,12 @@ export const DataService = {
         }
       } catch (e) {}
     }
-    const mock = StorageMock.getProfile(clean);
-    if (mock) return mock;
+
+    // Only fallback to StorageMock if Supabase is NOT configured
+    if (!isSupabaseConfigured) {
+      const mock = StorageMock.getProfile(clean);
+      if (mock) return mock;
+    }
     return null;
   },
 
@@ -490,7 +504,7 @@ export const DataService = {
 
     // Fallback to Backend API (cross-user persistent store)
     try {
-      const res = await fetch(buildApiUrl('/api/messages', { projectId }));
+      const res = await fetch(this.buildNextApiUrl('/api/messages', { projectId }));
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.messages) && json.messages.length > 0) {
@@ -586,7 +600,7 @@ export const DataService = {
 
     // Persist to Backend API so all collaborators and reloads see this message
     try {
-      const res = await fetch(buildApiUrl('/api/messages'), {
+      const res = await fetch(this.buildNextApiUrl('/api/messages'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, message: localPayload }),
@@ -620,7 +634,7 @@ export const DataService = {
     }
 
     try {
-      const res = await fetch(buildApiUrl('/api/activities', { projectId }));
+      const res = await fetch(this.buildNextApiUrl('/api/activities', { projectId }));
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.activities) && json.activities.length > 0) {
@@ -675,7 +689,7 @@ export const DataService = {
     }
 
     try {
-      const res = await fetch(buildApiUrl('/api/activities'), {
+      const res = await fetch(this.buildNextApiUrl('/api/activities'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, activity: actPayload }),
@@ -1702,7 +1716,7 @@ export const DataService = {
     }
 
     try {
-      const res = await fetch(buildApiUrl('/api/direct-messages', { user1Id, user2Id }));
+      const res = await fetch(this.buildNextApiUrl('/api/direct-messages', { user1Id, user2Id }));
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.messages)) {
@@ -1741,7 +1755,7 @@ export const DataService = {
     }
 
     try {
-      const res = await fetch(buildApiUrl('/api/direct-messages'), {
+      const res = await fetch(this.buildNextApiUrl('/api/direct-messages'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg }),
@@ -1771,7 +1785,7 @@ export const DataService = {
     }
 
     try {
-      await fetch(buildApiUrl('/api/direct-messages'), {
+      await fetch(this.buildNextApiUrl('/api/direct-messages'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ senderId, receiverId }),
@@ -1805,7 +1819,7 @@ export const DataService = {
 
     // Fallback to Backend API (cross-user persistent store)
     try {
-      const res = await fetch(buildApiUrl('/api/partners', { userId }));
+      const res = await fetch(this.buildNextApiUrl('/api/partners', { userId }));
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.partners) && json.partners.length > 0) {
@@ -1826,11 +1840,10 @@ export const DataService = {
     requester: UserProfile,
     targetIdentifier: string
   ): Promise<{ success: boolean; message: string; partner?: CodingPartner }> {
-    const targetUser = await this.findUser(targetIdentifier);
-    const target = targetUser || StorageMock.getProfile(targetIdentifier);
+    const target = await this.findUser(targetIdentifier);
 
     if (!target) {
-      return { success: false, message: `No developer found matching "${targetIdentifier}".` };
+      return { success: false, message: `No registered developer found matching "${targetIdentifier}". Please check their email or username.` };
     }
 
     if (target.id === requester.id) {
@@ -1881,7 +1894,7 @@ export const DataService = {
 
     // 2. Sync to Backend API
     try {
-      await fetch(buildApiUrl('/api/partners'), {
+      await fetch(this.buildNextApiUrl('/api/partners'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partner: createdPartner }),
@@ -1950,7 +1963,7 @@ export const DataService = {
     }
 
     try {
-      await fetch(buildApiUrl('/api/partners'), {
+      await fetch(this.buildNextApiUrl('/api/partners'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId, status }),
@@ -1992,7 +2005,7 @@ export const DataService = {
       } catch (err) {}
     }
     try {
-      await fetch(buildApiUrl('/api/partners'), {
+      await fetch(this.buildNextApiUrl('/api/partners'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partnerRequestId: partnerId }),
@@ -2009,7 +2022,7 @@ export const DataService = {
     }
 
     try {
-      await fetch(buildApiUrl('/api/partners'), {
+      await fetch(this.buildNextApiUrl('/api/partners'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partnerRequestId }),

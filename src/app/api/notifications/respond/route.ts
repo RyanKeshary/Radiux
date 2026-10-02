@@ -110,7 +110,8 @@ export async function POST(request: NextRequest) {
         ? notification.recipient_id 
         : (notification.actor_id || notification.metadata?.requesterId);
 
-      const targetRole = notification.metadata?.role || 'editor';
+      const rawRole = notification.metadata?.role || 'member';
+      const targetRole = (rawRole === 'editor' || rawRole === 'viewer') ? 'member' : rawRole;
 
       if (targetUserId && supabase) {
         try {

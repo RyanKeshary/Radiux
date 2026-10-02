@@ -34,7 +34,7 @@ function saveLocalNotifications(data: any[]) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { projectId, requesterId, requesterName, requesterEmail } = body;
+    const { projectId, requesterId, requesterName, requesterEmail, ownerId: passedOwnerId, projectName: passedProjectName } = body;
 
     if (!projectId || !requesterId) {
       return NextResponse.json({ error: 'Missing projectId or requesterId' }, { status: 400 });
@@ -46,17 +46,20 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Fetch project to identify owner and project name
-    const { data: project, error: projError } = await supabase
+    const { data: project } = await supabase
       .from('projects')
       .select('id, name, owner_id')
       .eq('id', projectId)
-      .single();
+      .maybeSingle();
 
-    if (projError || !project) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    const targetOwnerId = project?.owner_id || passedOwnerId;
+    const targetProjectName = project?.name || passedProjectName || 'Workspace';
+
+    if (!targetOwnerId) {
+      return NextResponse.json({ error: 'Project owner could not be identified' }, { status: 404 });
     }
 
-    if (project.owner_id === requesterId) {
+    if (targetOwnerId === requesterId) {
       return NextResponse.json({ error: 'You are already the owner of this workspace' }, { status: 400 });
     }
 
@@ -78,22 +81,22 @@ export async function POST(request: NextRequest) {
 
     const notif = {
       id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      recipient_id: project.owner_id,
+      recipient_id: targetOwnerId,
       actor_id: requesterId,
       actor_name: name,
       project_id: projectId,
-      project_name: project.name,
+      project_name: targetProjectName,
       type: 'action',
       category: 'join_request',
-      title: `Join Request: ${project.name}`,
-      body: `${name} (${requesterEmail || 'User'}) requested to join "${project.name}" as a collaborator.`,
+      title: `Join Request: ${targetProjectName}`,
+      body: `${name} (${requesterEmail || 'User'}) requested to join "${targetProjectName}" as a collaborator.`,
       metadata: {
         dedup_key: dedupKey,
         requesterId,
         requesterName: name,
         requesterEmail,
         projectId,
-        projectName: project.name,
+        projectName: targetProjectName,
       },
       action_state: 'pending',
       read_at: null,
@@ -105,7 +108,7 @@ export async function POST(request: NextRequest) {
       const { data: existing } = await supabase
         .from('notifications')
         .select('id')
-        .eq('recipient_id', project.owner_id)
+        .eq('recipient_id', targetOwnerId)
         .eq('metadata->>dedup_key', dedupKey)
         .eq('action_state', 'pending')
         .limit(1);
