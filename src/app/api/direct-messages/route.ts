@@ -40,10 +40,25 @@ function getPairKey(user1Id: string, user2Id: string): string {
   return [user1Id, user2Id].sort().join('_');
 }
 
-async function broadcastDM(supabase: any, message: any) {
-  if (!supabase) return;
+const NOTIF_FILE = path.join(DATA_ROOT, 'notifications.json');
+
+function saveDirectMessageNotification(notif: any) {
   try {
-    const pairKey = getPairKey(message.sender_id, message.receiver_id);
+    let notifs: any[] = [];
+    if (fs.existsSync(NOTIF_FILE)) {
+      notifs = JSON.parse(fs.readFileSync(NOTIF_FILE, 'utf8'));
+    }
+    notifs.unshift(notif);
+    fs.writeFileSync(NOTIF_FILE, JSON.stringify(notifs.slice(0, 500), null, 2), 'utf8');
+  } catch (e) {}
+}
+
+async function broadcastDM(supabase: any, message: any, senderName?: string) {
+  if (!supabase) return;
+  const pairKey = getPairKey(message.sender_id, message.receiver_id);
+  
+  // 1. Broadcast to specific DM room for open chat modals
+  try {
     const ch = supabase.channel(`radiux_dm_${pairKey}`);
     ch.subscribe((status: string) => {
       if (status === 'SUBSCRIBED') {
@@ -52,7 +67,49 @@ async function broadcastDM(supabase: any, message: any) {
           event: 'dm_message',
           payload: message,
         }).finally(() => {
-          setTimeout(() => supabase.removeChannel(ch), 1200);
+          setTimeout(() => supabase.removeChannel(ch), 1500);
+        });
+      }
+    });
+  } catch (e) {}
+
+  // 2. Broadcast on global notifications channel so recipient receives instant notification & chime anywhere in the app
+  try {
+    const globalCh = supabase.channel('radiux_notifications_realtime');
+    globalCh.subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') {
+        const notifRecord = {
+          id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          recipient_id: message.receiver_id,
+          actor_id: message.sender_id,
+          actor_name: senderName || 'Developer',
+          type: 'information',
+          category: 'direct_message',
+          title: `Message from ${senderName || 'Developer'}`,
+          body: message.content.length > 80 ? message.content.slice(0, 77) + '...' : message.content,
+          metadata: {
+            id: message.id,
+            sender_id: message.sender_id,
+            receiver_id: message.receiver_id,
+            content: message.content,
+            created_at: message.created_at,
+            senderId: message.sender_id,
+            senderName,
+            directMessage: true,
+          },
+          action_state: null,
+          read_at: null,
+          created_at: message.created_at,
+        };
+
+        saveDirectMessageNotification(notifRecord);
+
+        globalCh.send({
+          type: 'broadcast',
+          event: 'notification',
+          payload: notifRecord,
+        }).finally(() => {
+          setTimeout(() => supabase.removeChannel(globalCh), 1500);
         });
       }
     });
@@ -119,6 +176,8 @@ export async function POST(request: NextRequest) {
       created_at: payload.created_at || new Date().toISOString(),
     };
 
+    const senderName = body.sender_name || payload.sender_name;
+
     const supabase = getSupabase();
     if (supabase) {
       try {
@@ -136,7 +195,7 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (!error && data) {
-          broadcastDM(supabase, data);
+          broadcastDM(supabase, data, senderName);
           return NextResponse.json({ success: true, message: data });
         }
       } catch (e) {}
@@ -154,7 +213,7 @@ export async function POST(request: NextRequest) {
 
     // Broadcast over realtime
     if (supabase) {
-      broadcastDM(supabase, newRecord);
+      broadcastDM(supabase, newRecord, senderName);
     }
 
     return NextResponse.json({ success: true, message: newRecord });

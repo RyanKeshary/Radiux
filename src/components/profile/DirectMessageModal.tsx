@@ -11,15 +11,18 @@ import { MessageSquare, X, Send, Loader2 } from 'lucide-react';
 interface DirectMessageModalProps {
   isOpen: boolean;
   onClose: () => void;
-  targetUser: UserProfile;
+  targetUser: UserProfile | any;
+  user?: UserProfile | null;
 }
 
 export function DirectMessageModal({
   isOpen,
   onClose,
   targetUser,
+  user: propUser,
 }: DirectMessageModalProps) {
-  const { user } = useAuth();
+  const { user: authUser } = useAuth();
+  const user = propUser || authUser;
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(true);
@@ -70,14 +73,15 @@ export function DirectMessageModal({
     };
   }, [isOpen, user, targetUser.id]);
 
+  const channelRef = useRef<any>(null);
+
   // 2. Real-time Supabase Broadcast for instant message delivery (< 50ms)
   useEffect(() => {
-    if (!isOpen || !user || !isSupabaseConfigured || !supabase) return;
+    if (!isOpen || !user) return;
 
-    const pairKey = [user.id, targetUser.id].sort().join('_');
-    const channel = supabase.channel(`radiux_dm_${pairKey}`);
-
-    channel.on('broadcast', { event: 'dm_message' }, ({ payload }) => {
+    // A. Listen for window-level DM events dispatched from global notifications
+    const handleDmEvent = (e: any) => {
+      const payload = e.detail;
       if (payload && (payload.sender_id === targetUser.id || payload.sender_id === user.id)) {
         setMessages((prev) => {
           if (prev.some((m) => m.id === payload.id)) return prev;
@@ -88,13 +92,36 @@ export function DirectMessageModal({
           DataService.markDirectMessagesRead(targetUser.id, user.id);
         }
       }
-    });
+    };
+    window.addEventListener('radiux-dm-received', handleDmEvent);
 
-    channel.subscribe();
+    // B. Supabase direct room subscription
+    if (isSupabaseConfigured && supabase) {
+      const pairKey = [user.id, targetUser.id].sort().join('_');
+      const channel = supabase.channel(`radiux_dm_${pairKey}`);
+      channelRef.current = channel;
+
+      channel.on('broadcast', { event: 'dm_message' }, ({ payload }) => {
+        if (payload && (payload.sender_id === targetUser.id || payload.sender_id === user.id)) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === payload.id)) return prev;
+            return [...prev, payload];
+          });
+          if (payload.sender_id === targetUser.id) {
+            soundManager.playNotification();
+            DataService.markDirectMessagesRead(targetUser.id, user.id);
+          }
+        }
+      });
+
+      channel.subscribe();
+    }
 
     return () => {
-      if (supabase) {
-        supabase.removeChannel(channel);
+      window.removeEventListener('radiux-dm-received', handleDmEvent);
+      if (channelRef.current && supabase) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
       }
     };
   }, [isOpen, user, targetUser.id]);
@@ -121,22 +148,15 @@ export function DirectMessageModal({
         return [...prev, newMsg];
       });
 
-      // Broadcast immediately to counterparty via Realtime
-      if (isSupabaseConfigured && supabase) {
-        const client = supabase;
-        const pairKey = [user.id, targetUser.id].sort().join('_');
-        const channel = client.channel(`radiux_dm_${pairKey}`);
-        channel.subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            channel.send({
-              type: 'broadcast',
-              event: 'dm_message',
-              payload: newMsg,
-            }).finally(() => {
-              setTimeout(() => client.removeChannel(channel), 1000);
-            });
-          }
-        });
+      // Broadcast immediately to counterparty via persistent channel
+      if (channelRef.current) {
+        try {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'dm_message',
+            payload: newMsg,
+          });
+        } catch (e) {}
       }
     } catch (err) {
       console.error(err);
@@ -274,5 +294,35 @@ export function DirectMessageModal({
         </form>
       </div>
     </div>
+  );
+}
+
+export function GlobalDirectMessageModal({ currentUser }: { currentUser: any }) {
+  const [targetUser, setTargetUser] = useState<any | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = (e: any) => {
+      if (e.detail?.targetUser) {
+        setTargetUser(e.detail.targetUser);
+        setIsOpen(true);
+      }
+    };
+    window.addEventListener('open-direct-message', handleOpen);
+    return () => window.removeEventListener('open-direct-message', handleOpen);
+  }, []);
+
+  if (!isOpen || !targetUser || !currentUser) return null;
+
+  return (
+    <DirectMessageModal
+      isOpen={isOpen}
+      onClose={() => {
+        setIsOpen(false);
+        setTargetUser(null);
+      }}
+      user={currentUser}
+      targetUser={targetUser}
+    />
   );
 }

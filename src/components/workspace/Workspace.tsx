@@ -51,6 +51,7 @@ const GlobalSearchModal = dynamic(() => import('./GlobalSearchModal').then(m => 
 const EditorSettingsModal = dynamic(() => import('./EditorSettingsModal').then(m => m.EditorSettingsModal), { ssr: false });
 const GitHubModal = dynamic(() => import('./GitHubModal').then(m => m.GitHubModal), { ssr: false });
 const UserProfileModal = dynamic(() => import('./UserProfileModal').then(m => m.UserProfileModal), { ssr: false });
+const GlobalDirectMessageModal = dynamic(() => import('@/components/profile/DirectMessageModal').then(m => m.GlobalDirectMessageModal), { ssr: false });
 const PublicProfileModal = dynamic(() => import('./PublicProfileModal').then(m => m.PublicProfileModal), { ssr: false });
 const DeveloperDiscoveryModal = dynamic(() => import('@/components/profile/DeveloperDiscoveryModal').then(m => m.DeveloperDiscoveryModal), { ssr: false });
 const ProjectSwitcherModal = dynamic(() => import('./ProjectSwitcherModal').then(m => m.ProjectSwitcherModal), { ssr: false });
@@ -2659,14 +2660,17 @@ export function Workspace({ projectId }: WorkspaceProps) {
       />
 
       {user && (
-        <UserProfileModal
-          isOpen={isProfileModalOpen}
-          initialTab={profileModalTab}
-          onClose={() => setIsProfileModalOpen(false)}
-          currentUser={user}
-          settings={settings}
-          onUpdateSettings={updateSettings}
-        />
+        <>
+          <UserProfileModal
+            isOpen={isProfileModalOpen}
+            initialTab={profileModalTab}
+            onClose={() => setIsProfileModalOpen(false)}
+            currentUser={user}
+            settings={settings}
+            onUpdateSettings={updateSettings}
+          />
+          <GlobalDirectMessageModal currentUser={user} />
+        </>
       )}
 
       {selectedPublicUserId && (

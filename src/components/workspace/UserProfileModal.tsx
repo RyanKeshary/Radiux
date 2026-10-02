@@ -22,7 +22,8 @@ import {
   CheckCircle2,
   Upload,
   Image as ImageIcon,
-  Sparkles
+  Sparkles,
+  MessageSquare
 } from 'lucide-react';
 
 interface UserProfileModalProps {
@@ -958,14 +959,40 @@ export function UserProfileModal({
                             </div>
 
                             {/* Actions */}
-                            <button
-                              onClick={() => handleRemovePartner(p.id, p.profile?.full_name || 'this partner')}
-                              className="w-full text-[10px] py-1 rounded-lg border transition-colors opacity-0 group-hover:opacity-100"
-                              style={{ borderColor: 'rgba(239,68,68,0.3)', color: '#f87171', background: 'rgba(239,68,68,0.07)' }}
-                              title="Remove coding partner"
-                            >
-                              Remove
-                            </button>
+                            <div className="flex items-center gap-1.5 w-full mt-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!p.profile) return;
+                                  window.dispatchEvent(
+                                    new CustomEvent('open-direct-message', {
+                                      detail: {
+                                        targetUser: {
+                                          id: p.profile.id,
+                                          full_name: p.profile.full_name || p.profile.username || 'Partner',
+                                          username: p.profile.username,
+                                          avatar_url: p.profile.avatar_url,
+                                        },
+                                      },
+                                    })
+                                  );
+                                }}
+                                className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium py-1 px-2 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 transition-colors"
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                                <span>Chat</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePartner(p.id, p.profile?.full_name || 'this partner')}
+                                className="text-[10px] py-1 px-2 rounded-lg border transition-colors opacity-0 group-hover:opacity-100"
+                                style={{ borderColor: 'rgba(239,68,68,0.3)', color: '#f87171', background: 'rgba(239,68,68,0.07)' }}
+                                title="Remove coding partner"
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>

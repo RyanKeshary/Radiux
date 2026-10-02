@@ -1754,23 +1754,55 @@ export const DataService = {
       } catch (e) {}
     }
 
+    let savedMsg = msg;
     try {
       const res = await fetch(this.buildNextApiUrl('/api/direct-messages'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg }),
+        body: JSON.stringify({ 
+          message: msg,
+          sender_name: sender.full_name || sender.username || sender.email?.split('@')[0],
+          sender_email: sender.email,
+        }),
       });
       if (res.ok) {
         const json = await res.json();
         if (json.message) {
-          StorageMock.saveDirectMessage(json.message);
-          return json.message;
+          savedMsg = json.message;
         }
       }
     } catch (e) {}
 
-    StorageMock.saveDirectMessage(msg);
-    return msg;
+    StorageMock.saveDirectMessage(savedMsg);
+
+    // Send instant notification to the recipient so they hear chime and see unread badge on any device
+    try {
+      const { NotificationService } = await import('@/lib/notifications/notification-service');
+      const senderDisplayName = sender.full_name || sender.username || sender.email?.split('@')[0] || 'A developer';
+      await NotificationService.sendNotification({
+        recipient_id: receiverId,
+        actor_id: sender.id,
+        actor_name: senderDisplayName,
+        type: 'information',
+        category: 'direct_message',
+        title: `Message from ${senderDisplayName}`,
+        body: content.length > 80 ? content.slice(0, 77) + '...' : content,
+        metadata: {
+          id: savedMsg.id,
+          sender_id: sender.id,
+          receiver_id: receiverId,
+          content,
+          created_at: savedMsg.created_at,
+          senderId: sender.id,
+          senderName: senderDisplayName,
+          senderAvatar: sender.avatar_url,
+          senderEmail: sender.email,
+          directMessage: true,
+        },
+      });
+    } catch (e) {}
+
+    return savedMsg;
   },
 
   async markDirectMessagesRead(senderId: string, receiverId: string): Promise<void> {

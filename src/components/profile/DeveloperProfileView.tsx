@@ -480,6 +480,7 @@ export function DeveloperProfileView({
         <DirectMessageModal
           isOpen={isDirectMessageOpen}
           onClose={() => setIsDirectMessageOpen(false)}
+          user={user}
           targetUser={profile}
         />
       )}

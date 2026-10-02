@@ -5,6 +5,8 @@ export type NotificationCategory =
   | 'join_request'
   | 'partner_request'
   | 'partner_response'
+  | 'direct_message'
+  | 'chat_message'
   | 'review_request' 
   | 'permission_request' 
   | 'deployment' 

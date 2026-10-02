@@ -17,6 +17,7 @@ const CreateProjectModal = dynamic(() => import('@/components/dashboard/CreatePr
 const ImportProjectModal = dynamic(() => import('@/components/dashboard/ImportProjectModal').then(m => m.ImportProjectModal), { ssr: false });
 const ImportWorkspaceModal = dynamic(() => import('@/components/dashboard/ImportWorkspaceModal').then(m => m.ImportWorkspaceModal), { ssr: false });
 const UserProfileModal = dynamic(() => import('@/components/workspace/UserProfileModal').then(m => m.UserProfileModal), { ssr: false });
+const GlobalDirectMessageModal = dynamic(() => import('@/components/profile/DirectMessageModal').then(m => m.GlobalDirectMessageModal), { ssr: false });
 
 const EditorSettingsModal = dynamic(() => import('@/components/workspace/EditorSettingsModal').then(m => m.EditorSettingsModal), { ssr: false });
 const DeveloperDiscoveryModal = dynamic(() => import('@/components/profile/DeveloperDiscoveryModal').then(m => m.DeveloperDiscoveryModal), { ssr: false });
@@ -1244,6 +1245,8 @@ export default function DashboardPage() {
             isOpen={isCollaboratorsOpen}
             onClose={() => setIsCollaboratorsOpen(false)}
           />
+
+          <GlobalDirectMessageModal currentUser={user} />
         </>
       )}
 

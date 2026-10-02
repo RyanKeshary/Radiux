@@ -13,6 +13,7 @@ import {
   Info,
   Users,
   Loader2,
+  MessageSquare,
 } from 'lucide-react';
 import { AppNotification, NotificationCategory } from '@/lib/notifications/types';
 import { NotificationService } from '@/lib/notifications/notification-service';
@@ -67,6 +68,10 @@ export function NotificationCenter({ userId, onNavigateToProject }: Notification
         newOrUpdated.category === 'partner_response'
       ) {
         window.dispatchEvent(new CustomEvent('coding-partners-updated'));
+      }
+
+      if (newOrUpdated.category === 'direct_message') {
+        window.dispatchEvent(new CustomEvent('radiux-dm-received', { detail: newOrUpdated.metadata }));
       }
     });
 
@@ -147,6 +152,9 @@ export function NotificationCenter({ userId, onNavigateToProject }: Notification
         return <Rocket className="w-4 h-4 text-emerald-400" />;
       case 'collaborator_joined':
         return <Users className="w-4 h-4 text-cyan-400" />;
+      case 'direct_message':
+      case 'chat_message':
+        return <MessageSquare className="w-4 h-4 text-sky-400" />;
       default:
         return <Info className="w-4 h-4 text-neutral-400" />;
     }
@@ -230,7 +238,30 @@ export function NotificationCenter({ userId, onNavigateToProject }: Notification
                 return (
                   <div
                     key={n.id}
-                    onClick={() => isUnread && handleMarkAsRead(n.id)}
+                    onClick={() => {
+                      if (isUnread) handleMarkAsRead(n.id);
+                      if (n.category === 'direct_message') {
+                        const targetId = n.actor_id || (n.metadata as any)?.sender_id;
+                        const targetName = n.actor_name || (n.metadata as any)?.sender_name || 'Coding Partner';
+                        const targetUsername = (n.metadata as any)?.sender_username;
+                        const targetAvatar = (n.metadata as any)?.sender_avatar;
+                        if (targetId) {
+                          window.dispatchEvent(
+                            new CustomEvent('open-direct-message', {
+                              detail: {
+                                targetUser: {
+                                  id: targetId,
+                                  full_name: targetName,
+                                  username: targetUsername,
+                                  avatar_url: targetAvatar,
+                                },
+                              },
+                            })
+                          );
+                          setIsOpen(false);
+                        }
+                      }
+                    }}
                     className={`p-3 transition-colors cursor-pointer text-xs ${
                       isUnread ? 'bg-white/[0.03] hover:bg-white/[0.06]' : 'hover:bg-white/[0.02]'
                     }`}
@@ -255,6 +286,42 @@ export function NotificationCenter({ userId, onNavigateToProject }: Notification
                         <p className="mt-0.5 text-neutral-400 text-[11px] leading-relaxed line-clamp-2">
                           {n.body}
                         </p>
+
+                        {/* Direct Message Open Chat action */}
+                        {n.category === 'direct_message' && (
+                          <div className="mt-2 flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isUnread) handleMarkAsRead(n.id);
+                                const targetId = n.actor_id || (n.metadata as any)?.sender_id;
+                                const targetName = n.actor_name || (n.metadata as any)?.sender_name || 'Coding Partner';
+                                const targetUsername = (n.metadata as any)?.sender_username;
+                                const targetAvatar = (n.metadata as any)?.sender_avatar;
+                                if (targetId) {
+                                  window.dispatchEvent(
+                                    new CustomEvent('open-direct-message', {
+                                      detail: {
+                                        targetUser: {
+                                          id: targetId,
+                                          full_name: targetName,
+                                          username: targetUsername,
+                                          avatar_url: targetAvatar,
+                                        },
+                                      },
+                                    })
+                                  );
+                                  setIsOpen(false);
+                                }
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-white bg-sky-600 hover:bg-sky-500 rounded transition-colors"
+                            >
+                              <MessageSquare className="w-3 h-3" />
+                              <span>Open Chat</span>
+                            </button>
+                          </div>
+                        )}
 
                         {/* Actionable Controls (Accept / Decline) */}
                         {n.type === 'action' && n.action_state && (

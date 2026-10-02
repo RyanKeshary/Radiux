@@ -177,6 +177,7 @@ export function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const supabaseChannelRef = useRef<any>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -287,6 +288,7 @@ export function ChatPanel({
     if (!isSupabaseConfigured || !supabase || !projectId) return;
 
     const ch = supabase.channel(`radiux_chat_${projectId}`);
+    supabaseChannelRef.current = ch;
     ch.on('broadcast', { event: 'chat_message' }, ({ payload }) => {
       if (payload && payload.project_id === projectId) {
         setMessages((prev) => {
@@ -304,6 +306,7 @@ export function ChatPanel({
     ch.subscribe();
 
     return () => {
+      supabaseChannelRef.current = null;
       if (supabase) {
         supabase.removeChannel(ch);
       }
@@ -374,19 +377,16 @@ export function ChatPanel({
 
       // 3. Broadcast in real time via Supabase Realtime
       if (isSupabaseConfigured && supabase) {
-        const client = supabase;
-        const ch = client.channel(`radiux_chat_${projectId}`);
-        ch.subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            ch.send({
-              type: 'broadcast',
-              event: 'chat_message',
-              payload: saved,
-            }).finally(() => {
-              setTimeout(() => client.removeChannel(ch), 1000);
-            });
-          }
-        });
+        const activeCh = supabaseChannelRef.current || supabase.channel(`radiux_chat_${projectId}`);
+        try {
+          activeCh.send({
+            type: 'broadcast',
+            event: 'chat_message',
+            payload: saved,
+          });
+        } catch (e) {
+          console.warn('Failed to broadcast chat message:', e);
+        }
       }
 
       // 4. Also broadcast via WebSocket server if active
