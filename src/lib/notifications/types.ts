@@ -2,6 +2,7 @@ export type NotificationType = 'action' | 'information' | 'collaboration';
 
 export type NotificationCategory = 
   | 'project_invitation' 
+  | 'join_request'
   | 'review_request' 
   | 'permission_request' 
   | 'deployment' 

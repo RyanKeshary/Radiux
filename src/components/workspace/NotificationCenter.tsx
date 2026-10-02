@@ -121,10 +121,10 @@ export function NotificationCenter({ userId, onNavigateToProject }: Notification
     switch (category) {
       case 'project_invitation':
         return <UserPlus className="w-4 h-4 text-sky-400" />;
-      case 'review_request':
-        return <GitPullRequest className="w-4 h-4 text-purple-400" />;
+      case 'join_request':
       case 'permission_request':
         return <Shield className="w-4 h-4 text-amber-400" />;
+      case 'review_request':
       case 'deployment':
         return <Rocket className="w-4 h-4 text-emerald-400" />;
       case 'collaborator_joined':

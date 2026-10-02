@@ -67,31 +67,37 @@ export const DataService = {
 
   // Check if a user has access to a project
   async verifyProjectAccess(projectId: string, userId: string): Promise<{ authorized: boolean; role?: WorkspaceRole }> {
+    if (!projectId || !userId) return { authorized: false };
+
     // 1. Try Supabase
     if (isSupabaseConfigured && supabase) {
-      const { data: proj, error: projError } = await supabase
-        .from('projects')
-        .select('id, owner_id')
-        .eq('id', projectId)
-        .single();
-
-      if (!projError && proj) {
-        if (proj.owner_id === userId) {
-          return { authorized: true, role: 'owner' };
-        }
+      try {
+        // Direct membership check first (covers collaborators on any device)
         const { data: member } = await supabase
           .from('project_members')
           .select('id, role')
           .eq('project_id', projectId)
           .eq('user_id', userId)
-          .single();
+          .maybeSingle();
 
         if (member) {
           const rawRole = (member.role || 'editor') as WorkspaceRole;
           const normalizedRole = rawRole === 'member' ? 'editor' : rawRole;
           return { authorized: true, role: normalizedRole };
         }
-        return { authorized: false };
+
+        // Project ownership check
+        const { data: proj } = await supabase
+          .from('projects')
+          .select('id, owner_id')
+          .eq('id', projectId)
+          .maybeSingle();
+
+        if (proj && proj.owner_id === userId) {
+          return { authorized: true, role: 'owner' };
+        }
+      } catch (err) {
+        console.warn('[DataService] verifyProjectAccess Supabase error:', err);
       }
     }
 
@@ -232,21 +238,114 @@ export const DataService = {
 
   async addMember(projectId: string, user: UserProfile, role: WorkspaceRole = 'editor'): Promise<ProjectMember> {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('project_members')
-        .insert({
-          project_id: projectId,
-          user_id: user.id,
-          role
-        })
-        .select('*, profile:profiles(*)')
-        .single();
+      try {
+        // 1. Check if member already exists
+        const { data: existing } = await supabase
+          .from('project_members')
+          .select('*, profile:profiles(*)')
+          .eq('project_id', projectId)
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-      if (!error && data) {
-        return data;
+        if (existing) {
+          return existing as ProjectMember;
+        }
+
+        // 2. Try inserting requested role
+        let { data, error } = await supabase
+          .from('project_members')
+          .insert({
+            project_id: projectId,
+            user_id: user.id,
+            role
+          })
+          .select('*, profile:profiles(*)')
+          .maybeSingle();
+
+        // 3. Fallback to 'member' if check constraint 23514 triggered (e.g. Postgres constraint allows only 'owner','member')
+        if (error && (error.code === '23514' || error.message?.includes('check constraint'))) {
+          console.warn('[DataService] Database role constraint triggered, falling back to role "member"');
+          const fallback = await supabase
+            .from('project_members')
+            .insert({
+              project_id: projectId,
+              user_id: user.id,
+              role: 'member'
+            })
+            .select('*, profile:profiles(*)')
+            .maybeSingle();
+
+          if (!fallback.error && fallback.data) {
+            queryCache.invalidatePrefix('projects:');
+            return fallback.data as ProjectMember;
+          }
+        }
+
+        if (!error && data) {
+          queryCache.invalidatePrefix('projects:');
+          return data as ProjectMember;
+        }
+      } catch (err) {
+        console.error('[DataService] addMember error:', err);
       }
     }
     return StorageMock.addMember(projectId, user);
+  },
+
+  async requestJoinProject(projectId: string, user: UserProfile, ownerId?: string, projectName?: string): Promise<{ success: boolean; message?: string }> {
+    try {
+      const res = await fetch('/api/projects/request-join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          requesterId: user.id,
+          requesterName: user.full_name || user.display_name,
+          requesterEmail: user.email,
+        }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const data = await res.json().catch(() => ({}));
+      return { success: false, message: data.error || 'Failed to submit request' };
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Network error' };
+    }
+  },
+
+  async getExploreProjects(userId?: string): Promise<any[]> {
+    try {
+      const url = userId ? `/api/projects/explore?userId=${encodeURIComponent(userId)}` : '/api/projects/explore';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.projects)) {
+          return data.projects;
+        }
+      }
+    } catch (e) {
+      console.warn('[DataService] getExploreProjects API failed, falling back:', e);
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data } = await supabase
+          .from('projects')
+          .select('id, name, description, owner_id, updated_at, owner:profiles!owner_id(id, full_name, display_name, email, avatar_url)')
+          .order('updated_at', { ascending: false });
+
+        if (data) {
+          return data.map((p: any) => ({
+            ...p,
+            owner: Array.isArray(p.owner) ? p.owner[0] : p.owner,
+            user_status: userId && p.owner_id === userId ? 'owner' : 'can_request',
+          }));
+        }
+      } catch (e) {}
+    }
+
+    return [];
   },
 
   async updateMemberRole(projectId: string, userId: string, role: WorkspaceRole): Promise<boolean> {

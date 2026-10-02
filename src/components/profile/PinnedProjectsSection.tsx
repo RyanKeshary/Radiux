@@ -16,8 +16,13 @@ import {
   MoveDown, 
   X, 
   Check, 
-  AlertCircle 
+  AlertCircle,
+  UserPlus,
+  Clock,
+  Loader2
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { DataService } from '@/lib/data-service';
 
 interface PinnedProjectsSectionProps {
   pinnedProjects: Project[];
@@ -32,12 +37,30 @@ export function PinnedProjectsSection({
   isOwner,
   onUpdatePinned,
 }: PinnedProjectsSectionProps) {
+  const { user } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>(
     pinnedProjects.map((p) => p.id).slice(0, 4)
   );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [requestingId, setRequestingId] = useState<string | null>(null);
+  const [pendingJoinRequests, setPendingJoinRequests] = useState<Record<string, boolean>>({});
+
+  const handleRequestJoin = async (project: Project) => {
+    if (!user) return;
+    setRequestingId(project.id);
+    try {
+      const res = await DataService.requestJoinProject(project.id, user, project.owner_id, project.name);
+      if (res.success || res.message?.includes('already')) {
+        setPendingJoinRequests((prev) => ({ ...prev, [project.id]: true }));
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRequestingId(null);
+    }
+  };
 
   const handleOpenModal = () => {
     setSelectedIds(pinnedProjects.map((p) => p.id).slice(0, 4));
@@ -194,6 +217,28 @@ export function PinnedProjectsSection({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {!isOwner && user && (
+                    pendingJoinRequests[project.id] ? (
+                      <span className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                        <Clock className="w-2.5 h-2.5 animate-pulse" />
+                        <span>Pending</span>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleRequestJoin(project)}
+                        disabled={requestingId === project.id}
+                        className="flex items-center gap-1 text-[10.5px] font-medium text-indigo-400 hover:text-indigo-300 hover:underline disabled:opacity-50"
+                      >
+                        {requestingId === project.id ? (
+                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                        ) : (
+                          <UserPlus className="w-2.5 h-2.5" />
+                        )}
+                        <span>Join</span>
+                      </button>
+                    )
+                  )}
+
                   <Link
                     href={`/project/${project.id}`}
                     className="flex items-center gap-1 text-[11px] font-medium text-sky-400 hover:underline"

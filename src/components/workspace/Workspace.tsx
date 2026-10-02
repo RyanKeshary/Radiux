@@ -137,6 +137,25 @@ export function Workspace({ projectId }: WorkspaceProps) {
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
   const [loading, setLoading] = useState(true);
   const [unauthorized, setUnauthorized] = useState(false);
+  const [isRequestingAccess, setIsRequestingAccess] = useState(false);
+  const [accessRequestStatus, setAccessRequestStatus] = useState<'idle' | 'sent' | 'already_sent' | 'error'>('idle');
+
+  const handleRequestAccess = async () => {
+    if (!user) return;
+    setIsRequestingAccess(true);
+    try {
+      const res = await DataService.requestJoinProject(projectId, user);
+      if (res.success) {
+        setAccessRequestStatus('sent');
+      } else {
+        setAccessRequestStatus(res.message?.includes('already') ? 'already_sent' : 'error');
+      }
+    } catch {
+      setAccessRequestStatus('error');
+    } finally {
+      setIsRequestingAccess(false);
+    }
+  };
 
   // Level 7: Multi-Editor Groups & Split State
   const [editorGroups, setEditorGroups] = useState<EditorGroupState[]>([
@@ -1611,12 +1630,51 @@ export function Workspace({ projectId }: WorkspaceProps) {
         <p className="text-sm text-neutral-400 max-w-md text-center">
           You do not have permission to view or edit this project workspace.
         </p>
-        <Link
-          href="/"
-          className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded text-sm font-medium transition-colors"
-        >
-          Return to Dashboard
-        </Link>
+
+        {accessRequestStatus === 'sent' && (
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs flex items-center gap-2 max-w-sm text-center">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+            <span>Join request submitted! The project owner has been notified.</span>
+          </div>
+        )}
+
+        {accessRequestStatus === 'already_sent' && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-xs flex items-center gap-2 max-w-sm text-center">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>A join request is already pending for this project.</span>
+          </div>
+        )}
+
+        {accessRequestStatus === 'error' && (
+          <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs flex items-center gap-2 max-w-sm text-center">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>Failed to submit join request. Please try again.</span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3 mt-2">
+          {user && accessRequestStatus === 'idle' && (
+            <button
+              onClick={handleRequestAccess}
+              disabled={isRequestingAccess}
+              className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded text-sm font-medium transition-colors flex items-center gap-1.5 shadow-lg shadow-sky-600/20"
+            >
+              {isRequestingAccess ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <UserPlus className="w-4 h-4" />
+              )}
+              <span>Request Access to Join</span>
+            </button>
+          )}
+
+          <Link
+            href="/"
+            className="px-4 py-2 bg-white/10 hover:bg-white/15 text-white rounded text-sm font-medium transition-colors"
+          >
+            Return to Dashboard
+          </Link>
+        </div>
       </div>
     );
   }

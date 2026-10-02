@@ -49,6 +49,20 @@ export const NotificationService = {
   async fetchNotifications(userId: string): Promise<AppNotification[]> {
     if (!userId || userId === 'guest') return [];
 
+    // 1. Try unified Server API first (cross-device persistent)
+    try {
+      const res = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.notifications)) {
+          return data.notifications;
+        }
+      }
+    } catch (e) {
+      // Server fetch failed, try direct Supabase or local storage
+    }
+
+    // 2. Direct Supabase fallback
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase
@@ -62,7 +76,7 @@ export const NotificationService = {
           return data as AppNotification[];
         }
       } catch (err) {
-        console.warn('[NotificationService] Supabase fetch failed, falling back to local store:', err);
+        console.warn('[NotificationService] Supabase direct fetch failed:', err);
       }
     }
 
@@ -81,6 +95,21 @@ export const NotificationService = {
       return null;
     }
 
+    // 1. Try server API first for guaranteed cross-device delivery
+    try {
+      const res = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.notification) {
+          return data.notification;
+        }
+      }
+    } catch (e) {}
+
     const newRecord: AppNotification = {
       ...payload,
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `notif_${Date.now()}`,
@@ -89,23 +118,9 @@ export const NotificationService = {
       action_state: payload.action_state ?? (payload.type === 'action' ? 'pending' : null),
     };
 
+    // 2. Direct Supabase fallback
     if (isSupabaseConfigured && supabase) {
       try {
-        // Double-check DB-level deduplication for actionable invitations
-        if (dedupKey) {
-          const { data: existing } = await supabase
-            .from('notifications')
-            .select('id')
-            .eq('recipient_id', payload.recipient_id)
-            .eq('metadata->>dedup_key', dedupKey)
-            .limit(1);
-
-          if (existing && existing.length > 0) {
-            console.log(`[NotificationService] DB deduplicated notification: ${dedupKey}`);
-            return null;
-          }
-        }
-
         const { data, error } = await supabase
           .from('notifications')
           .insert({
@@ -126,11 +141,11 @@ export const NotificationService = {
           return data as AppNotification;
         }
       } catch (err) {
-        console.warn('[NotificationService] Supabase insert failed, saving locally:', err);
+        console.warn('[NotificationService] Supabase direct insert failed, saving locally:', err);
       }
     }
 
-    // Local fallback
+    // 3. Local fallback
     const local = getLocalNotifications(payload.recipient_id);
     local.unshift(newRecord);
     saveLocalNotifications(payload.recipient_id, local);
@@ -141,18 +156,22 @@ export const NotificationService = {
    * Mark a notification as read
    */
   async markAsRead(notificationId: string, userId: string): Promise<boolean> {
+    try {
+      fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId, userId }),
+      }).catch(() => {});
+    } catch (e) {}
+
     if (isSupabaseConfigured && supabase) {
       try {
-        const { error } = await supabase
+        await supabase
           .from('notifications')
           .update({ read_at: new Date().toISOString() })
           .eq('id', notificationId)
           .eq('recipient_id', userId);
-
-        if (!error) return true;
-      } catch (err) {
-        console.warn('[NotificationService] Supabase markAsRead failed:', err);
-      }
+      } catch (err) {}
     }
 
     const local = getLocalNotifications(userId);
@@ -160,9 +179,8 @@ export const NotificationService = {
     if (item) {
       item.read_at = new Date().toISOString();
       saveLocalNotifications(userId, local);
-      return true;
     }
-    return false;
+    return true;
   },
 
   /**
@@ -171,18 +189,22 @@ export const NotificationService = {
   async markAllAsRead(userId: string): Promise<boolean> {
     if (!userId || userId === 'guest') return false;
 
+    try {
+      fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, markAll: true }),
+      }).catch(() => {});
+    } catch (e) {}
+
     if (isSupabaseConfigured && supabase) {
       try {
-        const { error } = await supabase
+        await supabase
           .from('notifications')
           .update({ read_at: new Date().toISOString() })
           .eq('recipient_id', userId)
           .is('read_at', null);
-
-        if (!error) return true;
-      } catch (err) {
-        console.warn('[NotificationService] Supabase markAllAsRead failed:', err);
-      }
+      } catch (err) {}
     }
 
     const local = getLocalNotifications(userId);
@@ -201,54 +223,64 @@ export const NotificationService = {
     notification: AppNotification,
     action: 'accept' | 'decline'
   ): Promise<boolean> {
+    // 1. Call server API to handle mutation, membership grant, and feedback notification
+    try {
+      const res = await fetch('/api/notifications/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification, action }),
+      });
+      if (res.ok) {
+        return true;
+      }
+    } catch (e) {
+      console.warn('[NotificationService] Server respondToAction failed, attempting client fallback:', e);
+    }
+
+    // 2. Direct client fallback
     const newState: ActionState = action === 'accept' ? 'accepted' : 'declined';
     const readAt = new Date().toISOString();
 
-    // 1. Mutate underlying system state based on category
-    if (notification.category === 'project_invitation' && notification.project_id) {
-      if (action === 'accept') {
-        const role = notification.metadata?.role || 'editor';
-        if (isSupabaseConfigured && supabase) {
-          try {
-            await supabase.from('project_members').upsert({
-              project_id: notification.project_id,
-              user_id: notification.recipient_id,
-              role,
-            });
-          } catch (err) {
-            console.error('[NotificationService] Failed to add member on accept:', err);
-            return false;
+    if (action === 'accept' && notification.project_id && isSupabaseConfigured && supabase) {
+      const isJoinRequest = notification.category === 'join_request' || notification.category === 'permission_request';
+      const targetUserId = isJoinRequest
+        ? (notification.actor_id || notification.metadata?.requesterId)
+        : notification.recipient_id;
+
+      if (targetUserId) {
+        try {
+          let res = await supabase.from('project_members').insert({
+            project_id: notification.project_id,
+            user_id: targetUserId,
+            role: 'member',
+          });
+          if (res.error && res.error.code !== '23505') {
+            console.error('[NotificationService] Client direct add member failed:', res.error);
           }
+        } catch (err) {
+          console.error('[NotificationService] Failed to add member on accept:', err);
         }
       }
     }
 
-    // 2. Update notification record
     if (isSupabaseConfigured && supabase) {
       try {
-        const { error } = await supabase
+        await supabase
           .from('notifications')
           .update({
             action_state: newState,
             read_at: readAt,
           })
-          .eq('id', notification.id)
-          .eq('recipient_id', notification.recipient_id);
-
-        if (!error) return true;
-      } catch (err) {
-        console.warn('[NotificationService] Supabase respondToAction update failed:', err);
-      }
+          .eq('id', notification.id);
+      } catch (err) {}
     }
 
-    // Local fallback update
     const local = getLocalNotifications(notification.recipient_id);
     const target = local.find(n => n.id === notification.id);
     if (target) {
       target.action_state = newState;
       target.read_at = readAt;
       saveLocalNotifications(notification.recipient_id, local);
-      return true;
     }
     return true;
   },
@@ -260,44 +292,65 @@ export const NotificationService = {
     userId: string,
     onEvent: (notification: AppNotification) => void
   ): () => void {
-    if (!userId || userId === 'guest' || !isSupabaseConfigured || !supabase) {
+    if (!userId || userId === 'guest') {
       return () => {};
     }
 
-    const channel = supabase
-      .channel(`realtime:notifications:${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `recipient_id=eq.${userId}`,
-        },
-        (payload) => {
-          if (payload.new) {
-            onEvent(payload.new as AppNotification);
+    let channel: any = null;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        channel = supabase
+          .channel(`realtime:notifications:${userId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'notifications',
+              filter: `recipient_id=eq.${userId}`,
+            },
+            (payload) => {
+              if (payload.new) {
+                onEvent(payload.new as AppNotification);
+              }
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'notifications',
+              filter: `recipient_id=eq.${userId}`,
+            },
+            (payload) => {
+              if (payload.new) {
+                onEvent(payload.new as AppNotification);
+              }
+            }
+          )
+          .subscribe();
+      } catch (e) {}
+    }
+
+    // Periodic check for new notifications (every 8 seconds) to support polling fallback
+    const interval = setInterval(async () => {
+      try {
+        const notifs = await NotificationService.fetchNotifications(userId);
+        if (notifs && notifs.length > 0) {
+          // If first notification was created in last 10 seconds
+          const newest = notifs[0];
+          const diffMs = Date.now() - new Date(newest.created_at).getTime();
+          if (diffMs < 12000) {
+            onEvent(newest);
           }
         }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'notifications',
-          filter: `recipient_id=eq.${userId}`,
-        },
-        (payload) => {
-          if (payload.new) {
-            onEvent(payload.new as AppNotification);
-          }
-        }
-      )
-      .subscribe();
+      } catch (e) {}
+    }, 8000);
 
     return () => {
-      if (supabase) {
+      clearInterval(interval);
+      if (channel && supabase) {
         supabase.removeChannel(channel);
       }
     };

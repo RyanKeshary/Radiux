@@ -15,8 +15,14 @@ import {
   Sparkles, 
   ShieldCheck,
   Globe,
-  Share2
+  Share2,
+  UserPlus,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import { DataService } from '@/lib/data-service';
 import { FileItem, ProjectMember } from '@/lib/types';
 
@@ -30,9 +36,13 @@ export default function PublicProjectPage({ params }: PublicProjectPageProps) {
   // `use()` unwraps the params promise inside a client component without suspending
   // the whole tree. Equivalent to `await params` on the server.
   const { id } = use(params) as { id: string };
+  const { user } = useAuth();
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [isMember, setIsMember] = useState(false);
+  const [joinStatus, setJoinStatus] = useState<'idle' | 'pending' | 'joined' | 'error'>('idle');
+  const [isRequesting, setIsRequesting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -45,6 +55,10 @@ export default function PublicProjectPage({ params }: PublicProjectPageProps) {
         ]);
 
         if (p) {
+          if (user) {
+            const hasMembership = (members as ProjectMember[]).some((m: any) => m.user_id === user.id) || p.owner_id === user.id;
+            setIsMember(hasMembership);
+          }
           // Calculate real metrics from actual project files
           const textFiles = (files as FileItem[]).filter((f: FileItem) => !f.is_folder);
           let totalLines = 0;
@@ -121,6 +135,23 @@ export default function PublicProjectPage({ params }: PublicProjectPageProps) {
     }
   };
 
+  const handleRequestJoin = async () => {
+    if (!user || !project) return;
+    setIsRequesting(true);
+    try {
+      const res = await DataService.requestJoinProject(project.id, user, project.owner_id, project.name);
+      if (res.success) {
+        setJoinStatus('pending');
+      } else {
+        setJoinStatus(res.message?.includes('already') ? 'pending' : 'error');
+      }
+    } catch {
+      setJoinStatus('error');
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0a0a0c] text-white flex items-center justify-center">
@@ -167,6 +198,28 @@ export default function PublicProjectPage({ params }: PublicProjectPageProps) {
             <Share2 className="w-3.5 h-3.5" />
             <span>{copied ? 'Link Copied!' : 'Share'}</span>
           </button>
+
+          {user && !isMember && (
+            joinStatus === 'pending' ? (
+              <span className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 animate-pulse" />
+                <span>Join Request Pending</span>
+              </span>
+            ) : (
+              <button
+                onClick={handleRequestJoin}
+                disabled={isRequesting}
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/20 active:scale-95"
+              >
+                {isRequesting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <UserPlus className="w-3.5 h-3.5" />
+                )}
+                <span>Request to Join</span>
+              </button>
+            )
+          )}
 
           <Link
             href={`/project/${project.id}`}

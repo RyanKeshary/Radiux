@@ -20,6 +20,7 @@ const UserProfileModal = dynamic(() => import('@/components/workspace/UserProfil
 
 const EditorSettingsModal = dynamic(() => import('@/components/workspace/EditorSettingsModal').then(m => m.EditorSettingsModal), { ssr: false });
 const DeveloperDiscoveryModal = dynamic(() => import('@/components/profile/DeveloperDiscoveryModal').then(m => m.DeveloperDiscoveryModal), { ssr: false });
+const NotificationCenter = dynamic(() => import('@/components/workspace/NotificationCenter').then(m => m.NotificationCenter), { ssr: false });
 import type { EditorSettings } from '@/components/workspace/EditorSettingsModal';
 import { 
   Code2, 
@@ -52,7 +53,11 @@ import {
   Loader2,
   Shield,
   ShieldAlert,
-  X
+  X,
+  UserPlus,
+  CheckCircle2,
+  Compass,
+  AlertCircle
 } from 'lucide-react';
 import { soundManager } from '@/lib/sound';
 import { ReportIssueModal } from '@/components/common/ReportIssueModal';
@@ -77,7 +82,11 @@ export default function DashboardPage() {
   // Search & Filter State (debounced to avoid re-rendering on every keystroke)
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 150);
-  const [filterType, setFilterType] = useState<'all' | 'owned' | 'shared'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'owned' | 'shared' | 'explore'>('all');
+  const [exploreProjects, setExploreProjects] = useState<any[]>([]);
+  const [loadingExplore, setLoadingExplore] = useState(false);
+  const [requestingJoinId, setRequestingJoinId] = useState<string | null>(null);
+  const [joinRequestToast, setJoinRequestToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   // Last opened workspace state for instant resume
   const [lastProject, setLastProject] = useState<{ id: string; name: string } | null>(null);
@@ -221,6 +230,46 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchExploreProjects = async () => {
+    setLoadingExplore(true);
+    try {
+      const data = await DataService.getExploreProjects(user?.id);
+      setExploreProjects(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingExplore(false);
+    }
+  };
+
+  useEffect(() => {
+    if (filterType === 'explore') {
+      fetchExploreProjects();
+    }
+  }, [filterType, user?.id]);
+
+  const handleRequestJoin = async (targetProject: any) => {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setRequestingJoinId(targetProject.id);
+    try {
+      const res = await DataService.requestJoinProject(targetProject.id, user, targetProject.owner_id, targetProject.name);
+      if (res.success) {
+        setExploreProjects(prev => prev.map(p => p.id === targetProject.id ? { ...p, user_status: 'pending' } : p));
+        setJoinRequestToast({ msg: `Join request sent to ${targetProject.owner?.full_name || 'project owner'}!`, type: 'success' });
+      } else {
+        setJoinRequestToast({ msg: res.message || 'Could not send join request.', type: 'error' });
+      }
+    } catch (err: any) {
+      setJoinRequestToast({ msg: err.message || 'Failed to send join request.', type: 'error' });
+    } finally {
+      setRequestingJoinId(null);
+      setTimeout(() => setJoinRequestToast(null), 4000);
+    }
+  };
+
   useEffect(() => {
     fetchProjects();
   }, [user]);
@@ -302,6 +351,19 @@ export default function DashboardPage() {
     return list;
   }, [projects, filterType, debouncedSearch, user?.id]);
 
+  const filteredExploreProjects = useMemo(() => {
+    let list = [...exploreProjects];
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase().trim();
+      list = list.filter(p => 
+        p.name?.toLowerCase().includes(q) || 
+        (p.description && p.description.toLowerCase().includes(q)) ||
+        (p.owner?.full_name && p.owner.full_name.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [exploreProjects, debouncedSearch]);
+
   return (
     <div 
       className="min-h-screen flex flex-col font-mono text-xs select-none"
@@ -368,6 +430,12 @@ export default function DashboardPage() {
                 <Settings className="w-3.5 h-3.5 text-indigo-400 group-hover:rotate-45 transition-transform duration-300" />
                 <span className="hidden sm:inline">Settings</span>
               </button>
+
+              {/* Realtime Notification Center on Dashboard */}
+              <NotificationCenter 
+                userId={user.id} 
+                onNavigateToProject={(id) => router.push(`/project/${id}`)} 
+              />
 
 
             </div>
@@ -781,6 +849,13 @@ export default function DashboardPage() {
                     >
                       Shared
                     </button>
+                    <button
+                      onClick={() => setFilterType('explore')}
+                      className={`px-2 py-0.5 rounded flex items-center gap-1 ${filterType === 'explore' ? 'bg-indigo-600 text-white font-semibold' : 'opacity-70 hover:opacity-100'}`}
+                    >
+                      <Compass className="w-3 h-3" />
+                      <span>Explore</span>
+                    </button>
                   </div>
                 </div>
 
@@ -802,122 +877,266 @@ export default function DashboardPage() {
                   />
                 </div>
 
-                {/* Workspaces List Skeleton */}
-                {loading || authLoading ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3, 4].map(i => (
-                      <div 
-                        key={i} 
-                        className="p-3 rounded-lg border flex items-center justify-between animate-pulse" 
-                        style={{ backgroundColor: 'var(--ide-card-bg)', borderColor: 'var(--ide-border)' }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded bg-white/10" />
-                          <div className="space-y-1.5">
-                            <div className="w-32 h-3.5 rounded bg-white/10" />
-                            <div className="w-48 h-2.5 rounded bg-white/5" />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-4 rounded bg-white/10" />
-                          <div className="w-12 h-4 rounded bg-white/5" />
-                        </div>
-                      </div>
-                    ))}
+                {/* Join Request Toast Notification */}
+                {joinRequestToast && (
+                  <div className={`p-2.5 rounded-lg border text-xs flex items-center gap-2 animate-in fade-in duration-200 ${
+                    joinRequestToast.type === 'success' 
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                  }`}>
+                    {joinRequestToast.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    )}
+                    <span>{joinRequestToast.msg}</span>
                   </div>
-                ) : filteredProjects.length === 0 ? (
-                  <div 
-                    className="p-8 rounded-lg border text-center space-y-2 opacity-70"
-                    style={{
-                      backgroundColor: 'var(--ide-card-bg)',
-                      borderColor: 'var(--ide-border)',
-                    }}
-                  >
-                    <FileCode className="w-8 h-8 opacity-40 mx-auto" />
-                    <p className="text-xs">
-                      {searchQuery ? `No workspaces matching "${searchQuery}"` : 'No workspaces available yet.'}
-                    </p>
-                    <button
-                      onClick={() => setIsModalOpen(true)}
-                      className="text-xs text-sky-400 hover:underline"
-                    >
-                      Create your first workspace
-                    </button>
-                  </div>
-                ) : (
-                  <div 
-                    className="rounded-lg border divide-y overflow-hidden shadow-sm"
-                    style={{
-                      backgroundColor: 'var(--ide-card-bg)',
-                      borderColor: 'var(--ide-border)',
-                    }}
-                  >
-                    {filteredProjects.map((project) => {
-                      const isOwner = project.owner_id === user?.id;
-                      return (
-                        <div
-                          key={project.id}
-                          className="flex items-center justify-between p-3 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group text-xs"
+                )}
+
+                {/* Explore Community Workspaces View */}
+                {filterType === 'explore' ? (
+                  loadingExplore ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3].map(i => (
+                        <div 
+                          key={i} 
+                          className="p-3 rounded-lg border flex items-center justify-between animate-pulse" 
+                          style={{ backgroundColor: 'var(--ide-card-bg)', borderColor: 'var(--ide-border)' }}
                         >
-                          <Link href={`/project/${project.id}`} className="min-w-0 flex-1 pr-3">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="font-semibold truncate group-hover:text-sky-400 transition-colors" style={{ color: 'var(--ide-text)' }}>
-                                {project.name}
-                              </span>
-                              <span 
-                                className={`text-[9.5px] px-1.5 py-0.2 rounded font-medium ${
-                                  isOwner 
-                                    ? 'bg-sky-500/15 text-sky-400 border border-sky-500/20' 
-                                    : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                                }`}
-                              >
-                                {isOwner ? 'Owner' : 'Member'}
-                              </span>
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded bg-white/10" />
+                            <div className="space-y-1.5">
+                              <div className="w-32 h-3.5 rounded bg-white/10" />
+                              <div className="w-48 h-2.5 rounded bg-white/5" />
                             </div>
-                            <p className="text-[11px] opacity-60 truncate">
-                              {project.description || 'Collaborative IDE workspace'}
-                            </p>
-                          </Link>
+                          </div>
+                          <div className="w-24 h-6 rounded bg-white/10" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : filteredExploreProjects.length === 0 ? (
+                    <div 
+                      className="p-8 rounded-lg border text-center space-y-2 opacity-70"
+                      style={{
+                        backgroundColor: 'var(--ide-card-bg)',
+                        borderColor: 'var(--ide-border)',
+                      }}
+                    >
+                      <Globe className="w-8 h-8 opacity-40 mx-auto" />
+                      <p className="text-xs">
+                        {searchQuery ? `No public workspaces matching "${searchQuery}"` : 'No discoverable workspaces found.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div 
+                      className="rounded-lg border divide-y overflow-hidden shadow-sm"
+                      style={{
+                        backgroundColor: 'var(--ide-card-bg)',
+                        borderColor: 'var(--ide-border)',
+                      }}
+                    >
+                      {filteredExploreProjects.map((project) => {
+                        const isOwner = project.user_status === 'owner';
+                        const isMember = project.user_status === 'member';
+                        const isPending = project.user_status === 'pending';
+                        const isBusy = requestingJoinId === project.id;
 
-                          <div className="flex items-center gap-3 opacity-80 group-hover:opacity-100 flex-shrink-0">
-                            <span className="text-[10px] opacity-60 hidden sm:inline">
-                              {new Date(project.updated_at).toLocaleDateString()}
-                            </span>
+                        return (
+                          <div
+                            key={project.id}
+                            className="flex items-center justify-between p-3 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group text-xs gap-3"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="font-semibold truncate group-hover:text-indigo-400 transition-colors" style={{ color: 'var(--ide-text)' }}>
+                                  {project.name}
+                                </span>
+                                <span 
+                                  className={`text-[9.5px] px-1.5 py-0.2 rounded font-medium ${
+                                    isOwner 
+                                      ? 'bg-sky-500/15 text-sky-400 border border-sky-500/20' 
+                                      : isMember
+                                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                      : isPending
+                                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                                      : 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20'
+                                  }`}
+                                >
+                                  {isOwner ? 'Owner' : isMember ? 'Member' : isPending ? 'Pending' : 'Explore'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] opacity-60 truncate">
+                                {project.description || 'Community workspace'}
+                              </p>
+                              {project.owner && (
+                                <div className="flex items-center gap-1.5 mt-1 text-[10.5px] text-neutral-400">
+                                  <span>Owner:</span>
+                                  <span className="text-neutral-300 font-medium">{project.owner.full_name || project.owner.email}</span>
+                                </div>
+                              )}
+                            </div>
 
-                            {isOwner && (
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setProjectToDelete(project);
-                                }}
-                                className="p-1 rounded text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100"
-                                title="Delete Workspace"
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <Link
+                                href={`/project/${project.id}/public`}
+                                className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+                                title="Public Showcase Page"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                                <Globe className="w-3.5 h-3.5" />
+                              </Link>
 
-                            <Link
-                              href={`/project/${project.id}/public`}
-                              className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
-                              title="Public Showcase Page"
-                            >
-                              <Globe className="w-3.5 h-3.5" />
-                            </Link>
-
-                            <Link
-                              href={`/project/${project.id}`}
-                              className="px-2.5 py-1 rounded bg-sky-600/10 text-sky-400 hover:bg-sky-600 hover:text-white border border-sky-500/20 font-medium text-[11px] transition-all flex items-center gap-1"
-                            >
-                              <span>Open</span>
-                              <ArrowRight className="w-3 h-3" />
-                            </Link>
+                              {isOwner || isMember ? (
+                                <Link
+                                  href={`/project/${project.id}`}
+                                  className="px-2.5 py-1 rounded bg-sky-600/10 text-sky-400 hover:bg-sky-600 hover:text-white border border-sky-500/20 font-medium text-[11px] transition-all flex items-center gap-1"
+                                >
+                                  <span>Open</span>
+                                  <ArrowRight className="w-3 h-3" />
+                                </Link>
+                              ) : isPending ? (
+                                <span className="px-2.5 py-1 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[11px] font-medium flex items-center gap-1">
+                                  <Clock className="w-3 h-3 animate-pulse" />
+                                  <span>Request Pending</span>
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => handleRequestJoin(project)}
+                                  disabled={isBusy}
+                                  className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium text-[11px] transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                                  title="Send join request to project owner"
+                                >
+                                  {isBusy ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <UserPlus className="w-3 h-3" />
+                                  )}
+                                  <span>Request to Join</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                ) : (
+                  /* Standard Owned & Shared Workspaces List */
+                  loading || authLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3, 4].map(i => (
+                        <div 
+                          key={i} 
+                          className="p-3 rounded-lg border flex items-center justify-between animate-pulse" 
+                          style={{ backgroundColor: 'var(--ide-card-bg)', borderColor: 'var(--ide-border)' }}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded bg-white/10" />
+                            <div className="space-y-1.5">
+                              <div className="w-32 h-3.5 rounded bg-white/10" />
+                              <div className="w-48 h-2.5 rounded bg-white/5" />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-4 rounded bg-white/10" />
+                            <div className="w-12 h-4 rounded bg-white/5" />
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                      ))}
+                    </div>
+                  ) : filteredProjects.length === 0 ? (
+                    <div 
+                      className="p-8 rounded-lg border text-center space-y-2 opacity-70"
+                      style={{
+                        backgroundColor: 'var(--ide-card-bg)',
+                        borderColor: 'var(--ide-border)',
+                      }}
+                    >
+                      <FileCode className="w-8 h-8 opacity-40 mx-auto" />
+                      <p className="text-xs">
+                        {searchQuery ? `No workspaces matching "${searchQuery}"` : 'No workspaces available yet.'}
+                      </p>
+                      <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="text-xs text-sky-400 hover:underline"
+                      >
+                        Create your first workspace
+                      </button>
+                    </div>
+                  ) : (
+                    <div 
+                      className="rounded-lg border divide-y overflow-hidden shadow-sm"
+                      style={{
+                        backgroundColor: 'var(--ide-card-bg)',
+                        borderColor: 'var(--ide-border)',
+                      }}
+                    >
+                      {filteredProjects.map((project) => {
+                        const isOwner = project.owner_id === user?.id;
+                        return (
+                          <div
+                            key={project.id}
+                            className="flex items-center justify-between p-3 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group text-xs"
+                          >
+                            <Link href={`/project/${project.id}`} className="min-w-0 flex-1 pr-3">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="font-semibold truncate group-hover:text-sky-400 transition-colors" style={{ color: 'var(--ide-text)' }}>
+                                  {project.name}
+                                </span>
+                                <span 
+                                  className={`text-[9.5px] px-1.5 py-0.2 rounded font-medium ${
+                                    isOwner 
+                                      ? 'bg-sky-500/15 text-sky-400 border border-sky-500/20' 
+                                      : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                  }`}
+                                >
+                                  {isOwner ? 'Owner' : 'Member'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] opacity-60 truncate">
+                                {project.description || 'Collaborative IDE workspace'}
+                              </p>
+                            </Link>
+
+                            <div className="flex items-center gap-3 opacity-80 group-hover:opacity-100 flex-shrink-0">
+                              <span className="text-[10px] opacity-60 hidden sm:inline">
+                                {new Date(project.updated_at).toLocaleDateString()}
+                              </span>
+
+                              {isOwner && (
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setProjectToDelete(project);
+                                  }}
+                                  className="p-1 rounded text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                                  title="Delete Workspace"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              <Link
+                                href={`/project/${project.id}/public`}
+                                className="p-1 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
+                                title="Public Showcase Page"
+                              >
+                                <Globe className="w-3.5 h-3.5" />
+                              </Link>
+
+                              <Link
+                                href={`/project/${project.id}`}
+                                className="px-2.5 py-1 rounded bg-sky-600/10 text-sky-400 hover:bg-sky-600 hover:text-white border border-sky-500/20 font-medium text-[11px] transition-all flex items-center gap-1"
+                              >
+                                <span>Open</span>
+                                <ArrowRight className="w-3 h-3" />
+                              </Link>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
                 )}
               </div>
             </div>
