@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, DirectMessage } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
 import { useAuth } from '@/context/AuthContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { soundManager } from '@/lib/sound';
 import { MessageSquare, X, Send, Loader2 } from 'lucide-react';
 
 interface DirectMessageModalProps {
@@ -24,21 +26,77 @@ export function DirectMessageModal({
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // 1. Initial Load & Background Polling Sync
   useEffect(() => {
     if (!isOpen || !user) return;
-    const loadMessages = async () => {
-      setLoading(true);
+    let isMounted = true;
+
+    const loadMessages = async (showLoading = false) => {
+      if (showLoading) setLoading(true);
       try {
         const history = await DataService.getDirectMessages(user.id, targetUser.id);
-        setMessages(history);
-        await DataService.markDirectMessagesRead(targetUser.id, user.id);
+        if (isMounted) {
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const newOnes = history.filter((m) => !existingIds.has(m.id));
+            if (newOnes.length > 0) {
+              const merged = [...prev, ...newOnes].sort(
+                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+              );
+              return merged;
+            }
+            if (prev.length === 0) return history;
+            return prev;
+          });
+          await DataService.markDirectMessagesRead(targetUser.id, user.id);
+        }
       } catch (e) {
         console.error(e);
       } finally {
-        setLoading(false);
+        if (isMounted && showLoading) {
+          setLoading(false);
+        }
       }
     };
-    loadMessages();
+
+    loadMessages(true);
+
+    // Fast sync interval every 2.5 seconds
+    const interval = setInterval(() => loadMessages(false), 2500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isOpen, user, targetUser.id]);
+
+  // 2. Real-time Supabase Broadcast for instant message delivery (< 50ms)
+  useEffect(() => {
+    if (!isOpen || !user || !isSupabaseConfigured || !supabase) return;
+
+    const pairKey = [user.id, targetUser.id].sort().join('_');
+    const channel = supabase.channel(`radiux_dm_${pairKey}`);
+
+    channel.on('broadcast', { event: 'dm_message' }, ({ payload }) => {
+      if (payload && (payload.sender_id === targetUser.id || payload.sender_id === user.id)) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === payload.id)) return prev;
+          return [...prev, payload];
+        });
+        if (payload.sender_id === targetUser.id) {
+          soundManager.playNotification();
+          DataService.markDirectMessagesRead(targetUser.id, user.id);
+        }
+      }
+    });
+
+    channel.subscribe();
+
+    return () => {
+      if (supabase) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [isOpen, user, targetUser.id]);
 
   useEffect(() => {
@@ -57,7 +115,29 @@ export function DirectMessageModal({
     setSending(true);
     try {
       const newMsg = await DataService.sendDirectMessage(user, targetUser.id, content);
-      setMessages((prev) => [...prev, newMsg]);
+      soundManager.playSuccess();
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
+      });
+
+      // Broadcast immediately to counterparty via Realtime
+      if (isSupabaseConfigured && supabase) {
+        const client = supabase;
+        const pairKey = [user.id, targetUser.id].sort().join('_');
+        const channel = client.channel(`radiux_dm_${pairKey}`);
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            channel.send({
+              type: 'broadcast',
+              event: 'dm_message',
+              payload: newMsg,
+            }).finally(() => {
+              setTimeout(() => client.removeChannel(channel), 1000);
+            });
+          }
+        });
+      }
     } catch (err) {
       console.error(err);
     } finally {

@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '@/lib/types';
 import { DataService } from '@/lib/data-service';
 import { config } from '@/lib/config';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { soundManager } from '@/lib/sound';
 import { 
   Send, 
   MessageSquare, 
@@ -280,6 +282,34 @@ export function ChatPanel({
     };
   }, [projectId, userId, userName, onNewMessageReceived]);
 
+  // 3. Connect to Supabase Realtime channel for cross-device instant chat
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !projectId) return;
+
+    const ch = supabase.channel(`radiux_chat_${projectId}`);
+    ch.on('broadcast', { event: 'chat_message' }, ({ payload }) => {
+      if (payload && payload.project_id === projectId) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === payload.id)) return prev;
+          return [...prev, payload];
+        });
+        setTimeout(scrollToBottom, 50);
+        if (payload.user_id !== userId) {
+          soundManager.playNotification();
+          if (onNewMessageReceived) onNewMessageReceived();
+        }
+      }
+    });
+
+    ch.subscribe();
+
+    return () => {
+      if (supabase) {
+        supabase.removeChannel(ch);
+      }
+    };
+  }, [projectId, userId, onNewMessageReceived]);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -323,7 +353,7 @@ export function ChatPanel({
     setSending(true);
 
     try {
-      // 1. Persist to Supabase / Storage
+      // 1. Persist to Backend API & Supabase / Storage
       const saved = await DataService.sendMessage(
         projectId,
         userId,
@@ -333,6 +363,8 @@ export function ChatPanel({
         mediaPayload
       );
 
+      soundManager.playSuccess();
+
       // 2. Update local state immediately
       setMessages((prev) => {
         if (prev.some((m) => m.id === saved.id)) return prev;
@@ -340,7 +372,24 @@ export function ChatPanel({
       });
       setTimeout(scrollToBottom, 50);
 
-      // 3. Broadcast in real time via WebSocket
+      // 3. Broadcast in real time via Supabase Realtime
+      if (isSupabaseConfigured && supabase) {
+        const client = supabase;
+        const ch = client.channel(`radiux_chat_${projectId}`);
+        ch.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            ch.send({
+              type: 'broadcast',
+              event: 'chat_message',
+              payload: saved,
+            }).finally(() => {
+              setTimeout(() => client.removeChannel(ch), 1000);
+            });
+          }
+        });
+      }
+
+      // 4. Also broadcast via WebSocket server if active
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
           JSON.stringify({

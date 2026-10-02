@@ -1684,6 +1684,34 @@ export const DataService = {
 
   // Level 8: Direct Developer Messaging
   async getDirectMessages(user1Id: string, user2Id: string): Promise<DirectMessage[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('direct_messages')
+          .select('*')
+          .or(
+            `and(sender_id.eq.${user1Id},receiver_id.eq.${user2Id}),and(sender_id.eq.${user2Id},receiver_id.eq.${user1Id})`
+          )
+          .order('created_at', { ascending: true })
+          .limit(200);
+
+        if (!error && data && data.length > 0) {
+          return data as DirectMessage[];
+        }
+      } catch (err) {}
+    }
+
+    try {
+      const res = await fetch(buildApiUrl('/api/direct-messages', { user1Id, user2Id }));
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.messages)) {
+          json.messages.forEach((m: DirectMessage) => StorageMock.saveDirectMessage(m));
+          return json.messages;
+        }
+      }
+    } catch (e) {}
+
     return StorageMock.getDirectMessages(user1Id, user2Id);
   },
 
@@ -1692,15 +1720,64 @@ export const DataService = {
       id: `dm-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       sender_id: sender.id,
       receiver_id: receiverId,
-      content,
+      content: content.trim(),
       created_at: new Date().toISOString(),
       read: false,
     };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('direct_messages')
+          .insert(msg)
+          .select()
+          .single();
+
+        if (!error && data) {
+          StorageMock.saveDirectMessage(data);
+          return data as DirectMessage;
+        }
+      } catch (e) {}
+    }
+
+    try {
+      const res = await fetch(buildApiUrl('/api/direct-messages'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.message) {
+          StorageMock.saveDirectMessage(json.message);
+          return json.message;
+        }
+      }
+    } catch (e) {}
+
     StorageMock.saveDirectMessage(msg);
     return msg;
   },
 
   async markDirectMessagesRead(senderId: string, receiverId: string): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('direct_messages')
+          .update({ read: true })
+          .eq('sender_id', senderId)
+          .eq('receiver_id', receiverId);
+      } catch (e) {}
+    }
+
+    try {
+      await fetch(buildApiUrl('/api/direct-messages'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ senderId, receiverId }),
+      });
+    } catch (e) {}
+
     StorageMock.markDirectMessagesRead(senderId, receiverId);
   },
 

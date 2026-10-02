@@ -114,7 +114,59 @@ CREATE POLICY "Users can update own coding partners" ON public.coding_partners
 CREATE POLICY "Users can delete own coding partners" ON public.coding_partners
   FOR DELETE USING (auth.uid() = requester_id OR auth.uid() = receiver_id);
 
--- Enable Realtime publication for notifications and coding_partners
+-- 4. Ensure public.messages Table Exists (Workspace Team Chat)
+CREATE TABLE IF NOT EXISTS public.messages (
+  id TEXT PRIMARY KEY DEFAULT ('msg-' || extract(epoch from now())::bigint || '-' || substr(md5(random()::text), 1, 6)),
+  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_name TEXT NOT NULL DEFAULT 'Anonymous',
+  user_avatar TEXT DEFAULT '',
+  content TEXT NOT NULL,
+  media_type TEXT DEFAULT NULL,
+  media_url TEXT DEFAULT NULL,
+  media_name TEXT DEFAULT NULL,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_project_time ON public.messages(project_id, created_at ASC);
+
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can view project messages" ON public.messages;
+DROP POLICY IF EXISTS "Members can post project messages" ON public.messages;
+
+CREATE POLICY "Members can view project messages" ON public.messages
+  FOR SELECT USING (true);
+
+CREATE POLICY "Members can post project messages" ON public.messages
+  FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'authenticated');
+
+-- 5. Ensure public.direct_messages Table Exists (Direct 1-on-1 Chat)
+CREATE TABLE IF NOT EXISTS public.direct_messages (
+  id TEXT PRIMARY KEY DEFAULT ('dm-' || extract(epoch from now())::bigint || '-' || substr(md5(random()::text), 1, 6)),
+  sender_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  receiver_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  read BOOLEAN DEFAULT false NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_direct_messages_pair ON public.direct_messages(sender_id, receiver_id, created_at ASC);
+
+ALTER TABLE public.direct_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view own direct messages" ON public.direct_messages;
+DROP POLICY IF EXISTS "Users can send direct messages" ON public.direct_messages;
+DROP POLICY IF EXISTS "Users can update direct messages read status" ON public.direct_messages;
+
+CREATE POLICY "Users can view own direct messages" ON public.direct_messages
+  FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+
+CREATE POLICY "Users can send direct messages" ON public.direct_messages
+  FOR INSERT WITH CHECK (auth.uid() = sender_id);
+
+CREATE POLICY "Users can update direct messages read status" ON public.direct_messages
+  FOR UPDATE USING (auth.uid() = receiver_id OR auth.uid() = sender_id);
+
+-- Enable Realtime publication for all tables
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -130,7 +182,22 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.coding_partners;
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'messages'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'direct_messages'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.direct_messages;
+  END IF;
 EXCEPTION WHEN OTHERS THEN
   -- Ignore if publication does not exist or insufficient privileges
 END $$;
+
 
