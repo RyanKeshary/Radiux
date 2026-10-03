@@ -39,7 +39,7 @@ export const DataService = {
 
   // Lookup registered user by email, ID, or username
   async findUser(identifier: string): Promise<UserProfile | null> {
-    let raw = (identifier || '').trim();
+    const raw = (identifier || '').trim();
     if (!raw) return null;
     const clean = raw.startsWith('@') ? raw.substring(1).trim() : raw;
     if (!clean) return null;
@@ -284,7 +284,7 @@ export const DataService = {
         }
 
         // 2. Try inserting requested role
-        let { data, error } = await supabase
+        const { data, error } = await supabase
           .from('project_members')
           .insert({
             project_id: projectId,
@@ -1929,7 +1929,7 @@ export const DataService = {
       }
     }
 
-    let createdPartner: CodingPartner = {
+    const createdPartner: CodingPartner = {
       id: `partner-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       requester_id: requester.id,
       receiver_id: target.id,

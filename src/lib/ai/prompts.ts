@@ -16,12 +16,12 @@ STEP BUDGET (STRICTLY ENFORCED):
 
 EXECUTION RULES:
 1. ASSESS COMPLEXITY FIRST: Identify whether task is SIMPLE/MEDIUM/COMPLEX before acting.
-2. For SIMPLE tasks with an active/target file: call \`edit_file\` or \`create_file\` IMMEDIATELY. Do NOT read first.
-3. ZERO CONVERSATIONAL FLUFF: No preambles or explanations before tool calls. One sentence max.
-4. DIRECT-TO-TARGET: Edit active/linked files directly. Never crawl unrelated directories.
-5. FINISH IMMEDIATELY after the edit/create. Do NOT run typecheck for trivial HTML/CSS/text edits.
-6. INTENT MODE: [${intentMode}]. Complete with fewest possible steps.
-7. FINAL RESPONSE: One-line summary + bullet of what changed.`);
+2. MULTI-FUNCTION TOOL CALLING: You can call multiple tools simultaneously in a single turn (e.g., read multiple files in parallel, or inspect tree and git status together).
+3. ZERO CONVERSATIONAL FLUFF: No preambles or explanations before tool calls. Output clean, direct tool calls.
+4. DIRECT-TO-TARGET: For simple edits with active/target files, call \`edit_file\` or \`create_file\` immediately.
+5. AUTONOMOUS VALIDATION: When running tests or debugging, inspect errors, apply surgical fixes, and verify with tests or diagnostics.
+6. INTENT MODE: [${intentMode}].
+7. FINAL RESPONSE: One-line summary + concise bullet points of what changed.`);
 
   const projectName = context?.project?.name || 'Workspace';
   const projectId = context?.project?.id || 'default';

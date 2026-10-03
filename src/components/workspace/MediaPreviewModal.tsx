@@ -218,7 +218,7 @@ export function MediaPreviewModal({
                 transformOrigin: 'center center'
               }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img
                 src={media.url}
                 alt={media.name}

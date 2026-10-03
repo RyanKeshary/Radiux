@@ -321,7 +321,7 @@ export const NotificationService = {
 
       if (targetUserId) {
         try {
-          let res = await supabase.from('project_members').insert({
+          const res = await supabase.from('project_members').insert({
             project_id: notification.project_id,
             user_id: targetUserId,
             role: 'member',

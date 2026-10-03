@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
     const permissionMode: AIPermissionMode = body.permissionMode || AIConfig.defaultPermissionMode;
     const confirmedActionIds: string[] = body.confirmedActionIds || [];
     const history: AIMessage[] = body.history || [];
+    const requestedModel: string = body.model || AIConfig.defaultModel;
 
     projectId = clientContext.project?.id || 'default';
 
@@ -133,6 +134,7 @@ export async function POST(req: NextRequest) {
             permissionMode,
             confirmedActionIds,
             apiKey: effectiveApiKey,
+            model: requestedModel,
             onEvent: (event) => {
               if (event.type === 'token') {
                 totalTokens++;

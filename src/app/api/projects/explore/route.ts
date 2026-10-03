@@ -43,8 +43,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. If userId provided, fetch memberships and pending join requests
-    let userMemberships = new Set<string>();
-    let pendingRequests = new Set<string>();
+    const userMemberships = new Set<string>();
+    const pendingRequests = new Set<string>();
 
     if (userId) {
       const { data: memberships } = await supabase

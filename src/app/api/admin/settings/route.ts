@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     if (error) {
       return NextResponse.json({
         settings: [
-          { key: 'groq_model', value: 'llama-3.3-70b-versatile', description: 'Primary LLM inference model' },
+          { key: 'groq_model', value: process.env.AI_MODEL || 'openai/gpt-oss-120b', description: 'Primary LLM inference model' },
           { key: 'max_tool_iterations', value: 20, description: 'Maximum iterative tool calls per query' },
           { key: 'agent_permission_mode', value: 'ASSISTED', description: 'Default execution security level' },
           { key: 'telemetry_enabled', value: true, description: 'Collect anonymous usage metrics' },

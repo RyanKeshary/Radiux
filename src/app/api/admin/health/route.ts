@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
           name: 'Zodiac AI Engine (Groq)',
           status: aiLatency > 2000 ? 'DEGRADED' : 'HEALTHY',
           latencyMs: aiLatency,
-          message: `Operational (${process.env.AI_MODEL || 'openai/gpt-oss-20b'})`,
+          message: `Operational (${process.env.AI_MODEL || 'openai/gpt-oss-120b'})`,
           lastChecked: timestamp,
         };
       } else {

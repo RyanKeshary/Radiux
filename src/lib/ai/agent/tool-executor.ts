@@ -426,13 +426,21 @@ export class ToolExecutor {
           }
 
           const proposedContent = args.content || '';
+          const dir = path.dirname(filePath);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+          // In AUTONOMOUS mode or if file does not exist, write directly to disk
+          if (context.permissionMode === 'AUTONOMOUS' || !originalContent) {
+            fs.writeFileSync(filePath, proposedContent, 'utf8');
+          }
+
           const proposal: DiffProposal = {
             id: `diff_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
             path: args.path,
             originalContent,
             proposedContent,
             edits: [],
-            status: 'pending',
+            status: context.permissionMode === 'AUTONOMOUS' ? 'accepted' : 'pending',
             summary: originalContent ? `Replace entire content of ${args.path}` : `Create new file ${args.path}`,
           };
 
@@ -443,7 +451,9 @@ export class ToolExecutor {
           return {
             toolCallId: '',
             name: toolName,
-            output: `Proposed file changes for "${args.path}". Awaiting user review/approval in AI panel.`,
+            output: context.permissionMode === 'AUTONOMOUS'
+              ? `Successfully wrote file "${args.path}". Changes applied directly to disk.`
+              : `Proposed file changes for "${args.path}". Awaiting user review/approval in AI panel.`,
             diffProposal: proposal,
           };
         }
@@ -505,18 +515,26 @@ export class ToolExecutor {
           for (const edit of sortedEdits) {
             const startIdx = Math.max(0, edit.startLine - 1);
             const endIdx = Math.min(newLines.length, edit.endLine);
-            const replacementLines = (edit.replacement || '').split('\n');
+            const replacementText =
+              edit.replacement !== undefined
+                ? edit.replacement
+                : (edit.newContent !== undefined ? edit.newContent : (edit.content || ''));
+            const replacementLines = replacementText.split('\n');
             newLines.splice(startIdx, endIdx - startIdx, ...replacementLines);
           }
 
           const proposedContent = newLines.join('\n');
+          if (context.permissionMode === 'AUTONOMOUS') {
+            fs.writeFileSync(filePath, proposedContent, 'utf8');
+          }
+
           const proposal: DiffProposal = {
             id: `diff_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
             path: args.path,
             originalContent,
             proposedContent,
             edits: rawEdits,
-            status: 'pending',
+            status: context.permissionMode === 'AUTONOMOUS' ? 'accepted' : 'pending',
             summary: `Targeted edits on ${args.path} (${rawEdits.length} edit block${rawEdits.length > 1 ? 's' : ''})`,
           };
 
@@ -527,7 +545,9 @@ export class ToolExecutor {
           return {
             toolCallId: '',
             name: toolName,
-            output: `Prepared ${rawEdits.length} structured edit(s) for "${args.path}". Diff preview generated for user review.`,
+            output: context.permissionMode === 'AUTONOMOUS'
+              ? `Applied ${rawEdits.length} structured edit(s) for "${args.path}" directly to disk.`
+              : `Prepared ${rawEdits.length} structured edit(s) for "${args.path}". Diff preview generated for user review.`,
             diffProposal: proposal,
           };
         }
@@ -629,18 +649,26 @@ export class ToolExecutor {
           for (const edit of sortedEdits) {
             const startIdx = Math.max(0, edit.startLine - 1);
             const endIdx = Math.min(newLines.length, edit.endLine);
-            const replacementLines = (edit.replacement || '').split('\n');
+            const replacementText =
+              edit.replacement !== undefined
+                ? edit.replacement
+                : (edit.newContent !== undefined ? edit.newContent : (edit.content || ''));
+            const replacementLines = replacementText.split('\n');
             newLines.splice(startIdx, endIdx - startIdx, ...replacementLines);
           }
 
           const proposedContent = newLines.join('\n');
+          if (context.permissionMode === 'AUTONOMOUS') {
+            fs.writeFileSync(filePath, proposedContent, 'utf8');
+          }
+
           const proposal: DiffProposal = {
             id: `diff_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
             path: args.path,
             originalContent,
             proposedContent,
             edits: rawEdits,
-            status: 'pending',
+            status: context.permissionMode === 'AUTONOMOUS' ? 'accepted' : 'pending',
             summary: `Applied editor edits on ${args.path} (${rawEdits.length} edit block${rawEdits.length > 1 ? 's' : ''})`,
           };
 
@@ -651,7 +679,9 @@ export class ToolExecutor {
           return {
             toolCallId: '',
             name: toolName,
-            output: `Applied ${rawEdits.length} editor edit(s) for "${args.path}". Diff preview generated for review.`,
+            output: context.permissionMode === 'AUTONOMOUS'
+              ? `Applied ${rawEdits.length} editor edit(s) for "${args.path}" directly to disk.`
+              : `Applied ${rawEdits.length} editor edit(s) for "${args.path}". Diff preview generated for review.`,
             diffProposal: proposal,
           };
         }

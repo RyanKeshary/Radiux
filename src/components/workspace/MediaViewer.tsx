@@ -158,7 +158,7 @@ export function MediaViewer({ file, projectId }: MediaViewerProps) {
               transformOrigin: 'center center'
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img
               src={srcUrl}
               alt={file.name}

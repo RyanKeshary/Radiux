@@ -14,28 +14,27 @@ export const AIConfig = {
     return process.env.GROQ_API_KEY || '';
   },
 
-  // Configured default model (Groq fast coding & tool capable)
-  // llama-3.3-70b-versatile: best tool-calling support + generous daily limits on free tier
+  // Configured default model (Groq flagship reasoning & tool capable with 128K context)
+  // openai/gpt-oss-120b: flagship 120B model on Groq Cloud with highest token limit (131,072)
   get defaultModel(): string {
-    return process.env.AI_MODEL || 'llama-3.3-70b-versatile';
+    return process.env.AI_MODEL || 'openai/gpt-oss-120b';
   },
 
   // Maximum iterative tool steps per agent execution
-  // Default 8: enough for complex tasks, avoids infinite loops on simple ones
   get maxAgentSteps(): number {
-    const val = parseInt(process.env.AI_MAX_STEPS || '8', 10);
-    return isNaN(val) || val <= 0 ? 8 : Math.min(val, 30);
+    const val = parseInt(process.env.AI_MAX_STEPS || '15', 10);
+    return isNaN(val) || val <= 0 ? 15 : Math.min(val, 30);
   },
 
   // Token limits
   get maxContextTokens(): number {
-    const val = parseInt(process.env.AI_MAX_CONTEXT || '128000', 10);
-    return isNaN(val) || val <= 0 ? 128000 : val;
+    const val = parseInt(process.env.AI_MAX_CONTEXT || '131072', 10);
+    return isNaN(val) || val <= 0 ? 131072 : val;
   },
 
   get maxOutputTokens(): number {
-    const val = parseInt(process.env.AI_MAX_OUTPUT || '1200', 10);
-    return isNaN(val) || val <= 0 ? 1200 : Math.min(val, 4096);
+    const val = parseInt(process.env.AI_MAX_OUTPUT || '8192', 10);
+    return isNaN(val) || val <= 0 ? 8192 : Math.min(val, 65536);
   },
 
   // Default security permission mode

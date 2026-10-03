@@ -17,7 +17,13 @@ export interface AIToolParameterProperty {
   type: string;
   description: string;
   enum?: string[];
-  items?: { type: string };
+  items?: {
+    type: string;
+    properties?: Record<string, AIToolParameterProperty>;
+    required?: string[];
+  };
+  properties?: Record<string, AIToolParameterProperty>;
+  required?: string[];
   default?: any;
 }
 
@@ -58,6 +64,8 @@ export interface StructuredEdit {
   endLine: number;
   endColumn?: number;
   replacement: string;
+  newContent?: string;
+  content?: string;
 }
 
 export interface DiffProposal {
@@ -152,6 +160,7 @@ export interface WorkspaceAIContext {
     description?: string;
   };
   intentMode?: TaskIntentMode;
+  permissionMode?: AIPermissionMode;
   activeFile?: ActiveFileContext | null;
   openTabs?: string[];
   fileTree?: string;

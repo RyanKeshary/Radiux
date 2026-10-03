@@ -511,7 +511,7 @@ export function ChatPanel({
                       <div className="rounded-xl overflow-hidden bg-black/40 border border-black/30 my-0.5 max-w-xl lg:max-w-2xl w-full group relative">
                         {msg.media_type === 'image' && (
                           <div className="relative">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            { }
                             <img
                               src={msg.media_url}
                               alt={msg.media_name || 'image'}
@@ -707,7 +707,7 @@ export function ChatPanel({
         >
           <div className="flex items-center gap-2 min-w-0">
             {pendingMedia.type === 'image' ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
+               
               <img src={pendingMedia.previewUrl} alt="preview" className="w-10 h-10 object-cover rounded border" style={{ borderColor: 'var(--ide-border)' }} />
             ) : pendingMedia.type === 'video' ? (
               <div className="w-10 h-10 rounded bg-purple-900/40 border border-purple-500/50 flex items-center justify-center">

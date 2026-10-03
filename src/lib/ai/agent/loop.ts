@@ -24,6 +24,7 @@ export interface AgentLoopOptions {
   onEvent: (event: AgentStreamEvent) => void;
   maxSteps?: number;
   apiKey?: string;
+  model?: string;
 }
 
 export interface AgentLoopResult {
@@ -45,6 +46,7 @@ export class AgentExecutionLoop {
       onEvent,
       maxSteps = AIConfig.maxAgentSteps,
       apiKey,
+      model = AIConfig.defaultModel,
     } = options;
 
     const provider = apiKey ? new GroqProvider(apiKey) : providerRegistry.get();
@@ -95,8 +97,17 @@ export class AgentExecutionLoop {
       'get_file_tree',
       'get_open_tabs',
       'get_editor_state',
+      'get_current_file',
+      'get_selection',
+      'get_diagnostics',
+      'diagnostics',
+      'git_status',
+      'git_diff',
+      'git_log',
+      'git_branch',
       'inspect_project',
       'inspect_package_json',
+      'inspect_project_context',
       'inspect_environment_safely',
       'inspect_collaboration_state',
       'inspect_project_members',
@@ -118,24 +129,23 @@ export class AgentExecutionLoop {
         let assistantMessage: AIMessage;
 
         // Context compaction: Prune older historic tool outputs and bound recent tool outputs
-        // This keeps input prompt under ~700 tokens so Groq TTFT is sub-150ms and avoids 429 TPM limits
         const streamMessages: AIMessage[] = messages.map((m, idx) => {
           if (m.role === 'tool') {
             const raw = m.content || '';
-            if (idx < messages.length - 2 && raw.length > 200) {
+            if (idx < messages.length - 2 && raw.length > 2500) {
               return {
                 ...m,
                 content:
-                  raw.slice(0, 150) +
-                  `\n... [Output truncated (${raw.length - 150} chars) for high-velocity execution]`,
+                  raw.slice(0, 2000) +
+                  `\n... [Output truncated (${raw.length - 2000} chars) for execution performance]`,
               };
             }
-            if (raw.length > 1500) {
+            if (raw.length > 10000) {
               return {
                 ...m,
                 content:
-                  raw.slice(0, 1400) +
-                  `\n... [Output truncated (${raw.length - 1400} chars) for high-velocity execution]`,
+                  raw.slice(0, 9000) +
+                  `\n... [Output truncated (${raw.length - 9000} chars) for execution performance]`,
               };
             }
           }
@@ -152,9 +162,10 @@ export class AgentExecutionLoop {
               },
             },
             {
+              model,
               tools,
               temperature: 0.1,
-              maxTokens: Math.min(AIConfig.maxOutputTokens, 800),
+              maxTokens: Math.min(AIConfig.maxOutputTokens, 8192),
             }
           );
         } catch (err: any) {
@@ -199,10 +210,19 @@ export class AgentExecutionLoop {
         const executeSingleTool = async (toolCall: AIToolCall): Promise<{ toolCallId: string; content: string }> => {
           const toolName = toolCall.function.name;
           let args: any = {};
-          try {
-            args = JSON.parse(toolCall.function.arguments || '{}');
-          } catch (e) {
-            args = {};
+          if (typeof toolCall.function.arguments === 'object' && toolCall.function.arguments !== null) {
+            args = toolCall.function.arguments;
+          } else if (typeof toolCall.function.arguments === 'string') {
+            try {
+              args = JSON.parse(toolCall.function.arguments || '{}');
+            } catch (e) {
+              try {
+                const cleaned = toolCall.function.arguments.replace(/,\s*([}\]])/g, '$1');
+                args = JSON.parse(cleaned);
+              } catch {
+                args = {};
+              }
+            }
           }
 
           const toolDef = defaultToolRegistry.get(toolName);

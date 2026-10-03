@@ -139,9 +139,24 @@ export const CORE_AI_TOOLS: AITool[] = [
         },
         edits: {
           type: 'array',
-          description: 'List of edits to apply to the file.',
+          description: 'List of line-based replacement edits to apply to the file.',
           items: {
             type: 'object',
+            properties: {
+              startLine: {
+                type: 'number',
+                description: 'Starting line number (1-indexed, inclusive).',
+              },
+              endLine: {
+                type: 'number',
+                description: 'Ending line number (1-indexed, inclusive).',
+              },
+              replacement: {
+                type: 'string',
+                description: 'Replacement text content for the specified lines.',
+              },
+            },
+            required: ['startLine', 'endLine', 'replacement'],
           },
         },
       },
@@ -255,6 +270,21 @@ export const CORE_AI_TOOLS: AITool[] = [
           description: 'List of edits to apply with startLine, endLine, and replacement content.',
           items: {
             type: 'object',
+            properties: {
+              startLine: {
+                type: 'number',
+                description: 'Starting line number (1-indexed, inclusive).',
+              },
+              endLine: {
+                type: 'number',
+                description: 'Ending line number (1-indexed, inclusive).',
+              },
+              replacement: {
+                type: 'string',
+                description: 'Replacement text content for the specified lines.',
+              },
+            },
+            required: ['startLine', 'endLine', 'replacement'],
           },
         },
       },
@@ -420,7 +450,7 @@ export class ToolRegistry {
     return this.tools.get(name);
   }
 
-  getAll(fastCoreOnly = true): AITool[] {
+  getAll(fastCoreOnly = false): AITool[] {
     if (fastCoreOnly) {
       return Array.from(this.tools.values()).filter((t) =>
         ToolRegistry.FAST_CORE_NAMES.has(t.name)

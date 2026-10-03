@@ -39,28 +39,44 @@ export class GroqProvider implements AIProvider {
   async getModels(): Promise<AIModelInfo[]> {
     return [
       {
-        id: 'openai/gpt-oss-20b',
-        name: 'GPT OSS 20B',
-        contextWindow: 128000,
-        maxOutputTokens: 8192,
-        description: 'Ultra-fast lightweight reasoning model on Groq Cloud.',
+        id: 'openai/gpt-oss-120b',
+        name: 'OpenAI GPT-OSS 120B',
+        contextWindow: 131072,
+        maxOutputTokens: 65536,
+        description: 'Flagship 120B reasoning model on Groq Cloud. Highest context (128K) and deep coding intelligence.',
         supportsTools: true,
         isDefault: true,
       },
       {
         id: 'qwen/qwen3.8-27b',
         name: 'Qwen 3.8 27B',
-        contextWindow: 128000,
+        contextWindow: 131072,
         maxOutputTokens: 8192,
-        description: 'Verified high-speed coding and tool-calling model on Groq Cloud.',
+        description: 'High-speed coding and tool-calling model on Groq Cloud.',
+        supportsTools: true,
+      },
+      {
+        id: 'openai/gpt-oss-20b',
+        name: 'OpenAI GPT-OSS 20B',
+        contextWindow: 131072,
+        maxOutputTokens: 8192,
+        description: 'Ultra-fast lightweight reasoning model on Groq Cloud.',
         supportsTools: true,
       },
       {
         id: 'llama-3.3-70b-versatile',
         name: 'Llama 3.3 70B Versatile',
-        contextWindow: 128000,
+        contextWindow: 131072,
+        maxOutputTokens: 32768,
+        description: 'Meta Llama 3.3 70B multilingual coding and reasoning model.',
+        supportsTools: true,
+      },
+      {
+        id: 'llama-3.1-8b-instant',
+        name: 'Llama 3.1 8B Instant',
+        contextWindow: 131072,
         maxOutputTokens: 8192,
-        description: 'Multilingual coding and reasoning model.',
+        description: 'Ultra-fast lightweight model for instant answers.',
         supportsTools: true,
       },
     ];
@@ -69,23 +85,30 @@ export class GroqProvider implements AIProvider {
   private mapMessages(messages: AIMessage[]): any[] {
     return messages.map((m) => {
       const base: any = { role: m.role };
-      if (m.content !== undefined) {
-        base.content = m.content || '';
-      }
       if (m.role === 'tool') {
         base.tool_call_id = m.tool_call_id || '';
         base.content = m.content || '';
+        return base;
       }
+
       if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0) {
+        // OpenAI / Groq standard: when assistant sends tool_calls, content must be null if empty string
+        base.content = m.content ? m.content : null;
         base.tool_calls = m.tool_calls.map((tc) => ({
           id: tc.id,
           type: 'function',
           function: {
             name: tc.function.name,
-            arguments: tc.function.arguments,
+            arguments:
+              typeof tc.function.arguments === 'string'
+                ? tc.function.arguments
+                : JSON.stringify(tc.function.arguments || {}),
           },
         }));
+        return base;
       }
+
+      base.content = m.content !== undefined ? (m.content || '') : '';
       return base;
     });
   }
@@ -104,28 +127,32 @@ export class GroqProvider implements AIProvider {
 
   private async handleGroqError(err: any, payload: any, isStream: boolean): Promise<any> {
     const groq = this.getClient();
+    // Intelligent fallback matrix based on active model
+    const fallbackMatrix: Record<string, string> = {
+      'openai/gpt-oss-120b': 'openai/gpt-oss-20b',
+      'openai/gpt-oss-20b': 'qwen/qwen3.8-27b',
+      'qwen/qwen3.8-27b': 'openai/gpt-oss-120b',
+      'llama-3.3-70b-versatile': 'llama-3.1-8b-instant',
+      'llama-3.1-8b-instant': 'openai/gpt-oss-120b',
+    };
+    const nextFallback = fallbackMatrix[payload.model] || 'openai/gpt-oss-20b';
+
     // 1. Rate Limit 429 handling (TPD vs TPM)
     if (err.status === 429 || err.message?.includes('rate_limit_exceeded') || err.message?.includes('Rate limit')) {
-      // Check for wait duration in message
       const match = err.message?.match(/try again in ([\d\.]+)s/i);
       const waitSec = match ? parseFloat(match[1]) : 0;
 
-      // If wait is brief (<= 10s), back off and retry
-      if (waitSec > 0 && waitSec <= 10) {
+      if (waitSec > 0 && waitSec <= 5) {
         console.warn(`[GroqProvider] TPM rate limit on ${payload.model}. Backing off ${waitSec.toFixed(1)}s...`);
         await new Promise((r) => setTimeout(r, Math.ceil(waitSec * 1000) + 300));
-        payload.model = 'llama-3.3-70b-versatile';
-        payload.max_tokens = Math.min(payload.max_tokens || 800, 600);
         return isStream
           ? groq.chat.completions.create({ ...payload, stream: true })
           : groq.chat.completions.create(payload);
       }
 
-      // If not already on fallback, switch immediately
-      if (payload.model !== 'llama-3.3-70b-versatile') {
-        console.warn(`[GroqProvider] Rate limit on ${payload.model}. Switching to llama-3.3-70b-versatile...`);
-        payload.model = 'llama-3.3-70b-versatile';
-        payload.max_tokens = Math.min(payload.max_tokens || 800, 600);
+      if (payload.model !== nextFallback) {
+        console.warn(`[GroqProvider] Rate limit on ${payload.model}. Switching to ${nextFallback}...`);
+        payload.model = nextFallback;
         return isStream
           ? groq.chat.completions.create({ ...payload, stream: true })
           : groq.chat.completions.create(payload);
@@ -139,9 +166,9 @@ export class GroqProvider implements AIProvider {
       err.message?.includes('does not exist') ||
       err.message?.includes('Failed to call a function')
     ) {
-      if (payload.model !== 'llama-3.3-70b-versatile') {
-        console.warn(`[GroqProvider] Model ${payload.model} failed (${err.message}). Falling back to llama-3.3-70b-versatile...`);
-        payload.model = 'llama-3.3-70b-versatile';
+      if (payload.model !== nextFallback) {
+        console.warn(`[GroqProvider] Model ${payload.model} failed (${err.message}). Falling back to ${nextFallback}...`);
+        payload.model = nextFallback;
         return isStream
           ? groq.chat.completions.create({ ...payload, stream: true })
           : groq.chat.completions.create(payload);
@@ -249,12 +276,11 @@ export class GroqProvider implements AIProvider {
           reasoningText += reasoning;
         }
 
-        // 2. Tool call delta
+        // 2. Tool call delta (supports parallel & multi-function calling)
         if (delta.tool_calls) {
           for (const tcDelta of delta.tool_calls) {
             const index = tcDelta.index ?? 0;
             if (!toolCallAccumulators.has(index)) {
-              // Initialize with the first chunk's name (Groq sends name only on first delta)
               toolCallAccumulators.set(index, {
                 id: tcDelta.id || `call_${Date.now()}_${index}`,
                 name: tcDelta.function?.name || '',
@@ -263,15 +289,25 @@ export class GroqProvider implements AIProvider {
             }
             const acc = toolCallAccumulators.get(index)!;
             if (tcDelta.id) acc.id = tcDelta.id;
-            // Do NOT append name — Groq sends it only once on the first delta
-            if (tcDelta.function?.arguments) acc.arguments += tcDelta.function.arguments;
+            if (tcDelta.function?.name) {
+              if (!acc.name) {
+                acc.name = tcDelta.function.name;
+              } else if (!acc.name.includes(tcDelta.function.name)) {
+                acc.name += tcDelta.function.name;
+              }
+            }
+            if (tcDelta.function?.arguments) {
+              acc.arguments += tcDelta.function.arguments;
+            }
           }
         }
       }
 
-      // Convert accumulated tool calls
+      // Convert accumulated tool calls in sorted index order
       const parsedToolCalls: AIToolCall[] = [];
-      toolCallAccumulators.forEach((acc) => {
+      const sortedEntries = Array.from(toolCallAccumulators.entries()).sort(([a], [b]) => a - b);
+      for (const [, acc] of sortedEntries) {
+        if (!acc.name) continue;
         const tc: AIToolCall = {
           id: acc.id,
           type: 'function',
@@ -284,11 +320,11 @@ export class GroqProvider implements AIProvider {
         if (callbacks.onToolCall) {
           callbacks.onToolCall(tc);
         }
-      });
+      }
 
-      // If tools were called, content must remain clean (empty string) for strict API compatibility
+      // If tools were called, content should be empty string or text if generated
       const finalContent = parsedToolCalls.length > 0
-        ? assistantContent
+        ? ''
         : (assistantContent || reasoningText);
 
       return {

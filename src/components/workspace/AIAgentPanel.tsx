@@ -32,6 +32,7 @@ import {
   MessageSquare,
   Zap,
   ChevronLeft,
+  Cpu,
 } from 'lucide-react';
 import {
   AIPermissionMode,
@@ -269,7 +270,8 @@ export function AIAgentPanel({
   const [isLinkingFileOpen, setIsLinkingFileOpen] = useState(false);
   const [fileSearchQuery, setFileSearchQuery] = useState('');
 
-  const [activeModel, setActiveModel] = useState('llama-3.3-70b-versatile');
+  const [activeModel, setActiveModel] = useState('openai/gpt-oss-120b');
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(380);
   const [isDragging, setIsDragging] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
@@ -279,6 +281,7 @@ export function AIAgentPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const permissionMenuRef = useRef<HTMLDivElement>(null);
   const filePickerRef = useRef<HTMLDivElement>(null);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
 
   // Check API key configuration on load & sync from localStorage if present
   useEffect(() => {
@@ -345,6 +348,12 @@ export function AIAgentPanel({
         !intentMenuRef.current.contains(e.target as Node)
       ) {
         setIsIntentMenuOpen(false);
+      }
+      if (
+        modelMenuRef.current &&
+        !modelMenuRef.current.contains(e.target as Node)
+      ) {
+        setIsModelMenuOpen(false);
       }
       if (
         filePickerRef.current &&
@@ -540,6 +549,7 @@ export function AIAgentPanel({
         signal: abortController.signal,
         body: JSON.stringify({
           userMessage: finalPrompt,
+          model: activeModel,
           context: {
             ...context,
             intentMode,
@@ -916,6 +926,48 @@ export function AIAgentPanel({
                     >
                       <span>{mode}</span>
                       {intentMode === mode && <Check className="w-3 h-3 text-sky-400" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Model Selector */}
+            <div className="relative" ref={modelMenuRef}>
+              <button
+                onClick={() => setIsModelMenuOpen(prev => !prev)}
+                className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 border border-white/[0.06] transition-colors"
+                title={`Active Groq Model: ${activeModel}`}
+              >
+                <Cpu className="w-2.5 h-2.5 text-emerald-400" />
+                <span className="max-w-[85px] truncate">{activeModel.replace(/^(openai|qwen)\//, '')}</span>
+                <ChevronDown className="w-2.5 h-2.5 text-neutral-500" />
+              </button>
+              {isModelMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl bg-neutral-900/95 border border-white/10 shadow-2xl p-1 z-50 text-xs backdrop-blur-md flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100">
+                  {[
+                    { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', tag: '128K • Flagship (Best)' },
+                    { id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B', tag: '128K • High Speed' },
+                    { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', tag: '128K • Fast' },
+                    { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', tag: '128K • Versatile' },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setActiveModel(m.id);
+                        setIsModelMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between text-[11px] cursor-pointer transition-colors ${
+                        activeModel === m.id
+                          ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
+                          : 'text-neutral-300 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-medium">{m.label}</span>
+                        <span className="text-[9px] text-neutral-400">{m.tag}</span>
+                      </div>
+                      {activeModel === m.id && <Check className="w-3 h-3 text-emerald-400" />}
                     </button>
                   ))}
                 </div>
